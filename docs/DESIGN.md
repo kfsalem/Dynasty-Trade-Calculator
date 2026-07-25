@@ -64,6 +64,14 @@ This solves player-ID reconciliation across platforms **for free**. It is normal
 
 **Gap:** contains no draft picks.
 
+**Coverage gap found in Phase 1:** the 475-player universe does not reach the
+bottom of deep dynasty rosters. In a 10-team superflex league with 10 taxi slots
+(rosters of 30–45), **61 of 383 rostered skill players — 16% — had no
+FantasyCalc value** and were counted as 0. Those players are genuinely fringe
+(Ty Chandler, Carson Wentz, Javon Baker), so 0 is defensible for now, but it
+will distort *total* roster value more than starter value. DynastyProcess covers
+646 players and should be blended in as a fallback tier in Phase 2.
+
 ### 2.3 DynastyProcess — draft pick values
 `https://raw.githubusercontent.com/dynastyprocess/data/master/files/values.csv`
 
@@ -309,11 +317,20 @@ Sized deliberately small. This project was abandoned once; **momentum is the rea
 - GitHub Actions → Pages, linting and typechecking on every push
 - **Shipped:** a live URL and a repo that isn't empty
 
-### Phase 1 — League import *(~a weekend)*
-- Sleeper client + Zod schemas + canonical mapper
-- IndexedDB player cache
-- Enter a league ID → see all 12 rosters with player values
-- **Ship:** you and your league mates can look up any team
+### Phase 1 — League import ✅ *(done 2026-07-25)*
+- Sleeper client, Zod schemas, canonical mapper behind `LeagueProvider`
+- IndexedDB cache (24h players / 12h values), slimmed before storing
+- FantasyCalc values matched to the league's real format
+- Rosters ranked by best fieldable lineup
+- 24 unit tests; verified live against a real 10-team superflex dynasty league
+- **Shipped:** paste a league ID or URL, see every roster valued
+
+**Design change made during implementation:** we compute the best legal lineup
+rather than reading the platform's `starters` array. That array holds whatever
+lineup a manager last set — in the offseason (where we are now: week 0,
+`season_type: "off"`) that is a stale week-17 lineup, and on a new roster it is
+empty. Ranking on what a roster *can* field is both more accurate and the right
+input for the VORS work in Phase 2.
 
 ### Phase 2 — Trade calculator
 - FantasyCalc values wired to real league settings (superflex, PPR, team count)

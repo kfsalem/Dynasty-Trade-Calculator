@@ -1,51 +1,93 @@
-const phases = [
-  { name: 'League import', detail: 'Paste a Sleeper league ID, see every roster', done: false },
-  { name: 'Trade calculator', detail: 'League-aware values, including draft picks', done: false },
-  { name: 'Team analysis', detail: 'Strengths, weaknesses, contention window', done: false },
-  { name: 'Trade suggestions', detail: 'Ranked offers, and why they say yes', done: false },
-]
+import { useEffect, useState } from 'react';
+import { LeagueImport } from './components/LeagueImport';
+import { LeagueView } from './components/LeagueView';
+import { useLeagueSummaries } from './hooks/useLeagueData';
 
-function App() {
-  return (
-    <main className="min-h-screen bg-gray-50 text-gray-900">
-      <div className="mx-auto max-w-2xl px-6 py-20">
-        <p className="text-sm font-semibold uppercase tracking-widest text-primary-600">
-          Dynasty Fantasy Football
-        </p>
-        <h1 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">
-          A trade calculator that knows your league
-        </h1>
-        <p className="mt-5 text-lg text-gray-600">
-          Generic calculators tell you two players are worth the same. This one knows your
-          roster, your lineup, and the eleven managers you actually play against.
-        </p>
+const STORAGE_KEY = 'dynasty:leagueId';
 
-        <div className="card mt-12">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-            Under construction
-          </h2>
-          <ul className="mt-4 space-y-4">
-            {phases.map((phase) => (
-              <li key={phase.name} className="flex gap-3">
-                <span
-                  className="mt-2 h-2 w-2 shrink-0 rounded-full bg-gray-300"
-                  aria-hidden="true"
-                />
-                <div>
-                  <p className="font-medium">{phase.name}</p>
-                  <p className="text-sm text-gray-600">{phase.detail}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <p className="mt-8 text-sm text-gray-500">
-          Powered by the Sleeper, FantasyCalc, and DynastyProcess APIs.
-        </p>
-      </div>
-    </main>
-  )
+/**
+ * The "profile" for now: one league id in localStorage. No account, no backend
+ * — remembering your league covers nearly everything people actually want from
+ * a profile on a single device.
+ */
+function readStoredLeagueId(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
 }
 
-export default App
+function App() {
+  const [leagueId, setLeagueId] = useState<string | null>(readStoredLeagueId);
+  const { league, summaries, isLoading, error } = useLeagueSummaries(leagueId);
+
+  useEffect(() => {
+    try {
+      if (leagueId) localStorage.setItem(STORAGE_KEY, leagueId);
+      else localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Storage disabled — the app still works, it just won't remember.
+    }
+  }, [leagueId]);
+
+  const showImport = !leagueId || Boolean(error);
+
+  return (
+    <main className="min-h-screen bg-gray-50 text-gray-900">
+      <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-16">
+        {showImport && (
+          <div className="mx-auto max-w-xl">
+            <p className="text-sm font-semibold uppercase tracking-widest text-primary-600">
+              Dynasty Fantasy Football
+            </p>
+            <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
+              A trade calculator that knows your league
+            </h1>
+            <p className="mt-4 text-gray-600">
+              Import a Sleeper dynasty league to see every roster valued against your
+              actual lineup settings.
+            </p>
+
+            <div className="card mt-8">
+              <LeagueImport onSubmit={setLeagueId} busy={isLoading} />
+            </div>
+
+            {error && (
+              <div
+                role="alert"
+                className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+              >
+                <p className="font-semibold">Couldn't load that league.</p>
+                <p className="mt-1">{(error as Error).message}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {leagueId && isLoading && !error && (
+          <div className="py-20 text-center">
+            <div
+              className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-primary-600"
+              role="status"
+              aria-label="Loading league"
+            />
+            <p className="mt-4 text-sm text-gray-500">
+              Loading rosters and dynasty values…
+            </p>
+          </div>
+        )}
+
+        {league && !isLoading && !error && (
+          <LeagueView
+            league={league}
+            summaries={summaries}
+            onReset={() => setLeagueId(null)}
+          />
+        )}
+      </div>
+    </main>
+  );
+}
+
+export default App;
