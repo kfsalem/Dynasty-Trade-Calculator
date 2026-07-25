@@ -6,9 +6,10 @@ import { formatValue } from '../lib/format';
 interface Props {
   league: League;
   summaries: RosterSummary[];
+  myRosterId: number | null;
 }
 
-export function RosterList({ league, summaries }: Props) {
+export function RosterList({ league, summaries, myRosterId }: Props) {
   const topStarterValue = summaries[0]?.starterValue ?? 0;
 
   // Kickers and defenses have no dynasty market, so their absence is expected.
@@ -46,6 +47,7 @@ export function RosterList({ league, summaries }: Props) {
             league={league}
             rank={i + 1}
             topStarterValue={topStarterValue}
+            isMine={summary.rosterId === myRosterId}
           />
         ))}
       </div>

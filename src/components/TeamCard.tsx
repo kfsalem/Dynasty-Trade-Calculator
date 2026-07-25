@@ -16,6 +16,8 @@ interface Props {
   rank: number;
   /** Starter value of the top-ranked roster, for the comparison bar. */
   topStarterValue: number;
+  /** Highlights the claimed team so it's findable at a glance. */
+  isMine?: boolean;
 }
 
 function PlayerLine({ entry }: { entry: ValuedPlayer }) {
@@ -50,7 +52,7 @@ function PlayerLine({ entry }: { entry: ValuedPlayer }) {
   );
 }
 
-export function TeamCard({ summary, league, rank, topStarterValue }: Props) {
+export function TeamCard({ summary, league, rank, topStarterValue, isMine }: Props) {
   const [open, setOpen] = useState(false);
 
   const roster = league.rosters.find((r) => r.rosterId === summary.rosterId);
@@ -64,7 +66,11 @@ export function TeamCard({ summary, league, rank, topStarterValue }: Props) {
   const barWidth = topStarterValue > 0 ? (summary.starterValue / topStarterValue) * 100 : 0;
 
   return (
-    <div className="card !p-0 overflow-hidden">
+    <div
+      className={`card !p-0 overflow-hidden ${
+        isMine ? 'ring-2 ring-primary-500 ring-offset-2' : ''
+      }`}
+    >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -87,7 +93,14 @@ export function TeamCard({ summary, league, rank, topStarterValue }: Props) {
         )}
 
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-semibold">{roster.teamName}</span>
+          <span className="block truncate font-semibold">
+            {roster.teamName}
+            {isMine && (
+              <span className="ml-2 rounded bg-primary-100 px-1.5 py-0.5 text-xs font-semibold text-primary-700">
+                You
+              </span>
+            )}
+          </span>
           <span className="block truncate text-sm text-gray-500">
             {roster.ownerName} · {roster.wins}-{roster.losses}
             {roster.ties > 0 ? `-${roster.ties}` : ''} · avg {formatAge(summary.weightedAge)}

@@ -7,11 +7,13 @@ import {
   sleeperPlayersSchema,
   sleeperTradedPicksSchema,
   sleeperStateSchema,
+  sleeperAccountSchema,
   type SleeperLeague,
   type SleeperRoster,
   type SleeperUser,
   type SleeperTradedPick,
   type SleeperState,
+  type SleeperAccount,
 } from './schema';
 
 const BASE = 'https://api.sleeper.app/v1';
@@ -64,6 +66,24 @@ export function getTradedPicks(leagueId: string): Promise<SleeperTradedPick[]> {
 /** Current NFL season and phase — decides which draft years are still tradeable. */
 export function getState(): Promise<SleeperState> {
   return fetchJson(`${BASE}/state/nfl`, sleeperStateSchema);
+}
+
+/**
+ * Look up a Sleeper account by username, so a user can claim their team by
+ * name instead of hunting for it in a dropdown.
+ *
+ * Sleeper answers 200 with a `null` body for an unknown username rather than
+ * 404, so the absent case is translated here into a real error.
+ */
+export async function getAccountByUsername(username: string): Promise<SleeperAccount> {
+  const account = await fetchJson(
+    `${BASE}/user/${encodeURIComponent(username.trim())}`,
+    sleeperAccountSchema,
+  );
+  if (!account) {
+    throw new ApiError(`No Sleeper user named "${username.trim()}".`);
+  }
+  return account;
 }
 
 /**

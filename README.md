@@ -12,7 +12,7 @@ Early. The scaffold builds and deploys; features are being built in order.
 
 - [x] **League import** — paste a Sleeper league ID, see every roster
 - [x] **Trade calculator** — league-aware values, players and draft picks
-- [ ] **Team analysis** — strengths, weaknesses, contention window
+- [x] **Team analysis** — strengths, weaknesses, contention window, surplus
 - [ ] **Trade suggestions** — ranked offers, and why the other manager accepts
 
 Live: **https://kfsalem.github.io/Dynasty-Trade-Calculator/**
@@ -21,6 +21,10 @@ The trade calculator reports two numbers per side. **Net value** is what every
 other calculator shows. **Starting lineup** is the change in the best lineup
 that side can field — and it is the one that matters. Winning a trade on raw
 value while your starters get worse is common, and it is the whole point.
+
+Claim your team with your Sleeper username to get personalized analysis: your
+contention window, your positional strengths and weaknesses against the league,
+and which of your bench players other teams would actually start.
 
 See [`docs/DESIGN.md`](docs/DESIGN.md) for the full architecture and roadmap.
 

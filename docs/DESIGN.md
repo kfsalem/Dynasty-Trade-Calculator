@@ -356,11 +356,44 @@ input for the VORS work in Phase 2.
    `allSlots + taxiSlots + reserveSlots`, and only warns when a trade actually
    adds players. Unit tests cover both.
 
-### Phase 3 — Team analysis
-- Strengths/weaknesses vs. league median
-- Contention quadrant, age curves
-- "Focus this year" summary
-- **Ship:** the "know my team" half of the vision
+### Phase 2.5 — Claim your team ✅ *(done 2026-07-25)*
+- `dynasty:myRoster:<leagueId>` in localStorage, keyed per league
+- Claim by Sleeper username (`/user/<name>` → `user_id` → `roster.ownerId`) or
+  from a dropdown, since orphan and co-owned rosters can't resolve by name
+- Trade calculator anchors its left side to you; your team is badged in the
+  rankings
+- **Shipped:** the app knows who you are, with no account
+
+This was an orphan in the original plan — mentioned twice in passing but never
+scheduled. It is really a **prerequisite** for Phases 3 and 4, both of which
+promise second-person output ("*your* weaknesses", "trades *for you*") that is
+meaningless without it.
+
+Sleeper quirk worth remembering: `/user/<unknown>` answers **200 with a `null`
+body**, not 404, so the not-found case has to be detected explicitly.
+
+### Phase 3 — Team analysis ✅ *(done 2026-07-25)*
+- Positional strengths/weaknesses as z-scores vs. the league, flex-aware
+- Contention quadrant from now-rank vs. 3-year-projected rank
+- Position-specific age decay
+- Tradeable surplus, and "what to focus on"
+- **Shipped:** the "know my team" half of the vision
+
+**Two modelling decisions:**
+
+1. **The quadrant reads league-relative rank, not absolute score.** The decay
+   model only ever decays — it never invents growth for ascending young players,
+   which would be speculation dressed as arithmetic. That understates young
+   rosters in absolute terms, but a uniform understatement cancels out when
+   every team is ranked against the same yardstick.
+
+2. **Surplus means "someone else would start him."** The first implementation
+   required beating the league *median* starter at the position, and every one
+   of the ten teams reported no surplus — impossible with 45-man rosters. The
+   bar is now each rival's *weakest* starter at that position, which is both
+   what the UI claims and what actually converts into a trade. Results now
+   gradient sensibly: the first-place roster shows six surplus assets, the
+   last-place roster two.
 
 ### Phase 4 — Trade suggestions
 - Surplus/need matching across the league

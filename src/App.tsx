@@ -3,15 +3,24 @@ import { LeagueImport } from './components/LeagueImport';
 import { LeagueHeader } from './components/LeagueHeader';
 import { RosterList } from './components/RosterList';
 import { TradeBuilder } from './components/TradeBuilder';
+import { TeamAnalysis } from './components/TeamAnalysis';
+import { ClaimTeam } from './components/ClaimTeam';
 import { useLeagueSummaries } from './hooks/useLeagueData';
+import { useMyRoster } from './hooks/useMyRoster';
 
 const STORAGE_KEY = 'dynasty:leagueId';
 
-type Tab = 'rosters' | 'trade';
+type Tab = 'analysis' | 'rosters' | 'trade';
+
+const TABS: [Tab, string][] = [
+  ['analysis', 'My team'],
+  ['rosters', 'Rosters'],
+  ['trade', 'Trade calculator'],
+];
 
 /**
- * The "profile" for now: one league id in localStorage. No account, no backend
- * — remembering your league covers nearly everything people actually want from
+ * The "profile": a league id plus which roster is yours, both in localStorage.
+ * No account, no backend — that covers essentially everything people want from
  * a profile on a single device.
  */
 function readStoredLeagueId(): string | null {
@@ -24,7 +33,8 @@ function readStoredLeagueId(): string | null {
 
 function App() {
   const [leagueId, setLeagueId] = useState<string | null>(readStoredLeagueId);
-  const [tab, setTab] = useState<Tab>('rosters');
+  const [tab, setTab] = useState<Tab>('analysis');
+  const { myRosterId, setMyRoster } = useMyRoster(leagueId);
   const { league, players, values, summaries, picks, picksUnavailable, isLoading, error } =
     useLeagueSummaries(leagueId);
 
@@ -94,12 +104,7 @@ function App() {
               aria-label="League views"
               className="mt-6 flex gap-1 border-b border-gray-200"
             >
-              {(
-                [
-                  ['rosters', 'Rosters'],
-                  ['trade', 'Trade calculator'],
-                ] as const
-              ).map(([value, label]) => (
+              {TABS.map(([value, label]) => (
                 <button
                   key={value}
                   role="tab"
@@ -117,15 +122,34 @@ function App() {
             </div>
 
             <div className="mt-6">
-              {tab === 'rosters' ? (
-                <RosterList league={league} summaries={summaries} />
-              ) : (
+              {tab === 'analysis' &&
+                (myRosterId === null ? (
+                  <ClaimTeam league={league} onClaim={setMyRoster} />
+                ) : (
+                  <TeamAnalysis
+                    league={league}
+                    summaries={summaries}
+                    myRosterId={myRosterId}
+                    onChangeTeam={() => setMyRoster(null)}
+                  />
+                ))}
+
+              {tab === 'rosters' && (
+                <RosterList
+                  league={league}
+                  summaries={summaries}
+                  myRosterId={myRosterId}
+                />
+              )}
+
+              {tab === 'trade' && (
                 <TradeBuilder
                   league={league}
                   players={players}
                   values={values}
                   picks={picks}
                   picksUnavailable={picksUnavailable}
+                  myRosterId={myRosterId}
                 />
               )}
             </div>

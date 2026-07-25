@@ -93,6 +93,20 @@ export const sleeperStateSchema = z.object({
   week: z.number().nullish(),
 });
 
+/**
+ * `/user/<username>` answers 200 with a literal `null` body for an unknown
+ * name rather than 404, so the schema has to accept null and the caller has to
+ * translate it into a real "not found".
+ */
+export const sleeperAccountSchema = z
+  .object({
+    user_id: z.string(),
+    username: z.string().nullish(),
+    display_name: z.string().nullish(),
+    avatar: z.string().nullish(),
+  })
+  .nullable();
+
 export const sleeperRostersSchema = z.array(sleeperRosterSchema);
 export const sleeperUsersSchema = z.array(sleeperUserSchema);
 export const sleeperPlayersSchema = z.record(z.string(), sleeperPlayerSchema);
@@ -104,3 +118,4 @@ export type SleeperUser = z.infer<typeof sleeperUserSchema>;
 export type SleeperPlayer = z.infer<typeof sleeperPlayerSchema>;
 export type SleeperTradedPick = z.infer<typeof sleeperTradedPickSchema>;
 export type SleeperState = z.infer<typeof sleeperStateSchema>;
+export type SleeperAccount = NonNullable<z.infer<typeof sleeperAccountSchema>>;

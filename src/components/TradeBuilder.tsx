@@ -10,6 +10,8 @@ interface Props {
   values: Map<string, PlayerValue>;
   picks: DraftPick[];
   picksUnavailable: boolean;
+  /** Claimed team, if any — anchors the left side to you. */
+  myRosterId: number | null;
 }
 
 const toggle = (set: Set<string>, id: string): Set<string> => {
@@ -92,9 +94,22 @@ function SideSummary({ side }: { side: TradeSideResult }) {
   );
 }
 
-export function TradeBuilder({ league, players, values, picks, picksUnavailable }: Props) {
-  const [teamA, setTeamA] = useState(league.rosters[0]?.rosterId ?? 1);
-  const [teamB, setTeamB] = useState(league.rosters[1]?.rosterId ?? 2);
+export function TradeBuilder({
+  league,
+  players,
+  values,
+  picks,
+  picksUnavailable,
+  myRosterId,
+}: Props) {
+  // Anchor the left side to the claimed team so the trade reads from your
+  // perspective, and make sure the right side is never the same roster.
+  const defaultA = myRosterId ?? league.rosters[0]?.rosterId ?? 1;
+  const defaultB =
+    league.rosters.find((r) => r.rosterId !== defaultA)?.rosterId ?? defaultA + 1;
+
+  const [teamA, setTeamA] = useState(defaultA);
+  const [teamB, setTeamB] = useState(defaultB);
   const [givesA, setGivesA] = useState({
     playerIds: new Set<string>(),
     pickIds: new Set<string>(),
