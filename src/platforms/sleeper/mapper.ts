@@ -65,6 +65,7 @@ export function mapSettings(league: SleeperLeague): LeagueSettings {
     allSlots,
     taxiSlots: league.settings?.taxi_slots ?? 0,
     reserveSlots: league.settings?.reserve_slots ?? 0,
+    draftRounds: league.settings?.draft_rounds ?? 4,
   };
 }
 

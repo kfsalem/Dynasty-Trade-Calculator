@@ -74,12 +74,18 @@ export interface PlayerValue {
 }
 
 export interface DraftPick {
+  /** Stable key: "2027-1-3" (season, round, original roster). */
+  id: string;
   season: string;
   round: number;
   /** Roster that originally owned the pick. */
   originalRosterId: number;
   /** Roster that holds it now. */
   ownerRosterId: number;
+  /** Normalized to the same 0-10000 scale as player values. */
+  value: number;
+  /** Display label, e.g. "2027 1st (via Ben)". */
+  label: string;
 }
 
 export interface LeagueSettings {
@@ -96,6 +102,8 @@ export interface LeagueSettings {
   allSlots: LineupSlot[];
   taxiSlots: number;
   reserveSlots: number;
+  /** Rookie draft rounds — how many picks per team per year exist to trade. */
+  draftRounds: number;
 }
 
 export interface Roster {
@@ -132,24 +140,46 @@ export interface League {
 // Trade analysis — consumed from Phase 2 onward.
 // ---------------------------------------------------------------------------
 
-export interface TradeSide {
+export interface TradeSideResult {
   rosterId: number;
-  players: Player[];
-  picks: DraftPick[];
-  totalValue: number;
-  averageAge: number;
-  positionBreakdown: Partial<Record<Position, number>>;
+  teamName: string;
+  outgoingPlayers: Player[];
+  outgoingPicks: DraftPick[];
+  incomingPlayers: Player[];
+  incomingPicks: DraftPick[];
+  /** Raw market value shipped out and brought in. */
+  outgoingValue: number;
+  incomingValue: number;
+  /** incoming - outgoing. The number every other calculator stops at. */
+  netValue: number;
+  starterValueBefore: number;
+  starterValueAfter: number;
   /**
-   * Change in starting-lineup strength — value over replacement starter.
-   * This, not `totalValue`, is what makes a trade good or bad for a team.
+   * Change in best-lineup strength — value over replacement starter.
+   *
+   * This, not netValue, decides whether a trade actually helps. Winning a trade
+   * on raw value while downgrading your starting lineup is a real and common
+   * outcome, and it is the whole reason this app exists.
    */
   vorsDelta: number;
+  warnings: string[];
 }
 
+export type FairnessRating =
+  | 'very_unfair'
+  | 'unfair'
+  | 'slightly_unfair'
+  | 'fair'
+  | 'very_fair';
+
 export interface TradeAnalysis {
-  sides: [TradeSide, TradeSide];
+  sides: [TradeSideResult, TradeSideResult];
+  /** Absolute raw-value gap between the two sides. */
   valueDifference: number;
-  fairnessRating: 'very_unfair' | 'unfair' | 'slightly_unfair' | 'fair' | 'very_fair';
-  recommendation: string;
-  warnings: string[];
+  /** Gap as a share of the larger side, 0-1. */
+  valueDifferencePct: number;
+  fairnessRating: FairnessRating;
+  /** Roster id the raw value favors, or null when it is even. */
+  favors: number | null;
+  summary: string;
 }

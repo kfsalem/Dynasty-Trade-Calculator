@@ -6,10 +6,12 @@ import {
   sleeperUsersSchema,
   sleeperPlayersSchema,
   sleeperTradedPicksSchema,
+  sleeperStateSchema,
   type SleeperLeague,
   type SleeperRoster,
   type SleeperUser,
   type SleeperTradedPick,
+  type SleeperState,
 } from './schema';
 
 const BASE = 'https://api.sleeper.app/v1';
@@ -57,6 +59,11 @@ export function getUsers(leagueId: string): Promise<SleeperUser[]> {
 
 export function getTradedPicks(leagueId: string): Promise<SleeperTradedPick[]> {
   return fetchJson(`${BASE}/league/${leagueId}/traded_picks`, sleeperTradedPicksSchema);
+}
+
+/** Current NFL season and phase — decides which draft years are still tradeable. */
+export function getState(): Promise<SleeperState> {
+  return fetchJson(`${BASE}/state/nfl`, sleeperStateSchema);
 }
 
 /**

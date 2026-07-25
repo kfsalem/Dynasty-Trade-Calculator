@@ -44,7 +44,7 @@ function PlayerLine({ entry }: { entry: ValuedPlayer }) {
         ) : null}
       </span>
       <span className="shrink-0 tabular-nums text-gray-500">
-        {entry.valued ? formatValue(entry.value) : '—'}
+        {entry.valued ? formatValue(entry.value) : '~0'}
       </span>
     </>
   );

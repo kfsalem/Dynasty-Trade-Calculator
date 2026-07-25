@@ -10,10 +10,17 @@ Most trade calculators are roster-blind. They tell you two players are worth the
 
 Early. The scaffold builds and deploys; features are being built in order.
 
-- [ ] **League import** — paste a Sleeper league ID, see every roster
-- [ ] **Trade calculator** — league-aware values, including draft picks
+- [x] **League import** — paste a Sleeper league ID, see every roster
+- [x] **Trade calculator** — league-aware values, players and draft picks
 - [ ] **Team analysis** — strengths, weaknesses, contention window
 - [ ] **Trade suggestions** — ranked offers, and why the other manager accepts
+
+Live: **https://kfsalem.github.io/Dynasty-Trade-Calculator/**
+
+The trade calculator reports two numbers per side. **Net value** is what every
+other calculator shows. **Starting lineup** is the change in the best lineup
+that side can field — and it is the one that matters. Winning a trade on raw
+value while your starters get worse is common, and it is the whole point.
 
 See [`docs/DESIGN.md`](docs/DESIGN.md) for the full architecture and roadmap.
 

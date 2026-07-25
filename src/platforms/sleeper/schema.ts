@@ -26,6 +26,7 @@ export const sleeperLeagueSchema = z.object({
       num_teams: z.number().nullish(),
       taxi_slots: z.number().nullish(),
       reserve_slots: z.number().nullish(),
+      draft_rounds: z.number().nullish(),
     })
     .nullish(),
   scoring_settings: z.record(z.string(), z.number()).nullish(),
@@ -73,11 +74,23 @@ export const sleeperPlayerSchema = z.object({
   search_rank: z.number().nullish(),
 });
 
+/**
+ * `roster_id` is the roster the pick ORIGINALLY belonged to; `owner_id` is the
+ * roster holding it now. Picks absent from this feed are still held by their
+ * original owner.
+ */
 export const sleeperTradedPickSchema = z.object({
   season: z.string(),
   round: z.number(),
   roster_id: z.number(),
   owner_id: z.number(),
+  previous_owner_id: z.number().nullish(),
+});
+
+export const sleeperStateSchema = z.object({
+  season: z.string(),
+  season_type: z.string(),
+  week: z.number().nullish(),
 });
 
 export const sleeperRostersSchema = z.array(sleeperRosterSchema);
@@ -90,3 +103,4 @@ export type SleeperRoster = z.infer<typeof sleeperRosterSchema>;
 export type SleeperUser = z.infer<typeof sleeperUserSchema>;
 export type SleeperPlayer = z.infer<typeof sleeperPlayerSchema>;
 export type SleeperTradedPick = z.infer<typeof sleeperTradedPickSchema>;
+export type SleeperState = z.infer<typeof sleeperStateSchema>;

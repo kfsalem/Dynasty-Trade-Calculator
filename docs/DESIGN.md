@@ -332,11 +332,29 @@ lineup a manager last set — in the offseason (where we are now: week 0,
 empty. Ranking on what a roster *can* field is both more accurate and the right
 input for the VORS work in Phase 2.
 
-### Phase 2 — Trade calculator
-- FantasyCalc values wired to real league settings (superflex, PPR, team count)
-- DynastyProcess pick values, including traded picks from Sleeper
-- Two-sided trade builder, raw value + VORS
-- **Ship:** the original goal, now league-aware — already better than KTC for your league
+### Phase 2 — Trade calculator ✅ *(done 2026-07-25)*
+- DynastyProcess pick values, normalized onto the player scale
+- Full pick-ownership reconstruction from Sleeper's traded-pick feed
+- Two-sided trade builder with players and picks
+- VORS: change in best-lineup strength per side, plus warnings
+- 61 unit tests; verified live
+- **Shipped:** the original goal, now league-aware
+
+**Two findings from implementation:**
+
+1. **Skip the DynastyProcess player fallback.** Phase 1 flagged that 16% of
+   rostered skill players were unpriced and recommended blending DP in.
+   Measured: DP recovers 53 of 61 (87%), but those players are worth **4–9 out
+   of 10000** — roughly **0.3% of a roster's total**. A 2.5 MB extra download
+   for 0.3% is a bad trade. The UI now shows unranked players as `~0` instead of
+   `—`, which conveys the same truth honestly at zero cost.
+
+2. **`roster_positions` is not the roster limit.** It covers starters and bench
+   only; taxi and IR are separate allowances on top. The first live trade fired
+   "over the 30-spot limit" on both teams of a 1-for-1 swap, because rosters in
+   this league legitimately hold 45 (30 + 10 taxi + 5 IR). The cap is now
+   `allSlots + taxiSlots + reserveSlots`, and only warns when a trade actually
+   adds players. Unit tests cover both.
 
 ### Phase 3 — Team analysis
 - Strengths/weaknesses vs. league median

@@ -1,4 +1,5 @@
 import type { League, Player } from '../types';
+import type { TradedPickRef } from '../engine/picks';
 
 /**
  * Everything a loaded league needs, already in canonical form.
@@ -10,6 +11,10 @@ import type { League, Player } from '../types';
 export interface LeagueBundle {
   league: League;
   players: Map<string, Player>;
+  /** Picks that have changed hands. Untraded picks stay with their original roster. */
+  tradedPicks: TradedPickRef[];
+  /** Current real-world season, for deciding which draft classes are tradeable. */
+  currentSeason: string;
 }
 
 /**
