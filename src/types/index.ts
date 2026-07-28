@@ -97,7 +97,16 @@ export interface DraftPick {
   ownerRosterId: number;
   /** League-adjusted, on the same scale as `PlayerValue.value`. */
   value: number;
-  /** On the same scale as `PlayerValue.marketValue`, for fairness comparisons. */
+  /**
+   * The figure fairness is argued on, comparable to `PlayerValue.marketValue`.
+   *
+   * Not the raw source quote: the rookie-pick realism curve is applied here as
+   * well as to `value`. That is deliberate. The curve corrects a market that
+   * overprices late picks, and applying it to only the league-adjusted side
+   * would let the engine hand over third-rounders that "balance" a trade while
+   * costing it nothing. The consequence to be aware of is that a third-rounder
+   * shows far below what KeepTradeCut would quote for it.
+   */
   marketValue: number;
   /** Projected draft slot from the original owner's standing, when known. */
   slot: number | null;

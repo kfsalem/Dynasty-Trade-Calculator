@@ -4,6 +4,7 @@ import {
   leagueShrinkFactor,
   replacementLevels,
   startersByPosition,
+  valueLeague,
 } from './replacement';
 import { summarizeRoster, type RosterSummary } from './rosterValue';
 import type { LineupSlot, Player, PlayerValue, Position, Roster } from '../types';
@@ -157,5 +158,131 @@ describe('leagueShrinkFactor', () => {
 
     expect(shrink).toBeGreaterThan(0);
     expect(shrink).toBeLessThan(1);
+  });
+});
+
+describe('degenerate leagues', () => {
+  it('leaves values alone when nobody is starting anywhere', () => {
+    // A brand-new league before its startup draft: rosters exist, nobody is on
+    // them. Indexing the sorted list at 0 here would make the best player at
+    // each position his own replacement and render every roster as worth zero.
+    const settings = makeSettings(['QB', 'RB', 'WR'], { teamCount: 2 });
+    const values = new Map([
+      ['a', makeValue('a', 9000, 'QB')],
+      ['b', makeValue('b', 8000, 'RB')],
+    ]);
+    const empty = [
+      summarizeRoster(makeRoster(1, []), new Map(), values, settings),
+      summarizeRoster(makeRoster(2, []), new Map(), values, settings),
+    ];
+
+    const adjusted = applyReplacement(
+      values,
+      replacementLevels(values, startersByPosition(empty)),
+    );
+
+    expect(adjusted.get('a')!.value).toBe(9000);
+    expect(adjusted.get('b')!.value).toBe(8000);
+  });
+
+  it('fails closed on a player the feed could not classify', () => {
+    // FantasyCalc's position is nullable. Charging such a player nothing would
+    // leave him at full market value while everyone else is docked, floating
+    // him to the top of lineups and into the surplus list.
+    const values = new Map([
+      ['known', makeValue('known', 9000, 'RB')],
+      ['mystery', makeValue('mystery', 9000, null)],
+    ]);
+    const levels = replacementLevels(values, { RB: 1 });
+    const adjusted = applyReplacement(values, levels);
+
+    expect(adjusted.get('mystery')!.value).toBeLessThanOrEqual(
+      adjusted.get('known')!.value,
+    );
+  });
+});
+
+describe('valueLeague', () => {
+  /**
+   * A pool with no fixed point. The flex flips to the receiver once
+   * replacement is subtracted, which empties the running back count, which
+   * drops the back's replacement level to zero and wins the slot straight back.
+   */
+  function oscillating() {
+    const settings = makeSettings(['FLEX'], { teamCount: 1 });
+    const players = new Map<string, Player>();
+    const values = new Map<string, PlayerValue>();
+
+    const add = (id: string, position: Position, value: number) => {
+      players.set(id, makePlayer(id, position, 25));
+      values.set(id, makeValue(id, value, position));
+    };
+
+    add('rb_star', 'RB', 3000);
+    add('wr_star', 'WR', 2800);
+    for (let i = 0; i < 5; i++) add(`rb${i}`, 'RB', 2500);
+    for (let i = 0; i < 5; i++) add(`wr${i}`, 'WR', 500);
+
+    return { rosters: [makeRoster(1, ['rb_star', 'wr_star'])], players, values, settings };
+  }
+
+  it('returns starter counts that describe its own output', () => {
+    // The invariant that matters: the counts setting replacement level must be
+    // the counts the resulting lineups actually produce. Deriving them from a
+    // market-value pass and never revisiting breaks exactly this.
+    const { values, summaries } = league();
+    const players = new Map<string, Player>();
+    for (const summary of summaries) {
+      for (const entry of summary.players) players.set(entry.player.id, entry.player);
+    }
+    const rosters = summaries.map((s) =>
+      makeRoster(s.rosterId, s.players.map((p) => p.player.id)),
+    );
+
+    const result = valueLeague(
+      rosters,
+      players,
+      values,
+      makeSettings(['QB', 'RB', 'RB', 'WR', 'WR', 'WR', 'TE', 'FLEX'], { teamCount: 10 }),
+    );
+
+    expect(startersByPosition(result.summaries)).toEqual(result.starters);
+  });
+
+  it('terminates deterministically when no fixed point exists', () => {
+    const { rosters, players, values, settings } = oscillating();
+
+    const first = valueLeague(rosters, players, values, settings);
+    const second = valueLeague(rosters, players, values, settings);
+
+    // Must not depend on which parity the loop happened to stop at.
+    expect(first.starters).toEqual(second.starters);
+    expect(first.values.get('rb_star')!.value).toBe(second.values.get('rb_star')!.value);
+
+    // A different pass cap must not change the answer either.
+    const capped = valueLeague(rosters, players, values, settings, 2);
+    expect(capped.starters).toEqual(first.starters);
+  });
+
+  it('reports scarcity pointing the same way as value', () => {
+    const { values, summaries } = league();
+    const rosters = summaries.map((s) => makeRoster(s.rosterId, s.players.map((p) => p.player.id)));
+    const players = new Map<string, Player>();
+    for (const summary of summaries) {
+      for (const entry of summary.players) players.set(entry.player.id, entry.player);
+    }
+
+    const result = valueLeague(
+      rosters,
+      players,
+      values,
+      makeSettings(['QB', 'RB', 'RB', 'WR', 'WR', 'WR', 'TE', 'FLEX'], { teamCount: 10 }),
+    );
+
+    // Running backs are scarce here and quarterbacks are not, so retained share
+    // must rank them that way. Replacement level alone ranks them backwards,
+    // which is what made the old UI panel teach the opposite of the truth.
+    expect(result.scarcity.RB!.retained).toBeGreaterThan(result.scarcity.QB!.retained);
+    expect(result.levels.QB!.value).toBeGreaterThan(result.levels.RB!.value);
   });
 });

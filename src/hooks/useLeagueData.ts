@@ -3,14 +3,9 @@ import { useMemo } from 'react';
 import { sleeperProvider } from '../platforms/sleeper';
 import { fetchFantasyCalcValues } from '../values/fantasycalc';
 import { fetchPickValues } from '../values/dynastyprocess';
-import { summarizeRoster, type RosterSummary } from '../engine/rosterValue';
+import type { RosterSummary } from '../engine/rosterValue';
 import { buildDraftPicks, tradeableSeasons } from '../engine/picks';
-import {
-  applyReplacement,
-  leagueShrinkFactor,
-  replacementLevels,
-  startersByPosition,
-} from '../engine/replacement';
+import { valueLeague } from '../engine/replacement';
 import type { DraftPick, LeagueSettings } from '../types';
 
 export function useLeague(leagueId: string | null) {
@@ -71,25 +66,18 @@ export function useLeagueSummaries(leagueId: string | null) {
     const market = valuesQuery.data?.bySleeperId;
     if (!bundle || !market) return undefined;
 
-    const marketSummaries = bundle.league.rosters.map((roster) =>
-      summarizeRoster(roster, bundle.players, market, bundle.league.settings),
+    return valueLeague(
+      bundle.league.rosters,
+      bundle.players,
+      market,
+      bundle.league.settings,
     );
-    const levels = replacementLevels(market, startersByPosition(marketSummaries));
-    const values = applyReplacement(market, levels);
-
-    return { values, levels, shrink: leagueShrinkFactor(marketSummaries, values) };
   }, [leagueQuery.data, valuesQuery.data]);
 
-  const summaries = useMemo<RosterSummary[]>(() => {
-    const bundle = leagueQuery.data;
-    if (!bundle || !adjusted) return [];
-
-    return bundle.league.rosters
-      .map((roster) =>
-        summarizeRoster(roster, bundle.players, adjusted.values, bundle.league.settings),
-      )
-      .sort((a, b) => b.starterValue - a.starterValue);
-  }, [leagueQuery.data, adjusted]);
+  const summaries = useMemo<RosterSummary[]>(
+    () => [...(adjusted?.summaries ?? [])].sort((a, b) => b.starterValue - a.starterValue),
+    [adjusted],
+  );
 
   const picks = useMemo<DraftPick[]>(() => {
     const bundle = leagueQuery.data;
@@ -115,7 +103,7 @@ export function useLeagueSummaries(leagueId: string | null) {
     league: leagueQuery.data?.league,
     players: leagueQuery.data?.players,
     values: adjusted?.values,
-    replacement: adjusted?.levels,
+    scarcity: adjusted?.scarcity,
     summaries,
     picks,
     picksUnavailable: pickValuesQuery.isError,

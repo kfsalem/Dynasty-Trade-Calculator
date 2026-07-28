@@ -2,14 +2,14 @@ import type { League, Position } from '../types';
 import type { RosterSummary } from '../engine/rosterValue';
 import { analyzeTeam, type PositionalStrength, type Quadrant } from '../engine/analysis';
 import { SKILL_POSITIONS } from '../engine/analysis';
-import type { ReplacementLevel } from '../engine/replacement';
+import type { PositionScarcity } from '../engine/replacement';
 import { POSITION_STYLES, formatValue } from '../lib/format';
 
 interface Props {
   league: League;
   summaries: RosterSummary[];
   myRosterId: number;
-  replacement: Partial<Record<Position, ReplacementLevel>> | undefined;
+  scarcity: Partial<Record<Position, PositionScarcity>> | undefined;
   onChangeTeam: () => void;
 }
 
@@ -64,32 +64,31 @@ function StrengthBar({ item }: { item: PositionalStrength }) {
 /**
  * Why the app weights positions the way it does, shown rather than asserted.
  *
- * The cost of replacing a position is the whole argument: if the best free
- * quarterback is nearly as good as the tenth-best, losing yours costs almost
- * nothing, and no amount of market hype changes that.
+ * Plotted as the share of an elite player's value that *survives* replacement,
+ * not as replacement level itself. A high replacement level means the position
+ * is cheap to replace — so charting it directly would draw the longest bar for
+ * quarterbacks in a shallow league and teach the exact opposite of the point.
  */
-function ReplacementPanel({
-  levels,
+function ScarcityPanel({
+  scarcity,
   teamCount,
 }: {
-  levels: Partial<Record<Position, ReplacementLevel>>;
+  scarcity: Partial<Record<Position, PositionScarcity>>;
   teamCount: number;
 }) {
-  const rows = SKILL_POSITIONS.map((position) => levels[position]).filter(
-    (level): level is ReplacementLevel => Boolean(level),
-  );
+  const rows = SKILL_POSITIONS.map((position) => scarcity[position])
+    .filter((row): row is PositionScarcity => row !== undefined && row.topMarket > 0)
+    .sort((a, b) => b.retained - a.retained);
   if (rows.length === 0) return null;
-
-  const worst = Math.max(...rows.map((r) => r.value), 1);
 
   return (
     <section className="card mt-4">
-      <h3 className="font-semibold">What each position costs to replace</h3>
+      <h3 className="font-semibold">What each position is really worth here</h3>
       <p className="mt-1 text-sm text-gray-500">
-        With {teamCount} teams and this lineup, these are the best players at each
-        position who start for nobody. A player is only worth what he adds over that —
-        which is why a quarterback you can stream is worth far less than his sticker
-        price, and a workhorse back is worth nearly all of his.
+        With {teamCount} teams and this lineup, a player is only worth what he adds over
+        the best man at his position who starts for nobody. The bars show how much of an
+        elite player's market value survives that test — high means the position is
+        scarce and worth paying for, low means you can replace him off waivers.
       </p>
       <div className="mt-4 space-y-2">
         {rows.map((row) => (
@@ -104,11 +103,14 @@ function ReplacementPanel({
             <div className="h-2 flex-1 rounded bg-gray-100">
               <div
                 className={`h-2 rounded ${POSITION_STYLES[row.position].bar}`}
-                style={{ width: `${(row.value / worst) * 100}%` }}
+                style={{ width: `${Math.round(row.retained * 100)}%` }}
               />
             </div>
-            <span className="w-40 shrink-0 text-right text-xs tabular-nums text-gray-500">
-              {row.startersNeeded} start · {formatValue(row.value)} to replace
+            <span className="w-16 shrink-0 text-right text-sm font-semibold tabular-nums">
+              {Math.round(row.retained * 100)}%
+            </span>
+            <span className="hidden w-44 shrink-0 text-right text-xs tabular-nums text-gray-400 sm:block">
+              {row.startersNeeded} start · replace for {formatValue(row.value)}
             </span>
           </div>
         ))}
@@ -121,7 +123,7 @@ export function TeamAnalysis({
   league,
   summaries,
   myRosterId,
-  replacement,
+  scarcity,
   onChangeTeam,
 }: Props) {
   const analysis = analyzeTeam(myRosterId, summaries, league.settings);
@@ -190,9 +192,7 @@ export function TeamAnalysis({
         </div>
       </section>
 
-      {replacement && (
-        <ReplacementPanel levels={replacement} teamCount={contention.teamCount} />
-      )}
+      {scarcity && <ScarcityPanel scarcity={scarcity} teamCount={contention.teamCount} />}
 
       <section className="card mt-4">
         <h3 className="font-semibold">Tradeable surplus</h3>

@@ -44,7 +44,7 @@ function App() {
     league,
     players,
     values,
-    replacement,
+    scarcity,
     summaries,
     picks,
     picksUnavailable,
@@ -144,7 +144,7 @@ function App() {
                     league={league}
                     summaries={summaries}
                     myRosterId={myRosterId}
-                    replacement={replacement}
+                    scarcity={scarcity}
                     onChangeTeam={() => setMyRoster(null)}
                   />
                 ))}

@@ -65,7 +65,11 @@ export async function fetchFantasyCalcValues(
   });
 
   const url = `${BASE}?${params.toString()}`;
-  const key = `fantasycalc:${params.toString()}:v1`;
+  // Bump the version whenever the cached *shape* changes. The cache stores the
+  // transformed bundle, so a returning user with a warm entry would otherwise
+  // deserialize objects missing fields the current code requires.
+  // v2: added `position` and `marketValue`.
+  const key = `fantasycalc:${params.toString()}:v2`;
 
   return cached(key, TTL.VALUES, async () => {
     const rows = await fetchJson(url, responseSchema);

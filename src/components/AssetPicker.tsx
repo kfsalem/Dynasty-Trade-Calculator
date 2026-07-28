@@ -27,12 +27,12 @@ interface Props {
  */
 function ValuePair({ market, league }: { market: number; league: number }) {
   return (
-    <span className="w-24 shrink-0 text-right tabular-nums">
-      <span className="text-gray-500" title="Market value">
+    <span className="flex shrink-0 items-baseline justify-end gap-2 tabular-nums">
+      <span className="w-12 text-right text-gray-500" title="Market value">
         {formatValue(market)}
       </span>
       <span
-        className="ml-2 text-xs font-semibold text-primary-600"
+        className="w-12 text-right text-xs font-semibold text-primary-600"
         title="Value over replacement in this league"
       >
         {formatValue(league)}
@@ -87,9 +87,10 @@ export function AssetPicker({
         </p>
       </div>
 
-      <div className="flex justify-end gap-2 border-b border-gray-100 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide">
-        <span className="text-gray-400">Market</span>
-        <span className="text-primary-500">To this team</span>
+      {/* Widths mirror ValuePair so the headings sit above their columns. */}
+      <div className="flex justify-end gap-2 border-b border-gray-100 px-2 py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide">
+        <span className="w-12 text-right text-gray-400">Market</span>
+        <span className="w-12 text-right text-primary-500">Yours</span>
       </div>
 
       <div className="max-h-96 overflow-y-auto p-2">

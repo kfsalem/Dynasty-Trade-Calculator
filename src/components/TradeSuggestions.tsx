@@ -31,7 +31,18 @@ function AssetChip({ asset }: { asset: TradeAsset }) {
         {badge}
       </span>
       <span className="min-w-0 flex-1 truncate font-medium">{asset.label}</span>
-      <span className="shrink-0 tabular-nums text-gray-500">{formatValue(asset.value)}</span>
+      {/* Market first, to agree with the fairness verdict on this same card —
+          that percentage is computed on market values, so showing only the
+          league-adjusted figure made an even trade look wildly lopsided. */}
+      <span className="shrink-0 tabular-nums text-gray-500" title="Market value">
+        {formatValue(asset.marketValue)}
+      </span>
+      <span
+        className="w-12 shrink-0 text-right text-xs font-semibold tabular-nums text-primary-600"
+        title="Value over replacement in this league"
+      >
+        {formatValue(asset.value)}
+      </span>
     </li>
   );
 }
@@ -76,7 +87,7 @@ function SuggestionCard({
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-            You send
+            You send <span className="float-right normal-case text-primary-500">market · yours</span>
           </p>
           <ul className="mt-2 space-y-1.5">
             {trade.give.map((asset) => (
@@ -86,7 +97,7 @@ function SuggestionCard({
         </div>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-            You get
+            You get <span className="float-right normal-case text-primary-500">market · yours</span>
           </p>
           <ul className="mt-2 space-y-1.5">
             {trade.get.map((asset) => (

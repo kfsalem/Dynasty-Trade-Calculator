@@ -30,11 +30,11 @@ quote, and what it is actually worth **in your league**.
 
 The difference is replacement level. In a 10-team single-QB league every manager
 already starts a top-10 quarterback, and the next one is sitting on waivers — so
-losing yours costs almost nothing, whatever the market says. Workhorse running
-backs are the opposite: roughly 27 of them start each week and the supply of
-true 15–20 touch backs runs out not far past that, so an elite back keeps nearly
-all of his value. On a real 10-team league those numbers came out at 82% for the
-best running back and 50% for the best quarterback.
+losing yours costs almost nothing, whatever the market says. Running backs are
+the opposite: the supply of true 15–20 touch backs runs out not far past the
+number who have to start, so an elite back keeps most of his value. On a real
+10-team league the best running back kept 77% of his market value and the best
+quarterback 50%.
 
 None of this is hardcoded per position. Starter counts are read from the lineups
 the league actually fields, so a superflex league raises quarterbacks back on

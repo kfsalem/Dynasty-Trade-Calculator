@@ -496,13 +496,20 @@ quarterback. Phases 1–4 inherited that blind spot wholesale.
 
 1. **Nothing is hand-tuned per position, and it did not need to be.** The
    starter counts come from real best lineups, so scarcity falls out on its own.
-   On the real league: QB 10 starters, RB 27, WR 32, TE 11 — the ten FLEX slots
-   resolved to roughly 7 RB, 2 WR, 1 TE, which is precisely why running back
-   scarcity bites hardest. Elite backs keep 82% of market value, receivers 78%,
-   tight ends 73%, and the best quarterback alive keeps 50%. The five largest
-   drops in the league are all quarterbacks. Change the lineup settings to
-   superflex and quarterbacks recover automatically, because twenty of them
-   would have to start.
+   On the real league: QB 10 starters, RB 23, WR 34, TE 13 — the ten FLEX slots
+   resolving to roughly 3 RB, 4 WR, 3 TE. Elite backs keep 77% of market value,
+   receivers 78%, tight ends 75%, and the best quarterback alive keeps 50%. The
+   five largest drops in the league are all quarterbacks. Change the lineup
+   settings to superflex and quarterbacks recover automatically, because twenty
+   of them would have to start.
+
+   Worth noting against the intuition that drove this work: once replacement is
+   accounted for, RB, WR and TE land within a point of each other at the top,
+   and only quarterback separates. The positions differ enormously in *depth* —
+   the RB cliff is real — but the best player at each is about equally hard to
+   replace. Elite tight ends in particular are scarcer than the "stream a TE"
+   framing suggests, because only the top few clear a replacement level set at
+   TE14.
 
 2. **Fairness and benefit must run on different numbers.** A trade is *argued*
    in market terms — that is what the other manager looks up before accepting —
@@ -530,10 +537,45 @@ quarterback. Phases 1–4 inherited that blind spot wholesale.
    against how QB trades actually settle in the league. A per-position tuning
    multiplier is the obvious escape hatch if it proves too strong.
 
-**Cost:** league-wide suggestions fell from 36 to 18. That is the intended
+**Cost:** league-wide suggestions fell from 36 to 16. That is the intended
 direction — quarterback-for-quarterback filler no longer clears the bar — but
 it is a real reduction in variety, driven by how few assets carry meaningful
 value once replacement is subtracted.
+
+**Post-review corrections.** A review of the commit found six real defects; the
+two that mattered most:
+
+- **Starter counts and values define each other, and one pass is not enough.**
+  Replacement level is derived from who starts, but who starts is decided by the
+  adjusted values — and replacement subtracts a *different* constant per
+  position, which is exactly what can flip a FLEX slot. The first version
+  computed counts from a market-value pass and never revisited them. Iterating
+  to a fixed point moved the real league's flex split from 7 RB / 2 WR / 1 TE to
+  3 RB / 4 WR / 3 TE, and every retained-value figure with it. The counts are
+  now guaranteed to describe the lineups the returned values actually produce.
+
+  The iteration is not guaranteed to converge: a position that loses its last
+  starter has its replacement level drop to zero, which inflates it, which can
+  win the slot straight back. Cycles are detected and fall back to the market
+  pass, so the result never depends on which parity the loop stopped at.
+
+- **The explanatory UI panel taught the inverse of the model.** It plotted
+  replacement level directly under the heading "what each position costs to
+  replace" — but a *high* replacement level means a position is *cheap* to
+  replace, so quarterbacks drew the longest bar in a league where they are the
+  most replaceable thing on the board. It now plots retained share, which points
+  the same way as the values.
+
+Also fixed: the FantasyCalc cache key was not bumped when `PlayerValue` gained
+required fields, so any returning user inside the 12h TTL would have
+deserialized a pre-upgrade entry and rendered `NaN` everywhere; the rookie-pick
+realism curve was skipped entirely when standings were unknown, pricing
+third-rounders at full value; a position with zero counted starters made its own
+best player the replacement level and zeroed the position (reachable in a
+pre-draft league with empty rosters); an unclassifiable position failed open,
+keeping full market value while every classified player was docked; and the
+suggestion cards showed league-adjusted figures beneath a market-derived
+fairness verdict, so an even trade could read as wildly lopsided.
 
 ### Phase 5 — Scale out
 - MFL + Fleaflicker providers

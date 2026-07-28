@@ -108,7 +108,12 @@ export function buildDraftPicks(
         // The slot belongs to the roster the pick came *from* — that is whose
         // record decides where it lands, no matter who holds it now.
         const slot = slots.get(roster.rosterId) ?? null;
-        const overall = slot === null ? null : (round - 1) * teamCount + slot;
+        // With no standings to project from, fall back to the middle of the
+        // round. The round-based part of the curve — third-rounders being worth
+        // nothing — needs no slot at all, and skipping it entirely priced a
+        // third at full value.
+        const overall =
+          (round - 1) * teamCount + (slot ?? Math.ceil(teamCount / 2));
 
         // The realism curve is applied to the market figure too, not only the
         // league-adjusted one. It corrects a market that overprices late picks,
@@ -123,8 +128,7 @@ export function buildDraftPicks(
             slot,
             slot === null ? null : slotTier(slot, teamCount),
           );
-          const realism = overall === null ? 1 : pickRealismFactor(overall, round);
-          marketValue = Math.round(quoted * realism);
+          marketValue = Math.round(quoted * pickRealismFactor(overall, round));
         }
 
         picks.push({

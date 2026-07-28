@@ -1,5 +1,5 @@
-import type { PlayerValue, Position } from '../types';
-import type { RosterSummary } from './rosterValue';
+import type { LeagueSettings, Player, PlayerValue, Position, Roster } from '../types';
+import { summarizeRoster, type RosterSummary } from './rosterValue';
 
 /**
  * Replacement level: what a position is actually worth in *this* league.
@@ -76,6 +76,16 @@ export function replacementLevels(
   for (const [position, list] of byPosition) {
     list.sort((a, b) => b - a);
     const startersNeeded = starters[position] ?? 0;
+
+    // Nobody starting the position means we have no evidence about it — an
+    // empty or pre-draft league produces exactly this. Taking element [0] here
+    // would make the best player at the position the replacement level and zero
+    // out every player in the league, so fail open and leave values untouched.
+    if (startersNeeded <= 0) {
+      levels[position] = { position, startersNeeded: 0, value: 0 };
+      continue;
+    }
+
     // Zero-indexed, so element [startersNeeded] is the first player past the
     // last starting job — exactly the man you would pick up instead.
     const replacement = list[startersNeeded] ?? list.at(-1) ?? 0;
@@ -96,9 +106,18 @@ export function applyReplacement(
   values: Map<string, PlayerValue>,
   levels: Partial<Record<Position, ReplacementLevel>>,
 ): Map<string, PlayerValue> {
+  // An unknown position fails *closed*. Charging nothing would let a player the
+  // feed failed to classify keep his full market value while every classified
+  // player is docked, floating him to the top of lineups and into the surplus
+  // list. FantasyCalc's position is nullable and any unrecognised string maps
+  // to null, so this is a feed change away from happening.
+  const strictest = Math.max(0, ...Object.values(levels).map((level) => level.value));
+
   const out = new Map<string, PlayerValue>();
   for (const [id, value] of values) {
-    const replacement = value.position ? (levels[value.position]?.value ?? 0) : 0;
+    const replacement = value.position
+      ? (levels[value.position]?.value ?? strictest)
+      : strictest;
     out.set(id, {
       ...value,
       value: Math.max(0, value.marketValue - replacement),
@@ -134,4 +153,119 @@ export function leagueShrinkFactor(
     }
   }
   return market > 0 ? league / market : 1;
+}
+
+export interface PositionScarcity extends ReplacementLevel {
+  /** Market value of the best player at the position. */
+  topMarket: number;
+  /**
+   * Share of that best player's market value that survives replacement, 0-1.
+   *
+   * This is the number worth showing a human. A *high* replacement level means
+   * the position is cheap to replace, which is the opposite of scarce — so
+   * plotting replacement level directly reads backwards. Retained share points
+   * the right way: elite running backs keep most of their value, elite
+   * quarterbacks in a shallow single-QB league keep about half.
+   */
+  retained: number;
+}
+
+export function positionScarcity(
+  market: Map<string, PlayerValue>,
+  levels: Partial<Record<Position, ReplacementLevel>>,
+): Partial<Record<Position, PositionScarcity>> {
+  const top: Partial<Record<Position, number>> = {};
+  for (const value of market.values()) {
+    if (!value.position) continue;
+    top[value.position] = Math.max(top[value.position] ?? 0, value.marketValue);
+  }
+
+  const out: Partial<Record<Position, PositionScarcity>> = {};
+  for (const level of Object.values(levels)) {
+    const topMarket = top[level.position] ?? 0;
+    out[level.position] = {
+      ...level,
+      topMarket,
+      retained: topMarket > 0 ? Math.max(0, topMarket - level.value) / topMarket : 0,
+    };
+  }
+  return out;
+}
+
+export interface LeagueValuation {
+  /** Replacement-adjusted values, for every downstream consumer. */
+  values: Map<string, PlayerValue>;
+  levels: Partial<Record<Position, ReplacementLevel>>;
+  scarcity: Partial<Record<Position, PositionScarcity>>;
+  starters: StarterCounts;
+  /** Summaries built from the adjusted values, already converged. */
+  summaries: RosterSummary[];
+  shrink: number;
+}
+
+const sameCounts = (a: StarterCounts, b: StarterCounts): boolean => {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<Position>;
+  for (const key of keys) if ((a[key] ?? 0) !== (b[key] ?? 0)) return false;
+  return true;
+};
+
+/**
+ * Value a whole league, iterating until the starter counts settle.
+ *
+ * The counts and the values define each other: replacement level is derived
+ * from who starts, and who starts is decided by the adjusted values. A single
+ * pass off market values is not good enough, because replacement subtracts a
+ * *different* constant per position — which is exactly the thing that can flip
+ * a FLEX slot from one position to another. A back at 3,000 beats a receiver at
+ * 2,800 on market, and loses to him once 2,500 and 1,500 are subtracted.
+ *
+ * On real leagues this reaches a fixed point in two or three passes. It is not
+ * guaranteed to: a position that loses its last starter has its replacement
+ * level drop to zero, which inflates it, which can win the slot straight back.
+ * A cycle means no fixed point exists for this pool, so we fall back to the
+ * market pass — the answer is then no better than before, but it is at least
+ * deterministic rather than depending on which parity the loop stopped at.
+ */
+export function valueLeague(
+  rosters: Roster[],
+  players: Map<string, Player>,
+  market: Map<string, PlayerValue>,
+  settings: LeagueSettings,
+  maxPasses = 5,
+): LeagueValuation {
+  const summarize = (values: Map<string, PlayerValue>) =>
+    rosters.map((roster) => summarizeRoster(roster, players, values, settings));
+
+  // Every pass recomputes levels, values and summaries together, so whatever is
+  // returned is internally consistent — the counts describe the very lineups
+  // the returned values produce.
+  const pass = (counts: StarterCounts) => {
+    const levels = replacementLevels(market, counts);
+    const values = applyReplacement(market, levels);
+    const summaries = summarize(values);
+    return { levels, values, summaries, starters: counts };
+  };
+
+  const baseline = startersByPosition(summarize(market));
+  const seen: StarterCounts[] = [baseline];
+  let state = pass(baseline);
+
+  for (let n = 0; n < maxPasses; n++) {
+    const next = startersByPosition(state.summaries);
+    if (sameCounts(next, state.starters)) break;
+
+    if (seen.some((counts) => sameCounts(counts, next))) {
+      state = pass(baseline);
+      break;
+    }
+
+    seen.push(next);
+    state = pass(next);
+  }
+
+  return {
+    ...state,
+    scarcity: positionScarcity(market, state.levels),
+    shrink: leagueShrinkFactor(state.summaries, state.values),
+  };
 }
