@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bestLineup, valuePlayers, type ValuedPlayer } from './rosterValue';
 import type { LineupSlot, Player, PlayerValue, Position } from '../types';
+import { makeValue } from './testFixtures';
 
 function player(id: string, position: Position, name = id): Player {
   return {
@@ -108,21 +109,7 @@ describe('valuePlayers', () => {
     ['a', player('a', 'WR')],
     ['b', player('b', 'RB')],
   ]);
-  const values = new Map<string, PlayerValue>([
-    [
-      'a',
-      {
-        playerId: 'a',
-        value: 500,
-        redraftValue: 400,
-        overallRank: 1,
-        positionRank: 1,
-        trend30Day: 0,
-        tier: 1,
-        source: 'test',
-      },
-    ],
-  ]);
+  const values = new Map<string, PlayerValue>([['a', makeValue('a', 500, 'WR')]]);
 
   it('sorts by value descending and flags unvalued players', () => {
     const result = valuePlayers(['b', 'a'], players, values);

@@ -3,7 +3,14 @@ import { movableAssets, suggestTrades, type SuggestContext } from './suggest';
 import { analyzeTeam } from './analysis';
 import { summarizeRoster, type RosterSummary } from './rosterValue';
 import type { DraftPick, LineupSlot, Player, PlayerValue, Position, Roster } from '../types';
-import { makeLeague, makePlayer, makeRoster, makeSettings, makeValue } from './testFixtures';
+import {
+  makeLeague,
+  makePick,
+  makePlayer,
+  makeRoster,
+  makeSettings,
+  makeValue,
+} from './testFixtures';
 
 const SLOTS: LineupSlot[] = ['QB', 'RB', 'WR'];
 const settings = makeSettings(SLOTS, { teamCount: 4, draftRounds: 2 });
@@ -46,16 +53,16 @@ function world(specs: Spec[], pickValue = 0) {
     pickValue > 0
       ? rosters.flatMap((roster) =>
           ['2027', '2028'].flatMap((season) =>
-            [1, 2].map((round) => ({
-              id: `${season}-${round}-${roster.rosterId}`,
-              season,
-              round,
-              originalRosterId: roster.rosterId,
-              ownerRosterId: roster.rosterId,
+            [1, 2].map((round) =>
               // A 2nd is worth a third of a 1st, which is roughly the real shape.
-              value: round === 1 ? pickValue : Math.round(pickValue / 3),
-              label: `${season} round ${round}`,
-            })),
+              makePick(
+                `${season}-${round}-${roster.rosterId}`,
+                season,
+                round,
+                roster.rosterId,
+                round === 1 ? pickValue : Math.round(pickValue / 3),
+              ),
+            ),
           ),
         )
       : [];

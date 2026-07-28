@@ -40,8 +40,17 @@ function App() {
   // it re-reads the seed rather than keeping the user's previous selections.
   const [pending, setPending] = useState<{ trade: PendingTrade; seq: number } | null>(null);
   const { myRosterId, setMyRoster } = useMyRoster(leagueId);
-  const { league, players, values, summaries, picks, picksUnavailable, isLoading, error } =
-    useLeagueSummaries(leagueId);
+  const {
+    league,
+    players,
+    values,
+    replacement,
+    summaries,
+    picks,
+    picksUnavailable,
+    isLoading,
+    error,
+  } = useLeagueSummaries(leagueId);
 
   useEffect(() => {
     try {
@@ -135,6 +144,7 @@ function App() {
                     league={league}
                     summaries={summaries}
                     myRosterId={myRosterId}
+                    replacement={replacement}
                     onChangeTeam={() => setMyRoster(null)}
                   />
                 ))}

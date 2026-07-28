@@ -21,9 +21,29 @@ import { evaluateTrade, type TradeContext } from './trade';
  * yes, stated in their terms.
  */
 
+/**
+ * `value` is league-adjusted — what the asset is worth to the team holding it.
+ * `marketValue` is what the other manager will quote. Packages are balanced on
+ * the market figure, so an offer looks fair in the terms it will be judged in,
+ * while whether it helps is decided on the league-adjusted one.
+ */
 export type TradeAsset =
-  | { kind: 'player'; id: string; label: string; value: number; player: Player }
-  | { kind: 'pick'; id: string; label: string; value: number; pick: DraftPick };
+  | {
+      kind: 'player';
+      id: string;
+      label: string;
+      value: number;
+      marketValue: number;
+      player: Player;
+    }
+  | {
+      kind: 'pick';
+      id: string;
+      label: string;
+      value: number;
+      marketValue: number;
+      pick: DraftPick;
+    };
 
 export interface SideBenefit {
   /** Change in the best lineup this team could field today. */
@@ -92,12 +112,19 @@ export interface SuggestOptions {
  * trade — a rebuilder sending a veteran to a contender for picks — because
  * picks never start. A rebuilder is not trying to win now, so measuring their
  * gain in win-now units answers a question they did not ask.
+ *
+ * No weight drops below 0.35 on the present, deliberately. A model that scores
+ * a bottom team purely on the future will happily recommend stripping it to the
+ * studs, and a league where two teams have given up on the season is less fun
+ * for the other eight — which is the actual product being built here. Rebuilds
+ * are supposed to trade away the pieces that will not be there for the next
+ * good team, not every piece that can be sold.
  */
 export const WINDOW_WEIGHTS: Record<Quadrant, { now: number; future: number }> = {
   juggernaut: { now: 0.65, future: 0.35 },
   win_now: { now: 0.9, future: 0.1 },
-  rebuilding: { now: 0.25, future: 0.75 },
-  danger: { now: 0.1, future: 0.9 },
+  rebuilding: { now: 0.4, future: 0.6 },
+  danger: { now: 0.35, future: 0.65 },
 };
 
 const CONTENDING: Quadrant[] = ['juggernaut', 'win_now'];
@@ -115,11 +142,12 @@ const WINDOW_PHRASE: Record<Quadrant, string> = {
 
 const sum = (values: number[]): number => values.reduce((a, b) => a + b, 0);
 
-const playerAsset = (player: Player, value: number): TradeAsset => ({
+const playerAsset = (player: Player, value: number, marketValue: number): TradeAsset => ({
   kind: 'player',
   id: player.id,
   label: player.name,
   value,
+  marketValue,
   player,
 });
 
@@ -128,6 +156,7 @@ const pickAsset = (pick: DraftPick): TradeAsset => ({
   id: pick.id,
   label: pick.label,
   value: pick.value,
+  marketValue: pick.marketValue,
   pick,
 });
 
@@ -179,9 +208,14 @@ export function movableAssets(
   limit: number,
 ): TradeAsset[] {
   const assets = new Map<string, TradeAsset>();
+  const market = (id: string, fallback: number) =>
+    ctx.values.get(id)?.marketValue ?? fallback;
 
   for (const surplus of analysis.surpluses) {
-    assets.set(surplus.player.id, playerAsset(surplus.player, surplus.value));
+    assets.set(
+      surplus.player.id,
+      playerAsset(surplus.player, surplus.value, market(surplus.player.id, surplus.value)),
+    );
   }
 
   if (CONTENDING.includes(analysis.contention.quadrant)) {
@@ -194,7 +228,10 @@ export function movableAssets(
       if (!entry || entry.value <= 0) continue;
       const { age, position } = entry.player;
       if (age === null || age < (AGE_CLIFF[position] ?? 99)) continue;
-      assets.set(entry.player.id, playerAsset(entry.player, entry.value));
+      assets.set(
+        entry.player.id,
+        playerAsset(entry.player, entry.value, market(entry.player.id, entry.value)),
+      );
     }
   }
 
@@ -217,9 +254,12 @@ function balancePackage(
   ctx: SuggestContext,
   tolerance: number,
 ): { give: TradeAsset[]; get: TradeAsset[] } | null {
-  const gapOf = (a: TradeAsset[], b: TradeAsset[]) => sum(b.map((x) => x.value)) - sum(a.map((x) => x.value));
+  // Balanced on market value: an offer has to look fair in the terms the other
+  // manager will check it in, not in our own adjusted units.
+  const gapOf = (a: TradeAsset[], b: TradeAsset[]) =>
+    sum(b.map((x) => x.marketValue)) - sum(a.map((x) => x.marketValue));
   const largerOf = (a: TradeAsset[], b: TradeAsset[]) =>
-    Math.max(sum(a.map((x) => x.value)), sum(b.map((x) => x.value)));
+    Math.max(sum(a.map((x) => x.marketValue)), sum(b.map((x) => x.marketValue)));
 
   const larger = largerOf(give, get);
   if (larger <= 0) return null;
@@ -235,8 +275,8 @@ function balancePackage(
   let best: DraftPick | null = null;
   let bestResidual = target;
   for (const pick of picksForRoster(ctx.picks, shortRosterId)) {
-    if (pick.value <= 0 || used.has(pick.id)) continue;
-    const residual = Math.abs(target - pick.value);
+    if (pick.marketValue <= 0 || used.has(pick.id)) continue;
+    const residual = Math.abs(target - pick.marketValue);
     if (residual < bestResidual) {
       best = pick;
       bestResidual = residual;

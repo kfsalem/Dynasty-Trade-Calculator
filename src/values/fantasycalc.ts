@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { fetchJson } from '../lib/http';
 import { cached, TTL } from '../lib/cache';
-import type { LeagueSettings, PlayerValue } from '../types';
+import type { LeagueSettings, PlayerValue, Position } from '../types';
+
+const POSITIONS: string[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
 
 const BASE = 'https://api.fantasycalc.com/values/current';
 
@@ -75,11 +77,18 @@ export async function fetchFantasyCalcValues(
       const sleeperId = row.player.sleeperId;
       if (!sleeperId) continue;
 
+      // Normalized to a source-independent 0-10000 scale so a second value
+      // source can be blended in later without mixing incompatible units.
+      const normalized = Math.round((row.value / rawMax) * 10000);
+      const position = row.player.position?.toUpperCase();
+
       bySleeperId.set(sleeperId, {
         playerId: sleeperId,
-        // Normalized to a source-independent 0-10000 scale so a second value
-        // source can be blended in later without mixing incompatible units.
-        value: Math.round((row.value / rawMax) * 10000),
+        position: POSITIONS.includes(position as Position)
+          ? (position as Position)
+          : null,
+        value: normalized,
+        marketValue: normalized,
         redraftValue: Math.round(((row.redraftValue ?? 0) / rawMax) * 10000),
         overallRank: row.overallRank,
         positionRank: row.positionRank ?? 0,

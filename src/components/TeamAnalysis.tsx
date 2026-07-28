@@ -1,12 +1,15 @@
-import type { League } from '../types';
+import type { League, Position } from '../types';
 import type { RosterSummary } from '../engine/rosterValue';
 import { analyzeTeam, type PositionalStrength, type Quadrant } from '../engine/analysis';
+import { SKILL_POSITIONS } from '../engine/analysis';
+import type { ReplacementLevel } from '../engine/replacement';
 import { POSITION_STYLES, formatValue } from '../lib/format';
 
 interface Props {
   league: League;
   summaries: RosterSummary[];
   myRosterId: number;
+  replacement: Partial<Record<Position, ReplacementLevel>> | undefined;
   onChangeTeam: () => void;
 }
 
@@ -58,7 +61,69 @@ function StrengthBar({ item }: { item: PositionalStrength }) {
   );
 }
 
-export function TeamAnalysis({ league, summaries, myRosterId, onChangeTeam }: Props) {
+/**
+ * Why the app weights positions the way it does, shown rather than asserted.
+ *
+ * The cost of replacing a position is the whole argument: if the best free
+ * quarterback is nearly as good as the tenth-best, losing yours costs almost
+ * nothing, and no amount of market hype changes that.
+ */
+function ReplacementPanel({
+  levels,
+  teamCount,
+}: {
+  levels: Partial<Record<Position, ReplacementLevel>>;
+  teamCount: number;
+}) {
+  const rows = SKILL_POSITIONS.map((position) => levels[position]).filter(
+    (level): level is ReplacementLevel => Boolean(level),
+  );
+  if (rows.length === 0) return null;
+
+  const worst = Math.max(...rows.map((r) => r.value), 1);
+
+  return (
+    <section className="card mt-4">
+      <h3 className="font-semibold">What each position costs to replace</h3>
+      <p className="mt-1 text-sm text-gray-500">
+        With {teamCount} teams and this lineup, these are the best players at each
+        position who start for nobody. A player is only worth what he adds over that —
+        which is why a quarterback you can stream is worth far less than his sticker
+        price, and a workhorse back is worth nearly all of his.
+      </p>
+      <div className="mt-4 space-y-2">
+        {rows.map((row) => (
+          <div key={row.position} className="flex items-center gap-3">
+            <span
+              className={`inline-flex w-11 shrink-0 justify-center rounded px-1.5 py-0.5 text-xs font-semibold ${
+                POSITION_STYLES[row.position].chip
+              }`}
+            >
+              {row.position}
+            </span>
+            <div className="h-2 flex-1 rounded bg-gray-100">
+              <div
+                className={`h-2 rounded ${POSITION_STYLES[row.position].bar}`}
+                style={{ width: `${(row.value / worst) * 100}%` }}
+              />
+            </div>
+            <span className="w-40 shrink-0 text-right text-xs tabular-nums text-gray-500">
+              {row.startersNeeded} start · {formatValue(row.value)} to replace
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function TeamAnalysis({
+  league,
+  summaries,
+  myRosterId,
+  replacement,
+  onChangeTeam,
+}: Props) {
   const analysis = analyzeTeam(myRosterId, summaries, league.settings);
   const roster = league.rosters.find((r) => r.rosterId === myRosterId);
 
@@ -124,6 +189,10 @@ export function TeamAnalysis({ league, summaries, myRosterId, onChangeTeam }: Pr
           ))}
         </div>
       </section>
+
+      {replacement && (
+        <ReplacementPanel levels={replacement} teamCount={contention.teamCount} />
+      )}
 
       <section className="card mt-4">
         <h3 className="font-semibold">Tradeable surplus</h3>

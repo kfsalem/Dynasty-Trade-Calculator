@@ -58,11 +58,24 @@ export interface Player {
   };
 }
 
-/** A player's market value under a specific league configuration. */
+/**
+ * A player's value under a specific league configuration.
+ *
+ * Two numbers, deliberately. `marketValue` is what KeepTradeCut and FantasyCalc
+ * quote — the figure the manager across the table will check before accepting.
+ * `value` is whatever the map in hand represents: the same market figure in a
+ * market map, or value over this league's replacement level in a league-adjusted
+ * one. Trade *fairness* is argued in market terms; whether a trade actually
+ * helps is decided in league-adjusted ones.
+ */
 export interface PlayerValue {
   playerId: string;
-  /** Dynasty value, normalized to a 0-10000 scale. */
+  /** Position, carried so replacement level can be computed per position. */
+  position: Position | null;
+  /** Dynasty value on a 0-10000 scale — market, or above replacement. */
   value: number;
+  /** Always the raw market figure, whatever `value` holds. */
+  marketValue: number;
   redraftValue: number;
   overallRank: number;
   positionRank: number;
@@ -82,8 +95,12 @@ export interface DraftPick {
   originalRosterId: number;
   /** Roster that holds it now. */
   ownerRosterId: number;
-  /** Normalized to the same 0-10000 scale as player values. */
+  /** League-adjusted, on the same scale as `PlayerValue.value`. */
   value: number;
+  /** On the same scale as `PlayerValue.marketValue`, for fairness comparisons. */
+  marketValue: number;
+  /** Projected draft slot from the original owner's standing, when known. */
+  slot: number | null;
   /** Display label, e.g. "2027 1st (via Ben)". */
   label: string;
 }

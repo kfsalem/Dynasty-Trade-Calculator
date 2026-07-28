@@ -230,6 +230,10 @@ This is where the product is won or lost. Raw value summing is a commodity; ever
 
 ### 4.1 Roster valuation
 
+All of this runs on **replacement-adjusted** values, not raw market ones — see
+Phase 4.5. A player is worth what he adds over the best player at his position
+who starts for nobody in this league.
+
 Do **not** just sum player values. Compute:
 
 - **Starter value** — value in actual starting slots, honoring the league's real lineup (including SUPERFLEX and FLEX, read from Sleeper's `roster_positions`)
@@ -472,6 +476,64 @@ synthetic data:
    trivial one. The league's best team now correctly gets **no** suggestions —
    its surplus is real but nothing it can buy moves a 36,704-point lineup, and
    saying so is better than padding the list.
+
+### Phase 4.5 — Grounding values in league reality ✅ *(done 2026-07-28)*
+
+Market values price a player against the whole dynasty world. They cannot know
+that in a 10-team single-QB league every manager already starts a top-10
+quarterback. Phases 1–4 inherited that blind spot wholesale.
+
+- **Replacement level per position**, derived from the lineups the league
+  actually fields — `leagueValue = max(0, market - replacement(position))`
+- **Realistic rookie pick values**: projected draft slot from the standings,
+  plus a hard cliff after roughly pick 15 and near-zero third-rounders
+- **Anti-tanking**: no contention window weights the present below 0.35, and the
+  danger-zone advice no longer says "tear down aggressively"
+- Every value now carries both a `marketValue` and a league-adjusted `value`
+- 16 new tests (111 total); verified on the real league
+
+**Four findings:**
+
+1. **Nothing is hand-tuned per position, and it did not need to be.** The
+   starter counts come from real best lineups, so scarcity falls out on its own.
+   On the real league: QB 10 starters, RB 27, WR 32, TE 11 — the ten FLEX slots
+   resolved to roughly 7 RB, 2 WR, 1 TE, which is precisely why running back
+   scarcity bites hardest. Elite backs keep 82% of market value, receivers 78%,
+   tight ends 73%, and the best quarterback alive keeps 50%. The five largest
+   drops in the league are all quarterbacks. Change the lineup settings to
+   superflex and quarterbacks recover automatically, because twenty of them
+   would have to start.
+
+2. **Fairness and benefit must run on different numbers.** A trade is *argued*
+   in market terms — that is what the other manager looks up before accepting —
+   but whether it *helps* is a question about replacement-adjusted value.
+   Balancing packages on market value and scoring benefit on league value makes
+   suggestions more persuasive rather than less: they look fair in the terms
+   they will be judged in, and are genuinely good in the terms that matter.
+
+3. **The pick realism curve is a correction to the market's shape, not the
+   shape itself.** It is deliberately flat across the first ten picks, because
+   the market already prices 1.01 above 1.10 — when it knows the slot. Within-
+   round differences therefore come from DynastyProcess's slot and tier rows,
+   which means projecting the slot from the standings is what unlocks them. On
+   the real league a bottom team's 1.01 is worth **5.5x** the champion's 1.10
+   (6,349 against 1,154), and third-rounders price at 1–2 points. Applying the
+   curve to the market figure as well as the league one is deliberate: applying
+   it to only one side would let the engine hand over third-rounders that
+   "balance" a trade while costing it nothing.
+
+4. **Quarterbacks are now discounted twice, and that is worth watching.**
+   FantasyCalc is already asked for single-QB values, and replacement level
+   discounts them again on top. Both steps are defensible — the first is about
+   format, the second about this specific league's depth — but the combined
+   effect is aggressive, and it is the one number most worth sanity-checking
+   against how QB trades actually settle in the league. A per-position tuning
+   multiplier is the obvious escape hatch if it proves too strong.
+
+**Cost:** league-wide suggestions fell from 36 to 18. That is the intended
+direction — quarterback-for-quarterback filler no longer clears the bar — but
+it is a real reduction in variety, driven by how few assets carry meaningful
+value once replacement is subtracted.
 
 ### Phase 5 — Scale out
 - MFL + Fleaflicker providers

@@ -145,12 +145,12 @@ const QUADRANTS: Record<Quadrant, { label: string; advice: string }> = {
   rebuilding: {
     label: 'Rebuilding on schedule',
     advice:
-      'Weak now but young. Stay patient, keep selling win-now pieces to contenders, and let the youth mature.',
+      'Weak now but young. Let the core mature, and sell the veterans who will not be here for the next good team — while keeping enough starters to stay in games.',
   },
   danger: {
     label: 'Danger zone',
     advice:
-      'Weak now and old. The hardest spot in dynasty. Tear down aggressively — sell every veteran with value while it still exists.',
+      'Weak now and aging. Sell the veterans whose value is peaking, but spend what you get on players who can start for you next season. A full teardown costs two years and makes the league worse for everyone in it.',
   },
 };
 

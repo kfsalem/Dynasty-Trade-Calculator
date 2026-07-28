@@ -18,6 +18,29 @@ interface Props {
   outgoingValue: number;
 }
 
+/**
+ * Two numbers per asset. Market is what the other manager will look up before
+ * accepting; league is what the asset is worth once you account for how cheaply
+ * this league replaces the position. They diverge most where it matters — a
+ * quarterback in a shallow single-QB league is worth a fraction of his sticker
+ * price, because the waiver wire is full of near-equivalents.
+ */
+function ValuePair({ market, league }: { market: number; league: number }) {
+  return (
+    <span className="w-24 shrink-0 text-right tabular-nums">
+      <span className="text-gray-500" title="Market value">
+        {formatValue(market)}
+      </span>
+      <span
+        className="ml-2 text-xs font-semibold text-primary-600"
+        title="Value over replacement in this league"
+      >
+        {formatValue(league)}
+      </span>
+    </span>
+  );
+}
+
 export function AssetPicker({
   league,
   rosterId,
@@ -64,6 +87,11 @@ export function AssetPicker({
         </p>
       </div>
 
+      <div className="flex justify-end gap-2 border-b border-gray-100 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide">
+        <span className="text-gray-400">Market</span>
+        <span className="text-primary-500">To this team</span>
+      </div>
+
       <div className="max-h-96 overflow-y-auto p-2">
         {ownedPicks.length > 0 && (
           <>
@@ -82,9 +110,7 @@ export function AssetPicker({
                   className="h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                 />
                 <span className="min-w-0 flex-1 truncate">{pick.label}</span>
-                <span className="shrink-0 tabular-nums text-gray-500">
-                  {formatValue(pick.value)}
-                </span>
+                <ValuePair market={pick.marketValue} league={pick.value} />
               </label>
             ))}
           </>
@@ -119,9 +145,14 @@ export function AssetPicker({
                   </span>
                 )}
               </span>
-              <span className="shrink-0 tabular-nums text-gray-500">
-                {entry.valued ? formatValue(entry.value) : '~0'}
-              </span>
+              {entry.valued ? (
+                <ValuePair
+                  market={values.get(entry.player.id)?.marketValue ?? entry.value}
+                  league={entry.value}
+                />
+              ) : (
+                <span className="w-24 shrink-0 text-right tabular-nums text-gray-400">~0</span>
+              )}
             </label>
           );
         })}

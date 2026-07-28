@@ -23,6 +23,33 @@ other calculator shows. **Starting lineup** is the change in the best lineup
 that side can field — and it is the one that matters. Winning a trade on raw
 value while your starters get worse is common, and it is the whole point.
 
+## Values are league-specific
+
+Every asset carries two numbers: the **market** value your league mates will
+quote, and what it is actually worth **in your league**.
+
+The difference is replacement level. In a 10-team single-QB league every manager
+already starts a top-10 quarterback, and the next one is sitting on waivers — so
+losing yours costs almost nothing, whatever the market says. Workhorse running
+backs are the opposite: roughly 27 of them start each week and the supply of
+true 15–20 touch backs runs out not far past that, so an elite back keeps nearly
+all of his value. On a real 10-team league those numbers came out at 82% for the
+best running back and 50% for the best quarterback.
+
+None of this is hardcoded per position. Starter counts are read from the lineups
+the league actually fields, so a superflex league raises quarterbacks back on
+its own — twenty of them have to start.
+
+Rookie picks get the same treatment. An NFL class yields roughly 10–15 offensive
+players who matter in their first two years, so pick value falls off a cliff
+after about pick 15 and third-rounders are worth essentially nothing. Draft
+slots are projected from the standings, which is why a bottom team's first is
+worth several times the champion's.
+
+Trades are still *balanced* on market value, because that is the number the
+other manager will check. Whether a trade helps is judged on the league-adjusted
+one.
+
 Claim your team with your Sleeper username to get personalized analysis: your
 contention window, your positional strengths and weaknesses against the league,
 and which of your bench players other teams would actually start.

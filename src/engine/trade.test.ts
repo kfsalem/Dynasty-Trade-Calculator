@@ -3,6 +3,7 @@ import { evaluateTrade, type TradeContext } from './trade';
 import type { DraftPick, Player, PlayerValue } from '../types';
 import {
   makeLeague,
+  makePick,
   makePlayer,
   makeRoster,
   makeSettings,
@@ -158,15 +159,7 @@ describe('evaluateTrade', () => {
 
   it('counts pick value but keeps picks out of lineup strength', () => {
     const picks: DraftPick[] = [
-      {
-        id: '2027-1-2',
-        season: '2027',
-        round: 1,
-        originalRosterId: 2,
-        ownerRosterId: 2,
-        value: 4000,
-        label: '2027 1st',
-      },
+      makePick('2027-1-2', '2027', 1, 2, 4000),
     ];
     const ctx = context({ picks });
 
@@ -196,24 +189,8 @@ describe('evaluateTrade', () => {
 
   it('warns when a side ships most of its pick capital', () => {
     const picks: DraftPick[] = [
-      {
-        id: '2027-1-1',
-        season: '2027',
-        round: 1,
-        originalRosterId: 1,
-        ownerRosterId: 1,
-        value: 4000,
-        label: '2027 1st',
-      },
-      {
-        id: '2027-2-1',
-        season: '2027',
-        round: 2,
-        originalRosterId: 1,
-        ownerRosterId: 1,
-        value: 1000,
-        label: '2027 2nd',
-      },
+      makePick('2027-1-1', '2027', 1, 1, 4000),
+      makePick('2027-2-1', '2027', 2, 1, 1000),
     ];
     const ctx = context({ picks });
 

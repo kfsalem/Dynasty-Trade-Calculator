@@ -1,4 +1,5 @@
 import type {
+  DraftPick,
   League,
   LeagueSettings,
   LineupSlot,
@@ -26,16 +27,45 @@ export function makePlayer(
   };
 }
 
-export function makeValue(id: string, value: number): PlayerValue {
+export function makeValue(
+  id: string,
+  value: number,
+  position: Position | null = null,
+  marketValue = value,
+): PlayerValue {
   return {
     playerId: id,
+    position,
     value,
+    marketValue,
     redraftValue: value,
     overallRank: 1,
     positionRank: 1,
     trend30Day: 0,
     tier: 1,
     source: 'test',
+  };
+}
+
+export function makePick(
+  id: string,
+  season: string,
+  round: number,
+  originalRosterId: number,
+  value: number,
+  overrides: Partial<DraftPick> = {},
+): DraftPick {
+  return {
+    id,
+    season,
+    round,
+    originalRosterId,
+    ownerRosterId: originalRosterId,
+    value,
+    marketValue: value,
+    slot: null,
+    label: `${season} round ${round}`,
+    ...overrides,
   };
 }
 

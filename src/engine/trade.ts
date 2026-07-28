@@ -72,13 +72,16 @@ function buildSide(
   const outgoingPicks = resolvePicks(input.pickIds);
   const incomingPicks = resolvePicks(received.pickIds);
 
-  const playerValue = (p: Player) => ctx.values.get(p.id)?.value ?? 0;
+  // Fairness is argued in market terms, because that is the number the other
+  // manager will look up before accepting. Whether the trade actually helps is
+  // decided by the lineup maths below, which runs on league-adjusted values.
+  const playerValue = (p: Player) => ctx.values.get(p.id)?.marketValue ?? 0;
   const sum = (n: number[]) => n.reduce((a, b) => a + b, 0);
 
   const outgoingValue =
-    sum(outgoingPlayers.map(playerValue)) + sum(outgoingPicks.map((p) => p.value));
+    sum(outgoingPlayers.map(playerValue)) + sum(outgoingPicks.map((p) => p.marketValue));
   const incomingValue =
-    sum(incomingPlayers.map(playerValue)) + sum(incomingPicks.map((p) => p.value));
+    sum(incomingPlayers.map(playerValue)) + sum(incomingPicks.map((p) => p.marketValue));
 
   // Picks never appear in a starting lineup, so VORS moves only on players.
   // That asymmetry is the point: it is what shows a contender that trading

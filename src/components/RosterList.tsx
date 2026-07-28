@@ -28,7 +28,9 @@ export function RosterList({ league, summaries, myRosterId }: Props) {
       <p className="text-sm text-gray-500">
         Ranked by the best lineup each roster can field — computed from the league's{' '}
         {league.settings.startingSlots.length} starting slots, not from whatever lineup was
-        last set. Values are dynasty, from FantasyCalc, matched to this league's format.
+        last set. Values are dynasty, from FantasyCalc, matched to this league's format,
+        then measured against what it costs to replace each position{' '}
+        <em>in this league</em>.
       </p>
 
       {unvalued > 0 && (

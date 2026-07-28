@@ -156,10 +156,12 @@ export function TradeBuilder({
     );
   }, [anySelected, teamA, teamB, givesA, givesB, ctx]);
 
+  // Market value, to match the "Sends"/"Receives" figures in the verdict below —
+  // both are the numbers the other manager will check.
   const sumValue = (playerIds: Set<string>, pickIds: Set<string>) => {
     let total = 0;
-    for (const id of playerIds) total += values.get(id)?.value ?? 0;
-    for (const id of pickIds) total += picks.find((p) => p.id === id)?.value ?? 0;
+    for (const id of playerIds) total += values.get(id)?.marketValue ?? 0;
+    for (const id of pickIds) total += picks.find((p) => p.id === id)?.marketValue ?? 0;
     return total;
   };
 

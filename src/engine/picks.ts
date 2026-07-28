@@ -1,5 +1,56 @@
 import type { DraftPick, League, Roster } from '../types';
-import { lookupPickValue, type PickValueTable } from '../values/dynastyprocess';
+import { lookupPickValue, type PickTier, type PickValueTable } from '../values/dynastyprocess';
+
+/**
+ * What a rookie pick is really worth.
+ *
+ * An NFL draft class yields roughly 10-15 offensive players good enough to
+ * matter in fantasy in their first two years — first and early second round
+ * talent. In a 10-team rookie draft that is the first round and the top of the
+ * second, and after that the hit rate falls off a cliff: most later picks never
+ * become starters and never see meaningful snaps. Third-rounders are close to
+ * worthless as trade currency, which is why nobody will give you anything real
+ * for one.
+ *
+ * Market pick values are smoother than that, because they average across league
+ * formats and because hope is priced in. This curve reimposes the cliff.
+ *
+ * The thresholds are absolute pick numbers, not rounds, because the supply of
+ * NFL talent does not care how many teams are in your league.
+ */
+export function pickRealismFactor(overallPick: number, round: number): number {
+  if (round >= 3) return 0.03;
+  if (overallPick <= 10) return 1;
+  // Still real talent, fading.
+  if (overallPick <= 15) return 1 - (overallPick - 10) * 0.05;
+  // The cliff: pick 16 is worth barely half of pick 15.
+  if (overallPick <= 20) return 0.45 - (overallPick - 16) * 0.03;
+  return 0.2;
+}
+
+/**
+ * Where a team is likely to pick, from how good it is now.
+ *
+ * Rookie draft order is the reverse of the standings, so the worst roster holds
+ * 1.01. Valuing every first identically ignores the largest single factor in
+ * what a pick is worth — a bottom team's first and the champion's first are not
+ * remotely the same asset, and treating them as equal is how you end up trading
+ * one for the other.
+ */
+export function projectedSlots(rosterIdsWorstFirst: number[]): Map<number, number> {
+  const slots = new Map<number, number>();
+  rosterIdsWorstFirst.forEach((rosterId, index) => slots.set(rosterId, index + 1));
+  return slots;
+}
+
+/** Slot to early/mid/late, for seasons too far out for the source to name slots. */
+export function slotTier(slot: number, teamCount: number): PickTier {
+  if (teamCount <= 0) return null;
+  const third = teamCount / 3;
+  if (slot <= third) return 'early';
+  if (slot <= third * 2) return 'mid';
+  return 'late';
+}
 
 export interface TradedPickRef {
   season: string;
@@ -27,9 +78,15 @@ export function buildDraftPicks(
   tradedPicks: TradedPickRef[],
   seasons: string[],
   pickValues: PickValueTable | undefined,
+  /** Roster ids ordered worst-first, for projecting draft slots. */
+  rosterIdsWorstFirst: number[] = [],
+  /** Scales pick values onto the league-adjusted player scale. */
+  shrink = 1,
 ): DraftPick[] {
   const rounds = Math.max(1, league.settings.draftRounds);
   const rosterName = new Map(league.rosters.map((r: Roster) => [r.rosterId, r.teamName]));
+  const teamCount = league.rosters.length;
+  const slots = projectedSlots(rosterIdsWorstFirst);
 
   // season-round-originalRoster -> current owner
   const traded = new Map<string, number>();
@@ -48,13 +105,37 @@ export function buildDraftPicks(
         const ownerRosterId = traded.get(id) ?? roster.rosterId;
         const viaOther = ownerRosterId !== roster.rosterId;
 
+        // The slot belongs to the roster the pick came *from* — that is whose
+        // record decides where it lands, no matter who holds it now.
+        const slot = slots.get(roster.rosterId) ?? null;
+        const overall = slot === null ? null : (round - 1) * teamCount + slot;
+
+        // The realism curve is applied to the market figure too, not only the
+        // league-adjusted one. It corrects a market that overprices late picks,
+        // and applying it to only one side would let the engine hand over
+        // third-rounders that "balance" a trade while costing it nothing.
+        let marketValue = 0;
+        if (pickValues) {
+          const quoted = lookupPickValue(
+            pickValues,
+            season,
+            round,
+            slot,
+            slot === null ? null : slotTier(slot, teamCount),
+          );
+          const realism = overall === null ? 1 : pickRealismFactor(overall, round);
+          marketValue = Math.round(quoted * realism);
+        }
+
         picks.push({
           id,
           season,
           round,
           originalRosterId: roster.rosterId,
           ownerRosterId,
-          value: pickValues ? lookupPickValue(pickValues, season, round) : 0,
+          value: Math.round(marketValue * shrink),
+          marketValue,
+          slot,
           label: viaOther
             ? `${season} ${ordinal(round)} (via ${rosterName.get(roster.rosterId) ?? 'unknown'})`
             : `${season} ${ordinal(round)}`,
