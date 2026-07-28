@@ -46,6 +46,78 @@ function world() {
   return { league, players, values, summaries };
 }
 
+describe('contention quadrant', () => {
+  /**
+   * Four teams whose *absolute* future scores fall in the same order as their
+   * present ones, because the value spread between rosters is wider than the
+   * age spread. Judging the future axis on absolute score collapses this league
+   * into juggernauts and danger-zone teams with nothing in between — which is
+   * exactly what happened on a real 10-team league.
+   */
+  function skewed() {
+    const players = new Map<string, Player>();
+    const values = new Map<string, PlayerValue>();
+    const rosters: Roster[] = [];
+    const slots: LineupSlot[] = ['WR', 'WR', 'WR'];
+    const wrSettings = makeSettings(slots, { teamCount: 4 });
+
+    // Age 23 survives the horizon intact; age 28 is three years past the WR
+    // cliff by then and keeps about 55%.
+    const build = (id: number, total: number, age: number) => {
+      const ids: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        const pid = `s${id}_${i}`;
+        players.set(pid, makePlayer(pid, 'WR', age));
+        values.set(pid, makeValue(pid, total / 3));
+        ids.push(pid);
+      }
+      rosters.push(makeRoster(id, ids));
+    };
+
+    build(1, 10000, 23); // strong, young
+    build(2, 8000, 28); // strong, old
+    build(3, 3000, 23); // weak, young
+    build(4, 2500, 28); // weak, old
+
+    const summaries = rosters.map((r) => summarizeRoster(r, players, values, wrSettings));
+    return { summaries, settings: wrSettings };
+  }
+
+  it('separates young from old rather than ranking strength twice', () => {
+    const { summaries, settings: wrSettings } = skewed();
+    const quadrant = (rosterId: number) =>
+      contentionProfile(
+        summaries.find((s) => s.rosterId === rosterId) as RosterSummary,
+        summaries,
+        wrSettings,
+      ).quadrant;
+
+    expect(quadrant(1)).toBe('juggernaut');
+    expect(quadrant(2)).toBe('win_now');
+    expect(quadrant(3)).toBe('rebuilding');
+    expect(quadrant(4)).toBe('danger');
+  });
+
+  it('reports the share of value that survives the horizon', () => {
+    const { summaries, settings: wrSettings } = skewed();
+    const young = contentionProfile(
+      summaries.find((s) => s.rosterId === 1) as RosterSummary,
+      summaries,
+      wrSettings,
+    );
+    const old = contentionProfile(
+      summaries.find((s) => s.rosterId === 2) as RosterSummary,
+      summaries,
+      wrSettings,
+    );
+
+    // Projected values are rounded to whole points, so the ratio is only
+    // meaningful to about three decimals.
+    expect(young.retainedShare).toBeCloseTo(1, 3);
+    expect(old.retainedShare).toBeCloseTo(0.82 ** 3, 3);
+  });
+});
+
 describe('retention', () => {
   it('keeps full value for a player still short of the cliff', () => {
     expect(retention('WR', 23, 3)).toBe(1);

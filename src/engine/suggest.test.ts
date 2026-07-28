@@ -243,6 +243,40 @@ describe('suggestTrades', () => {
     expect(swap!.analysis.valueDifferencePct).toBeLessThanOrEqual(0.1);
   });
 
+  it('drops offers too small to be worth proposing', () => {
+    const ctx = world(COMPLEMENTARY, 1200);
+
+    // Every side must gain at least this share of its own starting value.
+    const strict = suggestTrades(1, ctx, { minBenefitShare: 0.5, maxResults: 20 });
+    expect(strict.trades).toHaveLength(0);
+    expect(strict.note).toContain('too small');
+
+    const normal = suggestTrades(1, ctx, { maxResults: 20 });
+    expect(normal.trades.length).toBeGreaterThan(0);
+    for (const trade of normal.trades) {
+      const [mySide, theirSide] = trade.analysis.sides;
+      expect(trade.myBenefit.total).toBeGreaterThanOrEqual(
+        mySide.starterValueBefore * 0.005,
+      );
+      expect(trade.theirBenefit.total).toBeGreaterThanOrEqual(
+        theirSide.starterValueBefore * 0.005,
+      );
+    }
+  });
+
+  it('collapses one swap balanced several ways into a single idea', () => {
+    const ctx = world(COMPLEMENTARY, 1200);
+    const seen = new Set<string>();
+
+    for (const trade of suggestTrades(1, ctx, { maxResults: 20 }).trades) {
+      const players = (assets: typeof trade.give) =>
+        assets.filter((a) => a.kind === 'player').map((a) => a.id).sort().join(',');
+      const key = `${trade.partnerRosterId}:${players(trade.give)}>${players(trade.get)}`;
+      expect(seen.has(key)).toBe(false);
+      seen.add(key);
+    }
+  });
+
   it('spreads suggestions across partners rather than one team’s variations', () => {
     const ctx = world(COMPLEMENTARY, 1200);
     const result = suggestTrades(1, ctx, { maxResults: 20, perPartner: 1 });

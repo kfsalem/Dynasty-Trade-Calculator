@@ -400,8 +400,9 @@ body**, not 404, so the not-found case has to be detected explicitly.
 - Draft picks used to balance packages that players alone leave uneven
 - Ranked offers, each with "why they say yes" written in the partner's terms
 - "Open in calculator" hands a suggestion to the Phase 2 builder to edit
-- 15 unit tests; verified against live FantasyCalc and DynastyProcess data on a
-  simulated 12-team superflex league (~15 ms and 275 packages per team)
+- 19 unit tests; verified end to end against the real league (10-team 1QB
+  dynasty, `1336802780030988288`): 36 suggestions across 10 teams, 6–23 ms and
+  ≤200 packages per team
 - **Shipped:** the feature that makes it worth showing strangers
 
 **Three findings from implementation:**
@@ -433,6 +434,44 @@ body**, not 404, so the not-found case has to be detected explicitly.
    used RB 26 / WR 28 / TE 29 / QB 33 for decay, so a 27-year-old RB was past
    the cliff on the team page and not in the trade warnings. Suggestions consume
    both, which forced the question. Unified on the `analysis.ts` table.
+
+**Two more found only by running the real league**, both invisible against
+synthetic data:
+
+4. **The contention quadrant was measuring quality twice.** Phase 3 split the
+   future axis on *absolute* projected score. Decay is roughly proportional to
+   value, so a strong roster stays strong and the future ordering came out
+   almost identical to the present one. On the real league this collapsed the
+   model completely: **five juggernauts, five danger-zone teams, and not one
+   `win_now` or `rebuilding`** — half the quadrant unreachable, and with it half
+   the window weights that Phase 4 depends on.
+
+   The Phase 3 note argued a uniform understatement "cancels out when every team
+   is ranked against the same yardstick." It does cancel — that is the problem.
+   Cancelling out is precisely what leaves the axis carrying no information
+   about age.
+
+   The axis now splits on **retained share** (`futureScore / nowScore`): the
+   fraction of today's starting value that survives three years. It is
+   scale-free, so a weak young roster and a strong young roster both read as
+   young. The real league now returns 4 / 1 / 4 / 1 across the quadrants, and
+   the team whose owner named it "DREAM TEAM 2028" — last in present strength,
+   highest retention in the league — correctly reads as rebuilding rather than
+   danger. `retainedShare` is exposed on `ContentionProfile`.
+
+5. **Mutually positive is not the same as worth proposing.** The strongest
+   roster's top suggestion was worth **+172 against 36,704 of starting value** —
+   0.5%, arithmetically positive and completely pointless. Both sides must now
+   clear a floor of 0.5% of their own starting value (`minBenefitShare`).
+
+   Packages are also deduplicated on their **player** content, since the same
+   swap balanced with a 1st, a 2nd, or two picks is one idea shown three times
+   and was crowding out genuinely different offers.
+
+   Together these cut the league's suggestions from 45 to 36 and removed every
+   trivial one. The league's best team now correctly gets **no** suggestions —
+   its surplus is real but nothing it can buy moves a 36,704-point lineup, and
+   saying so is better than padding the list.
 
 ### Phase 5 — Scale out
 - MFL + Fleaflicker providers
@@ -510,4 +549,7 @@ Everything from here is scale-out rather than new ground, so the next step is a 
 - **Saved scenarios** — localStorage already holds the league id and claimed team; saved trades are the obvious third thing, and need no backend.
 - **Accounts (Supabase)** — only if cross-device sync is genuinely wanted.
 
-Worth doing before any of them: **verify Phase 4 against a real league.** It has been checked against live value data on a simulated 12-team superflex roster set, which validates the engine but not the messiness of real rosters.
+Phase 4 has now been verified against the real league (`1336802780030988288`, "The Eternal Rebuild"), which is what surfaced findings 4 and 5 above. Two smaller things that run showed, neither urgent:
+
+- **10.2% of rostered players are unpriced** (18 of 176) — almost entirely kickers and defenses, which start in this league but have no dynasty market. They count as 0, which is right for trade value but means a lineup slot silently contributes nothing.
+- The league is **1QB, not superflex**, and the earlier synthetic check was superflex. Both work; worth keeping a 1QB league in mind when reasoning about QB values.

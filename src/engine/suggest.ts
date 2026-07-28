@@ -74,6 +74,14 @@ export interface SuggestOptions {
   tolerance?: number;
   /** Movable assets considered per team. Bounds the search at teams × k². */
   candidatesPerTeam?: number;
+  /**
+   * Smallest benefit worth proposing, as a share of that side's starting value.
+   *
+   * Without a floor the engine happily suggests a swap worth +172 to a roster
+   * with 36,704 of starting value — arithmetically positive, but nobody opens
+   * a trade negotiation over 0.5%. Both sides must clear it.
+   */
+  minBenefitShare?: number;
 }
 
 /**
@@ -378,6 +386,7 @@ function buildSuggestion(
   mine: { summary: RosterSummary; analysis: TeamAnalysis },
   ctx: SuggestContext,
   tolerance: number,
+  minBenefitShare: number,
 ): SuggestedTrade | null {
   const balanced = balancePackage(
     give,
@@ -406,8 +415,13 @@ function buildSuggestion(
 
   // The guard against the obvious failure mode. An engine that optimizes only
   // your side generates offers nobody accepts, which is the same as generating
-  // nothing at all.
-  if (my.benefit.total <= 0 || their.benefit.total <= 0) return null;
+  // nothing at all. The floor rules out the other failure mode: offers that are
+  // mutually positive but far too small to be worth anyone's time.
+  const floor = (side: TradeSideResult) =>
+    Math.max(1, side.starterValueBefore * minBenefitShare);
+  if (my.benefit.total < floor(mySide) || their.benefit.total < floor(theirSide)) {
+    return null;
+  }
 
   // Even trades rank above lopsided ones, and the geometric mean rewards
   // packages that are good for both rather than great for one.
@@ -453,6 +467,7 @@ export function suggestTrades(
     perPartner = 2,
     tolerance = 0.1,
     candidatesPerTeam = 5,
+    minBenefitShare = 0.005,
   } = options;
 
   const analyses = new Map<number, TeamAnalysis>();
@@ -489,7 +504,11 @@ export function suggestTrades(
     const partner = { summary, analysis };
     const theirAssets = movableAssets(analysis, summary, ctx, candidatesPerTeam);
 
-    const forPartner: SuggestedTrade[] = [];
+    // Keyed on the players alone. The same swap balanced with a 1st, a 2nd, or
+    // a pair of picks is one idea presented three ways, and filling a partner's
+    // slots with those variants crowds out genuinely different offers.
+    const byPlayers = new Map<string, SuggestedTrade>();
+
     for (const give of myAssets) {
       for (const get of theirAssets) {
         considered++;
@@ -501,12 +520,24 @@ export function suggestTrades(
           mine,
           ctx,
           tolerance,
+          minBenefitShare,
         );
-        if (trade) forPartner.push(trade);
+        if (!trade) continue;
+
+        const players = (assets: TradeAsset[]) =>
+          assets
+            .filter((a) => a.kind === 'player')
+            .map((a) => a.id)
+            .sort()
+            .join(',');
+        const key = `${players(trade.give)}>${players(trade.get)}`;
+
+        const seen = byPlayers.get(key);
+        if (!seen || trade.score > seen.score) byPlayers.set(key, trade);
       }
     }
 
-    forPartner.sort((a, b) => b.score - a.score);
+    const forPartner = [...byPlayers.values()].sort((a, b) => b.score - a.score);
     trades.push(...forPartner.slice(0, perPartner));
   }
 
@@ -520,8 +551,8 @@ export function suggestTrades(
     ranked.length > 0
       ? null
       : ctx.picks.length === 0
-        ? `Searched ${considered} packages and found none that help both sides. Draft-pick values didn't load, which removes the usual way to balance an uneven offer — try again in a moment.`
-        : `Searched ${considered} packages and found none that help both sides. Every trade that upgrades your lineup makes the other team worse off, so nothing here would be accepted.`;
+        ? `Searched ${considered} packages and found none worth proposing. Draft-pick values didn't load, which removes the usual way to balance an uneven offer — try again in a moment.`
+        : `Searched ${considered} packages and found none worth proposing. Either they leave the other team worse off, or the gain is too small on both sides to be worth opening a negotiation over.`;
 
   return { trades: ranked, considered, note };
 }

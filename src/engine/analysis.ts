@@ -62,6 +62,11 @@ export interface ContentionProfile {
   futureScore: number;
   nowRank: number;
   futureRank: number;
+  /**
+   * Share of today's starting value that survives the horizon. This, not the
+   * absolute future score, is what places a team on the young/old axis.
+   */
+  retainedShare: number;
   teamCount: number;
   quadrant: Quadrant;
   label: string;
@@ -160,11 +165,21 @@ export function contentionProfile(
   const now = summary.starterValue;
   const future = futureScore(summary, settings);
 
-  const nowMedian = median(nowScores);
-  const futureMedian = median(futureScores);
+  // The future axis has to measure *age*, not quality a second time. Decay is
+  // roughly proportional to value, so absolute future score ranks teams in
+  // nearly the same order as now: verified on a real 10-team league, where the
+  // two orderings matched at the median split and every team came out either
+  // juggernaut or danger — win_now and rebuilding never occurred at all.
+  //
+  // The share of today's value that survives the horizon has no such problem.
+  // It is scale-free, so a weak young roster and a strong young roster both
+  // read as young, which is the distinction the quadrant exists to draw.
+  const retained = (n: number, f: number) => f / (n || 1);
+  const retainedShare = retained(now, future);
 
-  const strongNow = now >= nowMedian;
-  const strongFuture = future >= futureMedian;
+  const strongNow = now >= median(nowScores);
+  const strongFuture =
+    retainedShare >= median(nowScores.map((n, i) => retained(n, futureScores[i])));
 
   const quadrant: Quadrant = strongNow
     ? strongFuture
@@ -179,6 +194,7 @@ export function contentionProfile(
     futureScore: future,
     nowRank: nowScores.filter((v) => v > now).length + 1,
     futureRank: futureScores.filter((v) => v > future).length + 1,
+    retainedShare,
     teamCount: all.length,
     quadrant,
     ...QUADRANTS[quadrant],
