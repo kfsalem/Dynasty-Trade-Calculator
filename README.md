@@ -8,12 +8,13 @@ Most trade calculators are roster-blind. They tell you two players are worth the
 
 ## Status
 
-Early. The scaffold builds and deploys; features are being built in order.
+The core product is complete. Sleeper leagues are fully supported; other
+platforms are not yet.
 
 - [x] **League import** — paste a Sleeper league ID, see every roster
 - [x] **Trade calculator** — league-aware values, players and draft picks
 - [x] **Team analysis** — strengths, weaknesses, contention window, surplus
-- [ ] **Trade suggestions** — ranked offers, and why the other manager accepts
+- [x] **Trade suggestions** — ranked offers, and why the other manager accepts
 
 Live: **https://kfsalem.github.io/Dynasty-Trade-Calculator/**
 
@@ -25,6 +26,15 @@ value while your starters get worse is common, and it is the whole point.
 Claim your team with your Sleeper username to get personalized analysis: your
 contention window, your positional strengths and weaknesses against the league,
 and which of your bench players other teams would actually start.
+
+**Trade ideas** searches the whole league for offers that leave both teams
+better off, and ships the reason the other manager accepts alongside each one.
+"Better off" is deliberately not the same measure for both sides: a team with a
+closing window is scored almost entirely on what a trade does to its starting
+lineup this year, and a team in the danger zone almost entirely on where it
+leaves them in three. Requiring both to gain *starting-lineup strength* would
+rule out the most common dynasty trade there is — a rebuilder sending a veteran
+to a contender for picks — because picks never start.
 
 See [`docs/DESIGN.md`](docs/DESIGN.md) for the full architecture and roadmap.
 

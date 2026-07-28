@@ -4,6 +4,17 @@ import { evaluateTrade, FAIRNESS_LABEL, type TradeContext } from '../engine/trad
 import { AssetPicker } from './AssetPicker';
 import { formatValue } from '../lib/format';
 
+/**
+ * A trade handed to the builder pre-filled — currently from the suggestion
+ * engine, so an idea can be inspected and edited rather than only read.
+ */
+export interface PendingTrade {
+  teamA: number;
+  teamB: number;
+  givesA: { playerIds: string[]; pickIds: string[] };
+  givesB: { playerIds: string[]; pickIds: string[] };
+}
+
 interface Props {
   league: League;
   players: Map<string, Player>;
@@ -12,6 +23,11 @@ interface Props {
   picksUnavailable: boolean;
   /** Claimed team, if any — anchors the left side to you. */
   myRosterId: number | null;
+  /**
+   * Seeds the builder. The parent remounts on change (via `key`), so this is
+   * read once — after that the selections belong to the user.
+   */
+  initial?: PendingTrade | null;
 }
 
 const toggle = (set: Set<string>, id: string): Set<string> => {
@@ -101,22 +117,25 @@ export function TradeBuilder({
   picks,
   picksUnavailable,
   myRosterId,
+  initial,
 }: Props) {
   // Anchor the left side to the claimed team so the trade reads from your
   // perspective, and make sure the right side is never the same roster.
-  const defaultA = myRosterId ?? league.rosters[0]?.rosterId ?? 1;
+  const defaultA = initial?.teamA ?? myRosterId ?? league.rosters[0]?.rosterId ?? 1;
   const defaultB =
-    league.rosters.find((r) => r.rosterId !== defaultA)?.rosterId ?? defaultA + 1;
+    initial?.teamB ??
+    league.rosters.find((r) => r.rosterId !== defaultA)?.rosterId ??
+    defaultA + 1;
 
   const [teamA, setTeamA] = useState(defaultA);
   const [teamB, setTeamB] = useState(defaultB);
   const [givesA, setGivesA] = useState({
-    playerIds: new Set<string>(),
-    pickIds: new Set<string>(),
+    playerIds: new Set<string>(initial?.givesA.playerIds),
+    pickIds: new Set<string>(initial?.givesA.pickIds),
   });
   const [givesB, setGivesB] = useState({
-    playerIds: new Set<string>(),
-    pickIds: new Set<string>(),
+    playerIds: new Set<string>(initial?.givesB.playerIds),
+    pickIds: new Set<string>(initial?.givesB.pickIds),
   });
 
   const ctx: TradeContext = useMemo(

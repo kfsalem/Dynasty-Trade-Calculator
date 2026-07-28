@@ -190,7 +190,7 @@ describe('evaluateTrade', () => {
       { rosterId: 2, playerIds: ['rb_old'], pickIds: [] },
       ctx,
     );
-    // rb_old is 29, past the RB cliff of 27.
+    // rb_old is 29, past the RB cliff of 26.
     expect(result.sides[0].warnings.join(' ')).toContain('age cliff');
   });
 

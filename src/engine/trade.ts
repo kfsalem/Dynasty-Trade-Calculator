@@ -7,6 +7,7 @@ import type {
   TradeAnalysis,
   TradeSideResult,
 } from '../types';
+import { AGE_CLIFF } from './analysis';
 import { bestLineup, valuePlayers } from './rosterValue';
 
 export interface TradeSideInput {
@@ -23,9 +24,6 @@ export interface TradeContext {
   values: Map<string, PlayerValue>;
   picks: DraftPick[];
 }
-
-/** Age past which a position's dynasty value decays sharply. */
-const AGE_CLIFF: Record<string, number> = { RB: 27, WR: 29, TE: 30, QB: 34 };
 
 function starterValue(
   playerIds: string[],

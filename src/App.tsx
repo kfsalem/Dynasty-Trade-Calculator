@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { LeagueImport } from './components/LeagueImport';
 import { LeagueHeader } from './components/LeagueHeader';
 import { RosterList } from './components/RosterList';
-import { TradeBuilder } from './components/TradeBuilder';
+import { TradeBuilder, type PendingTrade } from './components/TradeBuilder';
+import { TradeSuggestions } from './components/TradeSuggestions';
 import { TeamAnalysis } from './components/TeamAnalysis';
 import { ClaimTeam } from './components/ClaimTeam';
 import { useLeagueSummaries } from './hooks/useLeagueData';
@@ -10,10 +11,11 @@ import { useMyRoster } from './hooks/useMyRoster';
 
 const STORAGE_KEY = 'dynasty:leagueId';
 
-type Tab = 'analysis' | 'rosters' | 'trade';
+type Tab = 'analysis' | 'ideas' | 'rosters' | 'trade';
 
 const TABS: [Tab, string][] = [
   ['analysis', 'My team'],
+  ['ideas', 'Trade ideas'],
   ['rosters', 'Rosters'],
   ['trade', 'Trade calculator'],
 ];
@@ -34,6 +36,9 @@ function readStoredLeagueId(): string | null {
 function App() {
   const [leagueId, setLeagueId] = useState<string | null>(readStoredLeagueId);
   const [tab, setTab] = useState<Tab>('analysis');
+  // A suggestion sent to the calculator. Bumping `seq` remounts the builder so
+  // it re-reads the seed rather than keeping the user's previous selections.
+  const [pending, setPending] = useState<{ trade: PendingTrade; seq: number } | null>(null);
   const { myRosterId, setMyRoster } = useMyRoster(leagueId);
   const { league, players, values, summaries, picks, picksUnavailable, isLoading, error } =
     useLeagueSummaries(leagueId);
@@ -134,6 +139,24 @@ function App() {
                   />
                 ))}
 
+              {tab === 'ideas' &&
+                (myRosterId === null ? (
+                  <ClaimTeam league={league} onClaim={setMyRoster} />
+                ) : (
+                  <TradeSuggestions
+                    league={league}
+                    players={players}
+                    values={values}
+                    picks={picks}
+                    summaries={summaries}
+                    myRosterId={myRosterId}
+                    onOpenInCalculator={(trade) => {
+                      setPending((prev) => ({ trade, seq: (prev?.seq ?? 0) + 1 }));
+                      setTab('trade');
+                    }}
+                  />
+                ))}
+
               {tab === 'rosters' && (
                 <RosterList
                   league={league}
@@ -144,12 +167,14 @@ function App() {
 
               {tab === 'trade' && (
                 <TradeBuilder
+                  key={pending?.seq ?? 'blank'}
                   league={league}
                   players={players}
                   values={values}
                   picks={picks}
                   picksUnavailable={picksUnavailable}
                   myRosterId={myRosterId}
+                  initial={pending?.trade ?? null}
                 />
               )}
             </div>

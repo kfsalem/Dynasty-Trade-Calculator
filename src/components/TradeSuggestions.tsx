@@ -1,0 +1,230 @@
+import { useMemo } from 'react';
+import type { DraftPick, League, Player, PlayerValue } from '../types';
+import type { RosterSummary } from '../engine/rosterValue';
+import { suggestTrades, type SuggestContext, type SuggestedTrade, type TradeAsset } from '../engine/suggest';
+import { FAIRNESS_LABEL } from '../engine/trade';
+import { POSITION_STYLES, formatValue } from '../lib/format';
+import type { PendingTrade } from './TradeBuilder';
+
+interface Props {
+  league: League;
+  players: Map<string, Player>;
+  values: Map<string, PlayerValue>;
+  picks: DraftPick[];
+  summaries: RosterSummary[];
+  myRosterId: number;
+  onOpenInCalculator: (trade: PendingTrade) => void;
+}
+
+function AssetChip({ asset }: { asset: TradeAsset }) {
+  const style =
+    asset.kind === 'player'
+      ? POSITION_STYLES[asset.player.position].chip
+      : 'bg-gray-200 text-gray-700';
+  const badge = asset.kind === 'player' ? asset.player.position : 'PICK';
+
+  return (
+    <li className="flex items-center gap-2 text-sm">
+      <span
+        className={`inline-flex w-11 shrink-0 justify-center rounded px-1.5 py-0.5 text-xs font-semibold ${style}`}
+      >
+        {badge}
+      </span>
+      <span className="min-w-0 flex-1 truncate font-medium">{asset.label}</span>
+      <span className="shrink-0 tabular-nums text-gray-500">{formatValue(asset.value)}</span>
+    </li>
+  );
+}
+
+function Delta({ value }: { value: number }) {
+  return (
+    <span
+      className={`font-semibold tabular-nums ${
+        value > 0 ? 'text-fantasy-green' : value < 0 ? 'text-fantasy-red' : 'text-gray-500'
+      }`}
+    >
+      {value > 0 ? '+' : ''}
+      {formatValue(value)}
+    </span>
+  );
+}
+
+function SuggestionCard({
+  trade,
+  rank,
+  onOpen,
+}: {
+  trade: SuggestedTrade;
+  rank: number;
+  onOpen: () => void;
+}) {
+  const ids = (assets: TradeAsset[], kind: TradeAsset['kind']) =>
+    assets.filter((a) => a.kind === kind).map((a) => a.id);
+
+  return (
+    <article className="card">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="font-semibold">
+          <span className="text-gray-400">#{rank}</span> Offer to {trade.partnerName}
+        </h3>
+        <span className="text-xs text-gray-500">
+          {FAIRNESS_LABEL[trade.analysis.fairnessRating]} —{' '}
+          {Math.round(trade.analysis.valueDifferencePct * 100)}% apart
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+            You send
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {trade.give.map((asset) => (
+              <AssetChip key={asset.id} asset={asset} />
+            ))}
+          </ul>
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+            You get
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {trade.get.map((asset) => (
+              <AssetChip key={asset.id} asset={asset} />
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-gray-200 pt-3 text-sm">
+        <div className="flex justify-between gap-2">
+          <dt className="text-gray-500">Your lineup</dt>
+          <dd>
+            <Delta value={trade.myBenefit.now} />
+          </dd>
+        </div>
+        <div className="flex justify-between gap-2">
+          <dt className="text-gray-500">Their lineup</dt>
+          <dd>
+            <Delta value={trade.theirBenefit.now} />
+          </dd>
+        </div>
+        <div className="flex justify-between gap-2">
+          <dt className="text-gray-500">Your 3-year</dt>
+          <dd>
+            <Delta value={trade.myBenefit.future} />
+          </dd>
+        </div>
+        <div className="flex justify-between gap-2">
+          <dt className="text-gray-500">Their 3-year</dt>
+          <dd>
+            <Delta value={trade.theirBenefit.future} />
+          </dd>
+        </div>
+      </dl>
+
+      {/* The half no other calculator shows. An offer that gets declined on
+          sight is worth nothing, so this is given more weight than our own. */}
+      <section className="mt-4 rounded-lg border border-primary-200 bg-primary-50/60 p-4">
+        <h4 className="text-sm font-semibold text-primary-900">
+          Why {trade.partnerName} says yes
+        </h4>
+        <ul className="mt-2 space-y-1.5">
+          {trade.whyTheySayYes.map((line) => (
+            <li key={line} className="flex gap-2 text-sm text-primary-900/90">
+              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" />
+              <span>{line}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="mt-3">
+        <h4 className="text-sm font-semibold text-gray-700">Why it works for you</h4>
+        <ul className="mt-2 space-y-1.5">
+          {trade.rationale.map((line) => (
+            <li key={line} className="flex gap-2 text-sm text-gray-600">
+              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-gray-300" />
+              <span>{line}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="btn-secondary text-sm"
+          onClick={onOpen}
+        >
+          Open in calculator
+        </button>
+      </div>
+      <p className="sr-only">
+        {ids(trade.give, 'player').length} players and {ids(trade.give, 'pick').length} picks
+        sent.
+      </p>
+    </article>
+  );
+}
+
+export function TradeSuggestions({
+  league,
+  players,
+  values,
+  picks,
+  summaries,
+  myRosterId,
+  onOpenInCalculator,
+}: Props) {
+  const result = useMemo(() => {
+    const ctx: SuggestContext = { league, players, values, picks, summaries };
+    return suggestTrades(myRosterId, ctx);
+  }, [league, players, values, picks, summaries, myRosterId]);
+
+  return (
+    <div>
+      <h2 className="text-xl font-bold tracking-tight">Trade ideas</h2>
+      <p className="mt-1 text-sm text-gray-500">
+        Offers where both teams come out ahead — measured in what each team actually
+        wants, which is not the same thing for a contender and a rebuilder.
+      </p>
+
+      {result.trades.length === 0 ? (
+        <p className="mt-6 rounded-lg border border-gray-200 bg-white p-5 text-sm text-gray-600">
+          {result.note}
+        </p>
+      ) : (
+        <>
+          <p className="mt-3 text-xs text-gray-400">
+            Searched {result.considered.toLocaleString('en-US')} packages across{' '}
+            {summaries.length - 1} teams.
+          </p>
+          <div className="mt-4 space-y-4">
+            {result.trades.map((trade, index) => (
+              <SuggestionCard
+                key={trade.id}
+                trade={trade}
+                rank={index + 1}
+                onOpen={() =>
+                  onOpenInCalculator({
+                    teamA: myRosterId,
+                    teamB: trade.partnerRosterId,
+                    givesA: {
+                      playerIds: trade.give.filter((a) => a.kind === 'player').map((a) => a.id),
+                      pickIds: trade.give.filter((a) => a.kind === 'pick').map((a) => a.id),
+                    },
+                    givesB: {
+                      playerIds: trade.get.filter((a) => a.kind === 'player').map((a) => a.id),
+                      pickIds: trade.get.filter((a) => a.kind === 'pick').map((a) => a.id),
+                    },
+                  })
+                }
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

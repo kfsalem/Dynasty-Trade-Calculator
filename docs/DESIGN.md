@@ -1,7 +1,7 @@
 # Dynasty Utility — Design Document
 
 **Status:** Draft v1
-**Last updated:** 2026-07-25
+**Last updated:** 2026-07-28
 **Context:** Resuming an abandoned scaffold. Expanding scope from a personal trade calculator to a general NFL dynasty league utility.
 
 ---
@@ -395,10 +395,44 @@ body**, not 404, so the not-found case has to be detected explicitly.
    gradient sensibly: the first-place roster shows six surplus assets, the
    last-place roster two.
 
-### Phase 4 — Trade suggestions
-- Surplus/need matching across the league
-- Ranked packages with "why they say yes"
-- **Ship:** the feature that makes it worth showing strangers
+### Phase 4 — Trade suggestions ✅ *(done 2026-07-28)*
+- Surplus/need matching across every team in the league
+- Draft picks used to balance packages that players alone leave uneven
+- Ranked offers, each with "why they say yes" written in the partner's terms
+- "Open in calculator" hands a suggestion to the Phase 2 builder to edit
+- 15 unit tests; verified against live FantasyCalc and DynastyProcess data on a
+  simulated 12-team superflex league (~15 ms and 275 packages per team)
+- **Shipped:** the feature that makes it worth showing strangers
+
+**Three findings from implementation:**
+
+1. **"Both sides must gain" cannot mean VORS.** The plan said to require both
+   teams to improve, and the obvious reading — both gain starting-lineup
+   strength — rules out the most common dynasty trade there is: a rebuilder
+   sending a veteran to a contender for picks. Picks never start, so the
+   rebuilder's VORS is negative by construction. Measuring their gain in
+   win-now units answers a question they did not ask.
+
+   Each side is now scored on a **window-weighted blend** of a now delta (VORS)
+   and a future delta (age-decayed lineup three years out, plus pick value
+   moved), with weights from their contention quadrant — 0.9/0.1 for a closing
+   window, 0.1/0.9 for the danger zone. Both sides' *blended* benefit must be
+   positive. The live run confirms the shape: contenders take a negative future
+   delta to add a starter, rebuilders take a negative now delta to add picks,
+   and both come out ahead on the number they actually care about.
+
+2. **Candidate pools have to encode who would sell what.** Searching every
+   player against every player produces mostly offers nobody would read. The
+   pool per team is now: surplus always, **plus picks if contending, plus
+   aging starters if rebuilding** — the assets a manager has an actual reason
+   to move. This is also what keeps the search at teams × 5² rather than
+   teams × 45².
+
+3. **`AGE_CLIFF` was defined twice, with different numbers.** `engine/trade.ts`
+   used RB 27 / WR 29 / TE 30 / QB 34 for its warnings while `engine/analysis.ts`
+   used RB 26 / WR 28 / TE 29 / QB 33 for decay, so a 27-year-old RB was past
+   the cliff on the team page and not in the trade warnings. Suggestions consume
+   both, which forced the question. Unified on the `analysis.ts` table.
 
 ### Phase 5 — Scale out
 - MFL + Fleaflicker providers
@@ -411,7 +445,12 @@ body**, not 404, so the not-found case has to be detected explicitly.
 
 ## 6. Existing Code — Current State
 
-Local: `C:\GitHub Projects\Dynasty-Trade-Calculator` · Remote: `kfsalem/Dynasty-Trade-Calculator` (**empty — 0 commits**)
+*This section describes the scaffold as found on 2026-07-25, before Phase 0. It
+is kept as a record of what was rescued; every row has since been actioned.*
+
+Remote: `kfsalem/Dynasty-Trade-Calculator` (**was empty — 0 commits**).
+Working copies: `C:\GitHub Projects\` on Windows, `~/Documents/Github Projects/`
+on macOS.
 
 | File | State | Action |
 |---|---|---|
@@ -463,4 +502,12 @@ The existing `types/index.ts` is genuinely good and survives largely intact. Nee
 
 ## 9. Immediate Next Step
 
-**Phase 0.** The current repo has zero commits — every file on disk is untracked and exists in exactly one place. That is the most pressing problem in this document, and it is roughly an hour of work to fix.
+**Phase 5.** Phases 0–4 are shipped: the app imports a league, values every roster against its real lineup settings, evaluates a trade, analyses your team, and proposes offers both sides accept. That is the whole product thesis.
+
+Everything from here is scale-out rather than new ground, so the next step is a choice rather than an obligation:
+
+- **MFL provider** — the `LeagueProvider` seam has never been exercised by a second platform. Until it is, "not limited to Sleeper" is a claim, not a fact.
+- **Saved scenarios** — localStorage already holds the league id and claimed team; saved trades are the obvious third thing, and need no backend.
+- **Accounts (Supabase)** — only if cross-device sync is genuinely wanted.
+
+Worth doing before any of them: **verify Phase 4 against a real league.** It has been checked against live value data on a simulated 12-team superflex roster set, which validates the engine but not the messiness of real rosters.
