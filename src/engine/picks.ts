@@ -2,30 +2,52 @@ import type { DraftPick, League, Roster } from '../types';
 import { lookupPickValue, type PickTier, type PickValueTable } from '../values/dynastyprocess';
 
 /**
- * What a rookie pick is really worth.
+ * What a rookie pick is really worth, as a share of its quoted value.
  *
  * An NFL draft class yields roughly 10-15 offensive players good enough to
  * matter in fantasy in their first two years — first and early second round
- * talent. In a 10-team rookie draft that is the first round and the top of the
- * second, and after that the hit rate falls off a cliff: most later picks never
- * become starters and never see meaningful snaps. Third-rounders are close to
- * worthless as trade currency, which is why nobody will give you anything real
- * for one.
+ * talent. After that the hit rate falls off a cliff: most later picks never
+ * become starters and never see meaningful snaps. Market pick values are
+ * smoother than that, because they average across league formats and because
+ * hope is priced in. This curve reimposes the cliff.
  *
- * Market pick values are smoother than that, because they average across league
- * formats and because hope is priced in. This curve reimposes the cliff.
+ * Anchors are absolute pick numbers, because the supply of NFL talent does not
+ * care how many teams are in your league. That has a consequence worth stating:
+ * a third-rounder is worth appreciably more in a 10-team league (picks 21-30)
+ * than in a 14-team one (picks 29-42), which is correct — the bigger league is
+ * drafting further into the same pool.
  *
- * The thresholds are absolute pick numbers, not rounds, because the supply of
- * NFL talent does not care how many teams are in your league.
+ * An earlier version short-circuited on `round >= 3` before consulting the pick
+ * number at all, which contradicted the paragraph above and produced an 11x drop
+ * between two *adjacent* picks in a 10-team league: 2.10 kept 33% and 3.01 kept
+ * 3%. Projected draft slots are not precise to one pick, so a discontinuity that
+ * large was an artifact rather than a model. It also flattened every third-round
+ * pick onto the same near-zero number, losing the ordering between them for the
+ * same reason the old value clamp did — see `replacement.RESIDUAL_SHARE`.
  */
-export function pickRealismFactor(overallPick: number, round: number): number {
-  if (round >= 3) return 0.03;
-  if (overallPick <= 10) return 1;
-  // Still real talent, fading.
-  if (overallPick <= 15) return 1 - (overallPick - 10) * 0.05;
-  // The cliff: pick 16 is worth barely half of pick 15.
-  if (overallPick <= 20) return 0.45 - (overallPick - 16) * 0.03;
-  return 0.2;
+const REALISM_ANCHORS: readonly (readonly [pick: number, factor: number])[] = [
+  [10, 1], //  the class's genuine fantasy contributors
+  [15, 0.7], // real talent, fading
+  [20, 0.3], // the cliff
+  [30, 0.08], // dart throws
+  [45, 0.03], // lottery tickets, and the floor past here
+];
+
+export function pickRealismFactor(overallPick: number): number {
+  const first = REALISM_ANCHORS[0];
+  const last = REALISM_ANCHORS[REALISM_ANCHORS.length - 1];
+  if (overallPick <= first[0]) return first[1];
+  if (overallPick >= last[0]) return last[1];
+
+  for (let i = 1; i < REALISM_ANCHORS.length; i++) {
+    const [prevPick, prevFactor] = REALISM_ANCHORS[i - 1];
+    const [pick, factor] = REALISM_ANCHORS[i];
+    if (overallPick > pick) continue;
+    // Linear between anchors, so the curve is continuous everywhere and no two
+    // adjacent picks can differ by more than one segment's slope.
+    return prevFactor + ((overallPick - prevPick) / (pick - prevPick)) * (factor - prevFactor);
+  }
+  return last[1];
 }
 
 /**
@@ -109,9 +131,9 @@ export function buildDraftPicks(
         // record decides where it lands, no matter who holds it now.
         const slot = slots.get(roster.rosterId) ?? null;
         // With no standings to project from, fall back to the middle of the
-        // round. The round-based part of the curve — third-rounders being worth
-        // nothing — needs no slot at all, and skipping it entirely priced a
-        // third at full value.
+        // round. The curve reads absolute pick number only, so the round still
+        // places the pick correctly on it even when the slot is a guess —
+        // skipping the curve entirely here once priced a third at full value.
         const overall =
           (round - 1) * teamCount + (slot ?? Math.ceil(teamCount / 2));
 
@@ -128,7 +150,7 @@ export function buildDraftPicks(
             slot,
             slot === null ? null : slotTier(slot, teamCount),
           );
-          marketValue = Math.round(quoted * pickRealismFactor(overall, round));
+          marketValue = Math.round(quoted * pickRealismFactor(overall));
         }
 
         picks.push({
@@ -152,17 +174,42 @@ export function buildDraftPicks(
 }
 
 /**
+ * Sleeper league states in which this season's rookie draft has not yet run.
+ *
+ * `pre_draft` and `drafting` are the only two; a league reaches `in_season` when
+ * its draft completes, and `complete` when the season ends.
+ */
+const ROOKIE_DRAFT_PENDING = new Set(['pre_draft', 'drafting']);
+
+/**
  * Which draft classes are still tradeable.
  *
  * Anchored to the current NFL season rather than the league's own season field,
  * which goes stale on a completed league. Bounded by what the value source
  * actually publishes, so we never show a pick we cannot price.
+ *
+ * The current season needs the extra check. Sleeper's `/state/nfl` season rolls
+ * over in the spring, but dynasty rookie drafts run any time from May to well
+ * into August — so for months after a league drafts, `season >= currentSeason`
+ * alone keeps offering picks that have already been used. Those are not cheap
+ * mistakes to show: a first-rounder is the most valuable asset the app prices
+ * and the usual currency for balancing an offer.
+ *
+ * The league's own status answers it, but only when the league has rolled over
+ * to the current season. A dynasty league still sitting on last year's entry has
+ * a `complete` status describing a season that is over and a rookie draft that
+ * has not been scheduled, so its status says nothing about this year's class.
  */
 export function tradeableSeasons(
   currentSeason: string,
   available: string[],
+  league: Pick<League, 'season' | 'status'>,
 ): string[] {
-  return available.filter((season) => season >= currentSeason).sort();
+  const drafted =
+    league.season === currentSeason && !ROOKIE_DRAFT_PENDING.has(league.status);
+  const earliest = drafted ? String(Number(currentSeason) + 1) : currentSeason;
+
+  return available.filter((season) => season >= earliest).sort();
 }
 
 export function picksForRoster(picks: DraftPick[], rosterId: number): DraftPick[] {

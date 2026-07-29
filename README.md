@@ -33,18 +33,26 @@ already starts a top-10 quarterback, and the next one is sitting on waivers — 
 losing yours costs almost nothing, whatever the market says. Running backs are
 the opposite: the supply of true 15–20 touch backs runs out not far past the
 number who have to start, so an elite back keeps most of his value. On a real
-10-team league the best running back kept 77% of his market value and the best
-quarterback 50%.
+10-team league the best running back kept 81% of his market value and the best
+quarterback 49%.
 
 None of this is hardcoded per position. Starter counts are read from the lineups
 the league actually fields, so a superflex league raises quarterbacks back on
 its own — twenty of them have to start.
 
+A player below replacement level keeps a small share of his market value rather
+than dropping to nothing. He is not startable this week, but an aging starter or
+an unproven rookie is still a real asset, and flattening the whole tail onto zero
+made the app unable to tell any of them apart.
+
 Rookie picks get the same treatment. An NFL class yields roughly 10–15 offensive
 players who matter in their first two years, so pick value falls off a cliff
-after about pick 15 and third-rounders are worth essentially nothing. Draft
-slots are projected from the standings, which is why a bottom team's first is
-worth several times the champion's.
+after about pick 15 and late picks are lottery tickets. The curve reads *absolute
+pick number*, never round, because the supply of NFL talent does not care how
+many teams are in your league — which is why a third-rounder is worth more in a
+10-team league than in a 14-team one. Draft slots are projected from the
+standings, so a bottom team's first is worth several times the champion's, and
+this year's class disappears once your league has actually drafted.
 
 Trades are still *balanced* on market value, because that is the number the
 other manager will check. Whether a trade helps is judged on the league-adjusted

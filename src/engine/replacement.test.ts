@@ -116,8 +116,12 @@ describe('replacementLevels', () => {
     const adjusted = applyReplacement(values, levels);
 
     // A top-four tight end is a genuine weapon; TE12 is streamable filler.
+    const te12 = adjusted.get('TE12')!;
     expect(adjusted.get('TE1')!.value).toBeGreaterThan(4000);
-    expect(adjusted.get('TE12')!.value).toBe(0);
+    expect(te12.value).toBeLessThan(te12.marketValue * 0.15);
+    // Flattened, not erased. He is unstartable here but still an asset, and
+    // collapsing him onto a hard zero is what made the model order-dependent.
+    expect(te12.value).toBeGreaterThan(0);
   });
 
   it('raises quarterbacks again when the league starts two of them', () => {
@@ -144,6 +148,39 @@ describe('replacementLevels', () => {
     for (const value of adjusted.values()) {
       expect(value.value).toBeGreaterThanOrEqual(0);
     }
+  });
+
+  it('preserves market ordering all the way down the pool', () => {
+    // The property the hard `max(0, …)` floor broke. Without it, everything
+    // below replacement ties, and every consumer that sorts by value — above
+    // all `bestLineup` filling a FLEX — falls back on input order.
+    const { values, summaries } = league();
+    const adjusted = applyReplacement(
+      values,
+      replacementLevels(values, startersByPosition(summaries)),
+    );
+
+    for (const position of ['QB', 'RB', 'WR', 'TE'] as const) {
+      const ranked = [...adjusted.values()]
+        .filter((v) => v.position === position && v.marketValue > 0)
+        .sort((a, b) => b.marketValue - a.marketValue);
+
+      for (let i = 1; i < ranked.length; i++) {
+        // Strictly greater, not >=: ties are exactly the failure mode.
+        expect(ranked[i - 1].value).toBeGreaterThan(ranked[i].value);
+      }
+    }
+  });
+
+  it('leaves players well above replacement priced at their true surplus', () => {
+    // The floor must not become a subsidy. It binds only where the surplus is
+    // smaller than the residual share, so an elite back is untouched by it.
+    const { values, summaries } = league();
+    const levels = replacementLevels(values, startersByPosition(summaries));
+    const adjusted = applyReplacement(values, levels);
+
+    const rb1 = adjusted.get('RB1')!;
+    expect(rb1.value).toBe(rb1.marketValue - levels.RB!.value);
   });
 });
 
@@ -262,6 +299,71 @@ describe('valueLeague', () => {
     // A different pass cap must not change the answer either.
     const capped = valueLeague(rosters, players, values, settings, 2);
     expect(capped.starters).toEqual(first.starters);
+  });
+
+  it('does not depend on the order the platform lists a roster in', () => {
+    /**
+     * The regression this whole change exists for.
+     *
+     * `roster.playerIds` order carries no information — Sleeper returns it in
+     * whatever order it likes. When the bottom of the pool was clamped flat, the
+     * FLEX slot went to whichever tied player happened to be listed first; that
+     * arbitrary pick became the starter counts, the counts set replacement
+     * level, and replacement level decided who got clamped. On a real 10-team
+     * league, reshuffling player lists moved RB replacement level between 1,900
+     * and 2,709 and flipped individual players between 0 and 807.
+     *
+     * Every position here is deliberately packed with exact ties, which is the
+     * hardest case for a total order to survive.
+     */
+    const settings = makeSettings(
+      ['QB', 'RB', 'RB', 'WR', 'WR', 'WR', 'TE', 'FLEX'],
+      { teamCount: 4 },
+    );
+    const players = new Map<string, Player>();
+    const values = new Map<string, PlayerValue>();
+    const ids: string[] = [];
+
+    for (const position of ['QB', 'RB', 'WR', 'TE'] as Position[]) {
+      for (let rank = 1; rank <= 20; rank++) {
+        const id = `${position}${rank}`;
+        players.set(id, makePlayer(id, position, 25));
+        // Ranks collapse onto shared values in fours, so ties are everywhere
+        // and the id tiebreaker is doing real work.
+        values.set(id, makeValue(id, 4000 - Math.floor((rank - 1) / 4) * 700, position));
+        ids.push(id);
+      }
+    }
+
+    const rosters = [0, 1, 2, 3].map((t) =>
+      makeRoster(t + 1, ids.filter((_, i) => i % 4 === t)),
+    );
+
+    const baseline = valueLeague(rosters, players, values, settings);
+
+    // A seeded Fisher-Yates, so the shuffle itself is reproducible.
+    let seed = 20260729;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+
+    for (let trial = 0; trial < 25; trial++) {
+      const shuffled = rosters.map((roster) => {
+        const list = [...roster.playerIds];
+        for (let i = list.length - 1; i > 0; i--) {
+          const j = Math.floor(rnd() * (i + 1));
+          [list[i], list[j]] = [list[j], list[i]];
+        }
+        return { ...roster, playerIds: list };
+      });
+
+      const result = valueLeague(shuffled, players, values, settings);
+
+      expect(result.starters).toEqual(baseline.starters);
+      expect(result.levels).toEqual(baseline.levels);
+      expect(result.shrink).toBe(baseline.shrink);
+      for (const id of ids) {
+        expect(result.values.get(id)!.value).toBe(baseline.values.get(id)!.value);
+      }
+    }
   });
 
   it('reports scarcity pointing the same way as value', () => {

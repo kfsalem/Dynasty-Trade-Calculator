@@ -26,6 +26,22 @@ const table: PickValueTable = {
   ],
 };
 
+/**
+ * Every round quoted identically, so anything that differs between two picks
+ * priced off this table came from the realism curve and nowhere else.
+ */
+const flat: PickValueTable = {
+  seasons: ['2026'],
+  fetchedAt: 0,
+  rows: [1, 2, 3].map((round) => ({
+    season: '2026',
+    round,
+    slot: null,
+    tier: null,
+    value: 1000,
+  })),
+};
+
 describe('buildDraftPicks', () => {
   it('gives every roster its own picks when nothing has been traded', () => {
     const picks = buildDraftPicks(league, [], ['2026', '2027'], table);
@@ -92,39 +108,101 @@ describe('picksForRoster', () => {
 });
 
 describe('tradeableSeasons', () => {
+  const drafting = { season: '2026', status: 'pre_draft' };
+  const drafted = { season: '2026', status: 'in_season' };
+
   it('drops draft classes that have already happened', () => {
-    expect(tradeableSeasons('2027', ['2026', '2027', '2028'])).toEqual(['2027', '2028']);
+    expect(tradeableSeasons('2027', ['2026', '2027', '2028'], { ...drafting, season: '2027' }))
+      .toEqual(['2027', '2028']);
   });
 
   it('keeps everything when the current season precedes the range', () => {
-    expect(tradeableSeasons('2025', ['2026', '2027'])).toEqual(['2026', '2027']);
+    expect(tradeableSeasons('2025', ['2026', '2027'], { ...drafting, season: '2025' }))
+      .toEqual(['2026', '2027']);
+  });
+
+  it('keeps this year’s class while the rookie draft is still to come', () => {
+    // Dynasty rookie drafts run as late as August, months after Sleeper's
+    // season field rolls over. Those picks are live and highly tradeable.
+    expect(tradeableSeasons('2026', ['2026', '2027'], drafting)).toEqual(['2026', '2027']);
+    expect(tradeableSeasons('2026', ['2026', '2027'], { ...drafting, status: 'drafting' }))
+      .toEqual(['2026', '2027']);
+  });
+
+  it('drops this year’s class once the league has drafted', () => {
+    // The window this closes is long: from the day a league drafts until the
+    // NFL season field rolls over the following spring.
+    expect(tradeableSeasons('2026', ['2026', '2027'], drafted)).toEqual(['2027']);
+    expect(tradeableSeasons('2026', ['2026', '2027'], { ...drafted, status: 'complete' }))
+      .toEqual(['2027']);
+  });
+
+  it('ignores the status of a league that has not rolled over yet', () => {
+    // A dynasty league still on last season's entry reads `complete` — a
+    // statement about a finished season, not about this year's rookie draft,
+    // which has not even been scheduled.
+    expect(tradeableSeasons('2026', ['2026', '2027'], { season: '2025', status: 'complete' }))
+      .toEqual(['2026', '2027']);
   });
 });
 
 describe('pickRealismFactor', () => {
   it('keeps the first ten picks at full value', () => {
-    expect(pickRealismFactor(1, 1)).toBe(1);
-    expect(pickRealismFactor(10, 1)).toBe(1);
+    expect(pickRealismFactor(1)).toBe(1);
+    expect(pickRealismFactor(10)).toBe(1);
   });
 
-  it('puts a cliff after roughly the fifteenth pick', () => {
-    // An NFL class yields ~10-15 offensive players who matter early. Pick 16
-    // is the first one past that supply, and it is worth barely half of 15.
-    const fifteen = pickRealismFactor(15, 2);
-    const sixteen = pickRealismFactor(16, 2);
-    expect(fifteen).toBeGreaterThan(0.7);
-    expect(sixteen).toBeLessThan(fifteen * 0.65);
+  it('falls off a cliff past the fifteenth pick', () => {
+    // An NFL class yields ~10-15 offensive players who matter early. Past that
+    // the supply is gone, and the curve has to say so.
+    expect(pickRealismFactor(15)).toBeGreaterThan(0.65);
+    expect(pickRealismFactor(22)).toBeLessThan(pickRealismFactor(15) * 0.4);
   });
 
-  it('treats third-rounders as near worthless', () => {
-    expect(pickRealismFactor(21, 3)).toBeLessThan(0.05);
-    expect(pickRealismFactor(35, 3)).toBeLessThan(0.05);
+  it('prices late picks as lottery tickets without erasing them', () => {
+    // Small, but ordered: flattening them onto one number loses the difference
+    // between an early third and a late fourth, which is a real difference.
+    expect(pickRealismFactor(30)).toBeLessThan(0.1);
+    expect(pickRealismFactor(60)).toBeGreaterThan(0);
+    expect(pickRealismFactor(25)).toBeGreaterThan(pickRealismFactor(35));
+  });
+
+  it('is continuous — no two adjacent picks differ by a step', () => {
+    // The regression. A `round >= 3` short-circuit put an 11x drop between
+    // picks 20 and 21 in a 10-team league, which no projected slot is precise
+    // enough to justify.
+    for (let pick = 1; pick < 60; pick++) {
+      const drop = pickRealismFactor(pick) - pickRealismFactor(pick + 1);
+      expect(drop).toBeGreaterThanOrEqual(0);
+      expect(drop).toBeLessThan(0.1);
+    }
   });
 
   it('measures the cliff in absolute picks, not rounds', () => {
-    // Pick 12 is a late 1st in a 12-team league and an early 2nd in a 10-team
-    // one. NFL talent supply does not care which, so the factor must not.
-    expect(pickRealismFactor(12, 1)).toBe(pickRealismFactor(12, 2));
+    // Pick 21 is a third-rounder in a 10-team league and a second-rounder in a
+    // 12-team one. NFL talent supply does not care which, so neither may this.
+    const tenTeam = buildDraftPicks(
+      makeLeague(
+        Array.from({ length: 10 }, (_, i) => makeRoster(i + 1, [])),
+        makeSettings(['QB'], { draftRounds: 3 }),
+      ),
+      [], ['2026'], flat, Array.from({ length: 10 }, (_, i) => i + 1),
+    );
+    const twelveTeam = buildDraftPicks(
+      makeLeague(
+        Array.from({ length: 12 }, (_, i) => makeRoster(i + 1, [])),
+        makeSettings(['QB'], { draftRounds: 3 }),
+      ),
+      [], ['2026'], flat, Array.from({ length: 12 }, (_, i) => i + 1),
+    );
+
+    // 3.01 in the ten-team league and 2.09 in the twelve-team one are both
+    // overall pick 21, drawing on the same class.
+    const third = tenTeam.find((p) => p.id === '2026-3-1')!;
+    const second = twelveTeam.find((p) => p.id === '2026-2-9')!;
+    expect(third.slot).toBe(1);
+    expect(second.slot).toBe(9);
+    expect(third.marketValue).toBe(second.marketValue);
   });
 });
 

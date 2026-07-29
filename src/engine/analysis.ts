@@ -119,12 +119,18 @@ export function positionalStarterValue(
  * where a uniform understatement cancels out.
  */
 export function futureScore(summary: RosterSummary, settings: LeagueSettings): number {
-  const projected: ValuedPlayer[] = summary.players.map((entry) => ({
-    ...entry,
-    value: Math.round(
-      entry.value * retention(entry.player.position, entry.player.age, HORIZON_YEARS),
-    ),
-  }));
+  const projected: ValuedPlayer[] = summary.players.map((entry) => {
+    // Decay the tiebreaker alongside the value it breaks ties for. Leaving
+    // marketValue undecayed would rank a 35-year-old above a 24-year-old among
+    // players who project to the same lineup contribution — backwards, in the
+    // one calculation whose entire subject is aging.
+    const factor = retention(entry.player.position, entry.player.age, HORIZON_YEARS);
+    return {
+      ...entry,
+      value: Math.round(entry.value * factor),
+      marketValue: Math.round(entry.marketValue * factor),
+    };
+  });
   return bestLineup(projected, settings.startingSlots).reduce(
     (sum, slot) => sum + (slot.entry?.value ?? 0),
     0,

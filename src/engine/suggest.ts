@@ -167,10 +167,15 @@ const pickAsset = (pick: DraftPick): TradeAsset => ({
  * run against a hypothetical post-trade roster.
  */
 function futureLineupValue(playerIds: string[], ctx: SuggestContext): number {
-  const entries = valuePlayers(playerIds, ctx.players, ctx.values).map((entry) => ({
-    ...entry,
-    value: entry.value * retention(entry.player.position, entry.player.age, HORIZON_YEARS),
-  }));
+  // Both figures decay together; see the matching note in `analysis.futureScore`.
+  const entries = valuePlayers(playerIds, ctx.players, ctx.values).map((entry) => {
+    const factor = retention(entry.player.position, entry.player.age, HORIZON_YEARS);
+    return {
+      ...entry,
+      value: entry.value * factor,
+      marketValue: entry.marketValue * factor,
+    };
+  });
   return bestLineup(entries, ctx.league.settings.startingSlots).reduce(
     (total, slot) => total + (slot.entry?.value ?? 0),
     0,

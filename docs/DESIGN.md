@@ -484,7 +484,9 @@ that in a 10-team single-QB league every manager already starts a top-10
 quarterback. Phases 1–4 inherited that blind spot wholesale.
 
 - **Replacement level per position**, derived from the lineups the league
-  actually fields — `leagueValue = max(0, market - replacement(position))`
+  actually fields — `leagueValue = max(market * RESIDUAL_SHARE, market -
+  replacement(position))`. The first version used a hard `max(0, …)`; see
+  *The clamp was destroying the model* below for why that had to go.
 - **Realistic rookie pick values**: projected draft slot from the standings,
   plus a hard cliff after roughly pick 15 and near-zero third-rounders
 - **Anti-tanking**: no contention window weights the present below 0.35, and the
@@ -576,6 +578,102 @@ pre-draft league with empty rosters); an unclassifiable position failed open,
 keeping full market value while every classified player was docked; and the
 suggestion cards showed league-adjusted figures beneath a market-derived
 fairness verdict, so an even trade could read as wildly lopsided.
+
+**The clamp was destroying the model.** *(2026-07-29)*
+
+The `max(0, …)` floor did not merely understate the bottom of the pool — it
+erased the ordering *within* it. On the real 10-team league that was **87 of 158
+valued rostered players collapsed onto a single number**, 55% of everyone
+rostered, including Josh Jacobs, Mike Evans, Davante Adams and Travis Hunter.
+
+Every consumer that sorts by value then had nothing to sort by, and the model
+fed on its own noise:
+
+1. Ties at zero make `bestLineup`'s FLEX choice arbitrary — decided by whatever
+   order Sleeper happened to return `playerIds` in.
+2. `startersByPosition` counts that arbitrary choice.
+3. The counts set replacement level.
+4. Replacement level decides who lands at zero. Back to 1.
+
+Reshuffling player lists *within* each roster — an operation that says nothing
+whatever about the league — moved RB replacement level between **1,900 and
+2,709** and flipped individual players between **0 and 807**. The ordering the
+live app happened to receive was the extreme end of that range, which is why the
+zeroing looked far worse in practice than the design implied.
+
+Downstream the damage compounded: bench value read exactly `0` for 8 of 10
+teams, `analysis.surpluses` filters on `value > 0` so 7 of 10 teams reported no
+tradeable surplus at all, and two teams could be offered no trades whatsoever.
+
+Two fixes, deliberately separable:
+
+- **A total order on valued players** (`rosterValue.byValue`): value, then
+  market value, then player id. Market value separates players a league-adjusted
+  figure cannot — a below-replacement WR1 and a waiver body are not the same
+  asset — and the id makes the result depend only on *which* players are on a
+  roster, never on the order they arrived in. The decay in `futureScore` and
+  `futureLineupValue` now applies to both figures, so the tiebreaker stays in the
+  same units as the value it breaks ties for.
+
+- **An order-preserving floor** (`RESIDUAL_SHARE = 0.1`): a below-replacement
+  player is not startable today but is still an asset — an aging starter whose
+  dynasty price is age-suppressed, or a rookie whose value is entirely ahead of
+  him. Keeping a fixed share of market value says exactly that. The function is
+  continuous and strictly increasing, the two branches meeting where the surplus
+  equals the residual, so nobody meaningfully above replacement is affected: an
+  elite back is still worth market minus replacement, exactly as before. It is
+  deliberately *not* rounded — rounding the compressed tail to whole points puts
+  adjacent players back onto identical values, a smaller version of the same
+  collapse. `formatValue` rounds for display, which is where rounding belongs.
+
+After: zero players at zero, replacement levels identical across 25 reshuffles
+in test and 8 on the real league, bench value non-zero for all 10 teams, and
+every team reachable by the suggestion engine (129–205 packages considered per
+team, up from as few as 33). Retained share moved to RB 81%, WR 79%, TE 73%,
+QB 49%.
+
+**The rookie-pick curve had the same disease.** *(2026-07-29)*
+
+`pickRealismFactor` short-circuited on `round >= 3` *before* consulting the pick
+number, directly contradicting its own doc comment — "the thresholds are
+absolute pick numbers, not rounds, because the supply of NFL talent does not
+care how many teams are in your league". Two consequences:
+
+- **An 11x drop between adjacent picks.** In a 10-team league 2.10 is overall
+  pick 20 and kept 33%; 3.01 is overall pick 21 and kept 3%. Projected draft
+  slots are not precise to one pick, so a step that large was an artifact, not a
+  model. There was a second step at 15 → 16 (0.75 → 0.45).
+- **The curve depended on league size.** "Round 3" is overall pick 21 in a
+  10-team league and 33 in a 16-team one — the same rule firing at very
+  different depths of the same talent pool.
+
+And flattening every third-rounder onto 0.03 destroyed the ordering among them
+for exactly the reason the value clamp did: 22 of 30 third-round picks priced to
+league value 0, indistinguishable from each other and from nothing.
+
+Replaced with linear interpolation between anchors on absolute pick number —
+`(10, 1.0) (15, 0.70) (20, 0.30) (30, 0.08) (45, 0.03)`, floored past 45.
+Continuous, monotone, and league-size-independent by construction; the largest
+single-pick drop is now 0.08, down from 0.30. Rounds 1 and 2 barely move
+(2026 2.01 went 624 → 618), third-rounders go from 0–1 to 1–13, and no pick in
+the league prices to zero. A third-rounder is now worth appreciably more in a
+10-team league than a 14-team one, which is correct.
+
+**`tradeableSeasons` — a latent bug, not a live one.** The first review claimed
+the app was listing 2026 rookie picks after that draft had happened. That was
+wrong, and checking beat assuming: this league's status is `pre_draft` and its
+rookie draft is scheduled for **2026-08-23**. Dynasty rookie drafts commonly run
+in August, not with the NFL draft in April.
+
+The underlying gap is real though, and about to open. `season >= currentSeason`
+has no notion of whether a draft has run, and Sleeper's season field does not
+roll over until the following spring — so from the day a league drafts until
+then, the app would offer picks that no longer exist, and a first-rounder is
+both the most valuable asset it prices and its usual currency for balancing an
+offer. Now gated on the league's own status, and only when the league has
+actually rolled over to the current season: a dynasty league still sitting on
+last year's entry reads `complete`, which describes a finished season rather
+than this year's unscheduled rookie draft.
 
 ### Phase 5 — Scale out
 - MFL + Fleaflicker providers

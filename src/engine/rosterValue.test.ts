@@ -15,8 +15,13 @@ function player(id: string, position: Position, name = id): Player {
   };
 }
 
-function entry(id: string, position: Position, value: number): ValuedPlayer {
-  return { player: player(id, position), value, valued: true };
+function entry(
+  id: string,
+  position: Position,
+  value: number,
+  marketValue = value,
+): ValuedPlayer {
+  return { player: player(id, position), value, marketValue, valued: true };
 }
 
 const names = (lineup: ReturnType<typeof bestLineup>) =>
@@ -89,6 +94,29 @@ describe('bestLineup', () => {
     expect(result.map((a) => a.slot)).toEqual(['SUPER_FLEX', 'RB']);
     // RB slot is more restrictive so it fills first, taking rb1; SF gets qb1.
     expect(names(result)).toEqual(['qb1', 'rb1']);
+  });
+
+  it('breaks a value tie on market value, not on the order players arrived in', () => {
+    // Two players a league-adjusted valuation cannot separate, but the market
+    // can. The FLEX must take the better asset regardless of list order —
+    // whichever it takes becomes a starter count, which sets replacement level.
+    const cheap = entry('cheap', 'RB', 400, 900);
+    const rich = entry('rich', 'WR', 400, 3100);
+    const slots: LineupSlot[] = ['FLEX'];
+
+    expect(names(bestLineup([cheap, rich], slots))).toEqual(['rich']);
+    expect(names(bestLineup([rich, cheap], slots))).toEqual(['rich']);
+  });
+
+  it('is a total order, so identical players still sort deterministically', () => {
+    // Two players alike on every number we have. Some answer has to be picked;
+    // it must be the *same* answer each time, or the starter counts it feeds
+    // become a function of input ordering.
+    const a = entry('aaa', 'RB', 400, 900);
+    const b = entry('bbb', 'WR', 400, 900);
+    const slots: LineupSlot[] = ['FLEX'];
+
+    expect(names(bestLineup([a, b], slots))).toEqual(names(bestLineup([b, a], slots)));
   });
 
   it('fills REC_FLEX before FLEX, since WR/TE is the narrower slot', () => {

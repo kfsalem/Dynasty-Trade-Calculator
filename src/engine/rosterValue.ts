@@ -17,9 +17,34 @@ import {
 export interface ValuedPlayer {
   player: Player;
   value: number;
+  /**
+   * The market figure behind `value`, carried solely to break ties.
+   *
+   * Replacement level compresses the bottom of the pool hard, and any floor
+   * applied there puts many players on identical or near-identical values. Sort
+   * order among them decides who fills a FLEX slot, which decides the starter
+   * counts that set replacement level in the first place — so leaving it to the
+   * order the platform happened to return players in makes the whole model a
+   * function of its input ordering. See `byValue`.
+   */
+  marketValue: number;
   /** False when no source had a value for this player (kickers, defenses, deep bench). */
   valued: boolean;
 }
+
+/**
+ * Total order over valued players. Never returns 0 for two different players.
+ *
+ * `value` first, since that is the real question. `marketValue` next, because
+ * when league-adjusted value cannot separate two players the market still can —
+ * a below-replacement WR1 and a waiver body are not the same asset. Player id
+ * last, as an arbitrary but *stable* decider, so the result depends only on
+ * which players are on the roster and never on what order they arrived in.
+ */
+export const byValue = (a: ValuedPlayer, b: ValuedPlayer): number =>
+  b.value - a.value ||
+  b.marketValue - a.marketValue ||
+  (a.player.id < b.player.id ? -1 : a.player.id > b.player.id ? 1 : 0);
 
 export interface LineupAssignment {
   slot: LineupSlot;
@@ -53,9 +78,14 @@ export function valuePlayers(
     const player = players.get(id);
     if (!player) continue;
     const value = values.get(id);
-    out.push({ player, value: value?.value ?? 0, valued: value !== undefined });
+    out.push({
+      player,
+      value: value?.value ?? 0,
+      marketValue: value?.marketValue ?? 0,
+      valued: value !== undefined,
+    });
   }
-  return out.sort((a, b) => b.value - a.value);
+  return out.sort(byValue);
 }
 
 /**
@@ -75,7 +105,7 @@ export function bestLineup(
   startingSlots: LineupSlot[],
 ): LineupAssignment[] {
   const used = new Set<string>();
-  const pool = [...entries].sort((a, b) => b.value - a.value);
+  const pool = [...entries].sort(byValue);
 
   const pick = (eligible: Position[]): ValuedPlayer | null => {
     for (const candidate of pool) {

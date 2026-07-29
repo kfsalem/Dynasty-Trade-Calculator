@@ -57,9 +57,12 @@ export function useLeagueSummaries(leagueId: string | null) {
    * position the league actually starts. That sets replacement level, which
    * produces the league-adjusted values everything downstream runs on.
    *
-   * Deliberately a single pass. Re-deriving lineups from adjusted values and
-   * looping would chase its own tail for no real gain: replacement subtracts a
-   * constant per position, so it almost never reorders who starts.
+   * `valueLeague` then iterates that to a fixed point, because the counts and
+   * the values define each other and one pass is not enough. Replacement
+   * subtracts a *different* constant per position, which is exactly what flips
+   * a FLEX slot from one position to another: on this league the market pass
+   * gives RB 26 / WR 33 / TE 11 and the converged answer is RB 22 / WR 35 /
+   * TE 13.
    */
   const adjusted = useMemo(() => {
     const bundle = leagueQuery.data;
@@ -84,7 +87,7 @@ export function useLeagueSummaries(leagueId: string | null) {
     const table = pickValuesQuery.data;
     if (!bundle || !table || !adjusted) return [];
 
-    const seasons = tradeableSeasons(bundle.currentSeason, table.seasons);
+    const seasons = tradeableSeasons(bundle.currentSeason, table.seasons, bundle.league);
     // Rookie order is the reverse of the standings, so the weakest roster picks
     // first. `summaries` is sorted strongest-first.
     const worstFirst = [...summaries].reverse().map((s) => s.rosterId);

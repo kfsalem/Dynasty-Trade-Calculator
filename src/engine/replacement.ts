@@ -13,7 +13,7 @@ import { summarizeRoster, type RosterSummary } from './rosterValue';
  *
  * So a player is worth what he adds *over the best player who starts nowhere*:
  *
- *     leagueValue = max(0, marketValue - replacement(position))
+ *     leagueValue = max(marketValue * RESIDUAL_SHARE, marketValue - replacement)
  *
  * Nothing here is hand-tuned per position. The starter counts come from the
  * lineups the league actually fields, so the same code says quarterbacks matter
@@ -21,6 +21,32 @@ import { summarizeRoster, type RosterSummary } from './rosterValue';
  * a shallow single-QB league. Change the roster settings and the weighting
  * follows on its own.
  */
+
+/**
+ * Share of market value a below-replacement player keeps.
+ *
+ * A hard `max(0, …)` floor was the first attempt and it was wrong in a way worth
+ * recording. Clamping does not merely understate the bottom of the pool; it
+ * *erases the ordering within it*, and on a real 10-team league that was 55% of
+ * all rostered players collapsed onto a single number. Everything downstream
+ * that sorts by value then had nothing to sort by: the FLEX slot went to
+ * whichever tied player the platform happened to list first, those arbitrary
+ * picks became the starter counts, the counts set replacement level, and
+ * replacement level decided who got clamped. Reshuffling one roster's player
+ * list — which says nothing about the league — moved RB replacement level from
+ * 1,900 to 2,709 and flipped individual players between 0 and 807.
+ *
+ * A player below replacement is not worthless. He is not startable *today*, but
+ * he is still a tradeable asset: an aging starter whose dynasty price is
+ * age-suppressed, or a rookie whose value is entirely ahead of him. Keeping a
+ * fixed share of market value says exactly that, and keeps the tail strictly
+ * ordered so the tie-driven feedback loop above cannot form.
+ *
+ * The floor only binds where the surplus is smaller than the share, so no player
+ * meaningfully above replacement is affected — an elite back is worth market
+ * minus replacement, exactly as before.
+ */
+export const RESIDUAL_SHARE = 0.1;
 
 export type StarterCounts = Partial<Record<Position, number>>;
 
@@ -96,6 +122,22 @@ export function replacementLevels(
 }
 
 /**
+ * One player's league value. The model, in one line.
+ *
+ * Continuous and strictly increasing in `market`: the two branches meet where
+ * the surplus equals the residual, so there is no step at the crossover, and a
+ * player with no market value still lands on zero.
+ *
+ * Deliberately not rounded. The residual branch compresses several thousand
+ * points of market value into a few hundred, and rounding that to whole points
+ * puts adjacent players back onto identical values — a smaller version of the
+ * very collapse this replaced. `formatValue` rounds for display, which is where
+ * rounding belongs.
+ */
+export const leagueValue = (market: number, replacement: number): number =>
+  Math.max(market * RESIDUAL_SHARE, market - replacement);
+
+/**
  * Rebuild a value map in league-adjusted terms.
  *
  * `marketValue` is preserved untouched so the UI can still show the number the
@@ -118,10 +160,7 @@ export function applyReplacement(
     const replacement = value.position
       ? (levels[value.position]?.value ?? strictest)
       : strictest;
-    out.set(id, {
-      ...value,
-      value: Math.max(0, value.marketValue - replacement),
-    });
+    out.set(id, { ...value, value: leagueValue(value.marketValue, replacement) });
   }
   return out;
 }
@@ -186,7 +225,10 @@ export function positionScarcity(
     out[level.position] = {
       ...level,
       topMarket,
-      retained: topMarket > 0 ? Math.max(0, topMarket - level.value) / topMarket : 0,
+      // Through `leagueValue`, not a second copy of the arithmetic — this number
+      // is the explanatory panel's whole content, and a panel that teaches a
+      // different model than the engine runs is worse than no panel.
+      retained: topMarket > 0 ? leagueValue(topMarket, level.value) / topMarket : 0,
     };
   }
   return out;
