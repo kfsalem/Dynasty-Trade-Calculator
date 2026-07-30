@@ -98,6 +98,30 @@ describe('reduceSnapCounts', () => {
     expect(stats.relevant.byPosition.TE).toEqual({ matched: 0, unmatched: 1 });
   });
 
+  it('counts a player with an unusable id as unmatched, not as absent', () => {
+    // The failure the gate exists to catch is coverage collapsing. If a row
+    // with no usable id were skipped before accounting, it would leave the
+    // denominator too, and the rate would read 100% while half the players
+    // disappeared.
+    const { file, stats } = reduce(
+      csv(
+        "2025,1,REG,Ja'Marr Chase,ChasJa00,WR,CIN,45,0.87",
+        '2025,1,REG,No Id,NA,WR,CIN,50,0.9',
+        '2025,1,REG,Blank Id,,WR,CIN,50,0.9',
+      ),
+    );
+
+    expect(Object.keys(file.players)).toEqual(['7564']);
+    expect(stats.relevant.byPosition.WR).toEqual({ matched: 1, unmatched: 2 });
+    expect(stats.unmatched.map((p) => p.name)).toEqual(['No Id', 'Blank Id']);
+  });
+
+  it('counts a player whose usage never parses, rather than dropping him', () => {
+    const { stats } = reduce(csv('2025,1,REG,Unparseable,UnknoPl00,WR,CIN,NA,NA'));
+
+    expect(stats.all.byPosition.WR).toEqual({ matched: 0, unmatched: 1 });
+  });
+
   it('leaves a fringe player out of the tally the build gate reads', () => {
     const { stats } = reduce(
       csv(

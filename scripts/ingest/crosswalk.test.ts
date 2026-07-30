@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { matchRate, newMatchStats, parseCrosswalk, recordMatch } from './crosswalk';
+import {
+  describeUnmatched,
+  matchRate,
+  newMatchStats,
+  observe,
+  parseCrosswalk,
+  recordMatch,
+  tallyCandidates,
+  type Candidate,
+} from './crosswalk';
 
 const HEADER = 'mfl_id,sleeper_id,gsis_id,pfr_id,espn_id,name';
 
@@ -106,7 +115,46 @@ describe('match accounting', () => {
     ]);
   });
 
+  it('renders an unmatched player one way, for the log and the exception alike', () => {
+    expect(
+      describeUnmatched({
+        name: 'Cody White',
+        position: 'WR',
+        note: 'peak 73% snaps',
+        relevant: true,
+      }),
+    ).toBe('Cody White (WR, peak 73% snaps)');
+  });
+
   it('reports zero rather than dividing by zero on an empty position', () => {
     expect(matchRate({ matched: 0, unmatched: 0 })).toBe(0);
+  });
+});
+
+describe('deferred candidates', () => {
+  it('keeps the best week, whatever order the rows arrive in', () => {
+    // Relevance has to survive row order: a starter eased in on 8% of snaps in
+    // week 1 must not be written off before week 9 is read.
+    const candidates = new Map<string, Candidate>();
+    const player = { name: 'Someone', position: 'TE', sleeperId: undefined };
+
+    observe(candidates, 'k', player, 0.81);
+    observe(candidates, 'k', player, 0.08);
+
+    expect(candidates.get('k')?.peak).toBe(0.81);
+  });
+
+  it('tallies each candidate once, against the relevance bar', () => {
+    const candidates = new Map<string, Candidate>();
+    observe(candidates, 'a', { name: 'Starter', position: 'WR', sleeperId: '1' }, 0.9);
+    observe(candidates, 'b', { name: 'Fringe', position: 'WR', sleeperId: undefined }, 0.05);
+
+    const stats = tallyCandidates(candidates.values(), 0.25, (peak) => `peak ${peak}`);
+
+    expect(stats.all.total).toEqual({ matched: 1, unmatched: 1 });
+    expect(stats.relevant.total).toEqual({ matched: 1, unmatched: 0 });
+    expect(stats.unmatched).toEqual([
+      { name: 'Fringe', position: 'WR', note: 'peak 0.05', relevant: false },
+    ]);
   });
 });

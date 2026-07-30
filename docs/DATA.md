@@ -125,21 +125,42 @@ any number the app produces:
 | dataset | has a role |
 |---|---|
 | `snaps` | peak single-week snap share ≥ 25% |
-| `opportunity` | peak single-week targets + carries ≥ 3 |
+| `opportunity` | peak single-week targets + carries + pass attempts ≥ 3 |
 | `depth` | depth rank ≤ 3 |
+
+Pass attempts count, and have to. A pocket quarterback takes almost no targets
+and carries, so a targets-plus-carries bar left eight real starters outside the
+denominator in 2025 — the worst of them with a 35-attempt, 17-point game.
+`fantasy_points_ppr` ships in that file and a quarterback's points come from
+passing, so ignoring attempts would contradict the premise that below this line
+a missing id changes nothing.
 
 The gate covers QB/RB/WR/TE at a 90% floor, and skips any position with fewer
 than 20 players in the sample. FB is outside it on purpose: there are about
 nineteen in the league, so one miss is five percent and the gate would be
 measuring noise.
 
+Three things keep the gate from failing open, which matters more here than
+usual — a check that silently stops checking is worse than no check:
+
+- **A player whose id cannot be resolved counts as a miss, not as absent.** If
+  an unusable id were skipped before accounting, it would leave the denominator
+  too, and the rate would read 100% while coverage collapsed.
+- **A gated position that vanishes from the source fails.** A renamed position
+  code drops every player at it, and an empty bucket must not be read as
+  nothing to check.
+- **A collapse in the relevance signal itself fails.** Relevance is derived from
+  a source column, so if `pos_rank` became a team-wide ordering, nearly nobody
+  would qualify, every position would fall under the sample floor, and the gate
+  would go quiet exactly when it was needed.
+
 Rates as of 2026-07-30, against that 90% floor:
 
-| dataset | raw | with a role | weakest position |
+| dataset | raw | with a role | weakest gated position |
 |---|---|---|---|
-| `snaps` | 97.0% | **98.4%** | TE 95.9% |
-| `opportunity` | 98.0% | **99.6%** | TE 99.0% |
-| `depth` | 83.0% | **98.0%** | QB 95.8% |
+| `snaps` | 97.0% | **98.4%** (504/512) | TE 95.9% |
+| `opportunity` | 98.0% | **99.6%** (489/491) | TE 99.0% |
+| `depth` | 83.0% | **98.0%** (395/403) | QB 95.8% |
 
 Every unmatched player with a role is named in full in the build log, with the
 evidence that they mattered — `Cody White (WR, peak 73% snaps)`. Players below

@@ -37,6 +37,15 @@ interface Snapshot {
   }[];
 }
 
+/** One player's best spot on the current chart, after de-duplication. */
+interface Listing {
+  sleeperId: string | undefined;
+  team: string;
+  name: string;
+  pos: string;
+  rank: number;
+}
+
 /**
  * Reduce the depth chart file to the current chart.
  *
@@ -72,7 +81,10 @@ export function reduceDepthCharts(
     const rank = num(row.pos_rank);
     const gsis = id(row.gsis_id);
     const espn = id(row.espn_id);
-    if (rank === null || !row.team || (!gsis && !espn)) continue;
+    // A listing carrying no id at all is kept, and counts later as a player we
+    // could not resolve. Dropping it here would hide a chart that stopped
+    // publishing ids behind a match rate that still read 100%.
+    if (rank === null || !row.team) continue;
 
     const current = latest.get(row.team);
 
@@ -93,8 +105,11 @@ export function reduceDepthCharts(
 
   if (!checked) requireColumns('depth_charts', undefined, REQUIRED);
 
-  const players: DepthChartsFile['players'] = {};
-  const stats = newMatchStats();
+  // Resolve and de-duplicate first, then tally. A player listed at two spots —
+  // Pittsburgh carried one at RB4 and WR7 — is one player, and counting his
+  // listings would put him in the gate's denominator twice while the output
+  // holds him once.
+  const resolved = new Map<string, Listing>();
   let asOf = '';
 
   for (const [team, snapshot] of latest) {
@@ -109,20 +124,36 @@ export function reduceDepthCharts(
         (row.gsis ? crosswalk.byGsis.get(row.gsis) : undefined) ??
         (row.espn ? crosswalk.byEspn.get(row.espn) : undefined);
 
-      recordMatch(stats, {
-        position: row.pos,
-        sleeperId,
-        name: row.name,
-        relevant: row.rank <= RELEVANT_DEPTH_RANK,
-        note: `${row.pos}${row.rank}`,
-      });
-      if (!sleeperId) continue;
+      // Unresolved players still need a stable identity, or each of their
+      // listings would count as a separate failure to match.
+      const key = sleeperId ?? `src:${row.gsis ?? row.espn ?? `${row.name}|${team}`}`;
 
-      // A player listed at two positions keeps the higher spot on the chart.
-      const existing = players[sleeperId];
+      // Whichever listing puts him higher on a chart is the one that counts.
+      const existing = resolved.get(key);
       if (existing && existing.rank <= row.rank) continue;
 
-      players[sleeperId] = { team, pos: row.pos, rank: row.rank };
+      resolved.set(key, { sleeperId, team, name: row.name, pos: row.pos, rank: row.rank });
+    }
+  }
+
+  const players: DepthChartsFile['players'] = {};
+  const stats = newMatchStats();
+
+  for (const listing of resolved.values()) {
+    recordMatch(stats, {
+      position: listing.pos,
+      sleeperId: listing.sleeperId,
+      name: listing.name,
+      relevant: listing.rank <= RELEVANT_DEPTH_RANK,
+      note: `${listing.pos}${listing.rank}`,
+    });
+
+    if (listing.sleeperId) {
+      players[listing.sleeperId] = {
+        team: listing.team,
+        pos: listing.pos,
+        rank: listing.rank,
+      };
     }
   }
 

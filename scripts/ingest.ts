@@ -25,6 +25,7 @@ import {
 import { requireRows } from './ingest/columns';
 import { IngestError } from './ingest/errors';
 import {
+  describeUnmatched,
   loadCrosswalk,
   matchRate,
   sampleSize,
@@ -61,6 +62,9 @@ const GATE: MatchGate = {
   positions: ['QB', 'RB', 'WR', 'TE'],
   minRate: 0.9,
   minSample: 20,
+  // These datasets clear the bar with 400-500 players each; 200 is a collapse,
+  // not a quiet week.
+  minRelevantTotal: 200,
 };
 
 interface Reduced {
@@ -133,28 +137,40 @@ async function readExistingMeta(path: string): Promise<DatasetMeta & { players: 
   };
 }
 
-function reportMatches(stats: MatchStats): void {
+function reportMatches(stats: MatchStats, gate: MatchGate): void {
   console.log(
     `    all players    ${stats.all.total.matched}/${sampleSize(stats.all.total)} ` +
       `matched to Sleeper (${pct(matchRate(stats.all.total))})`,
   );
 
-  const byPosition = Object.entries(stats.relevant.byPosition)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([position, counts]) => `${position} ${pct(matchRate(counts))}`)
-    .join('  ');
+  const relevantSample = sampleSize(stats.relevant.total);
+  if (relevantSample === 0) {
+    // Distinguished from a 0% match rate on purpose: nothing was measured, and
+    // printing "0/0 (0.0%)" reads as a total collapse instead.
+    console.log('    with a role    no players cleared the relevance bar');
+  } else {
+    // Every gated position, so one that vanished shows as "absent" rather than
+    // simply not appearing in the line.
+    const positions = [...new Set([...gate.positions, ...Object.keys(stats.relevant.byPosition)])]
+      .sort()
+      .map((position) => {
+        const counts = stats.relevant.byPosition[position];
+        return counts ? `${position} ${pct(matchRate(counts))}` : `${position} absent`;
+      })
+      .join('  ');
 
-  console.log(
-    `    with a role    ${stats.relevant.total.matched}/${sampleSize(stats.relevant.total)} ` +
-      `(${pct(matchRate(stats.relevant.total))})   ${byPosition}`,
-  );
+    console.log(
+      `    with a role    ${stats.relevant.total.matched}/${relevantSample} ` +
+        `(${pct(matchRate(stats.relevant.total))})   ${positions}`,
+    );
+  }
 
   // The gate reads the line above; this is the evidence behind it.
   const relevant = stats.unmatched.filter((player) => player.relevant);
   if (relevant.length > 0) {
     console.log(`    ${relevant.length} unmatched despite having a role:`);
     for (const player of relevant) {
-      console.log(`      ${player.name} (${player.position}, ${player.note})`);
+      console.log(`      ${describeUnmatched(player)}`);
     }
   }
 
@@ -164,7 +180,7 @@ function reportMatches(stats: MatchStats): void {
     const hidden = rest.length - shown.length;
     console.log(
       `    ${rest.length} unmatched below the relevance line: ` +
-        `${shown.map((player) => `${player.name} (${player.position}, ${player.note})`).join(', ')}` +
+        `${shown.map(describeUnmatched).join(', ')}` +
         `${hidden > 0 ? `, and ${hidden} more` : ''}`,
     );
   }
@@ -215,7 +231,7 @@ async function main(): Promise<void> {
 
       const through = file.throughWeek === null ? 'snapshot' : `through week ${file.throughWeek}`;
       console.log(`  ${dataset.name}  ${file.season} season, ${through}`);
-      reportMatches(stats);
+      reportMatches(stats, GATE);
 
       // After the report, so a failing build still shows the evidence.
       requireMatchRates(dataset.name, stats, GATE);

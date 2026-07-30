@@ -162,3 +162,56 @@ export function matchRate(counts: MatchCounts): number {
 }
 
 export const sampleSize = (counts: MatchCounts): number => counts.matched + counts.unmatched;
+
+/** One rendering of an unmatched player, so the log and the exception agree. */
+export const describeUnmatched = (player: UnmatchedPlayer): string =>
+  `${player.name} (${player.position}, ${player.note})`;
+
+/**
+ * A player seen in a weekly source, held until his best week is known.
+ *
+ * Whether a player has a role depends on his peak week, and the last row read
+ * can still change it — a starter eased in on 8% of snaps in week 1 must not be
+ * written off before week 9 is read. So the weekly reducers accumulate here and
+ * tally once at the end.
+ */
+export interface Candidate {
+  name: string;
+  position: string;
+  sleeperId: string | undefined;
+  peak: number;
+}
+
+export function observe(
+  candidates: Map<string, Candidate>,
+  key: string,
+  player: Omit<Candidate, 'peak'>,
+  peak: number,
+): void {
+  const candidate = candidates.get(key);
+  if (candidate) {
+    candidate.peak = Math.max(candidate.peak, peak);
+    return;
+  }
+  candidates.set(key, { ...player, peak });
+}
+
+export function tallyCandidates(
+  candidates: Iterable<Candidate>,
+  relevantAt: number,
+  note: (peak: number) => string,
+): MatchStats {
+  const stats = newMatchStats();
+
+  for (const candidate of candidates) {
+    recordMatch(stats, {
+      position: candidate.position,
+      sleeperId: candidate.sleeperId,
+      name: candidate.name,
+      relevant: candidate.peak >= relevantAt,
+      note: note(candidate.peak),
+    });
+  }
+
+  return stats;
+}
