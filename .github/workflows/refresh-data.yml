@@ -1,0 +1,61 @@
+name: Refresh nflverse data
+
+# Weekly data refresh, so activity data stays current without a code push.
+#
+# Tuesday is the right day: nflverse finishes reprocessing Monday night's game
+# some time Tuesday morning, so a Tuesday run is the first moment the previous
+# week is complete. Restricted to September through February because outside
+# the season there is no new week to pick up — run it by hand if a depth chart
+# matters in the offseason.
+on:
+  schedule:
+    - cron: '0 11 * 9,10,11,12,1,2 2'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  # Pushing with GITHUB_TOKEN deliberately does not trigger other workflows, so
+  # the deploy has to be dispatched by hand at the end of this job.
+  actions: write
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run ingest
+
+      - id: diff
+        run: |
+          if git diff --quiet -- public/data; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "nflverse data is unchanged; nothing to deploy."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat -- public/data
+          fi
+
+      # Committing the refreshed data is what keeps the fallback copy current.
+      # Without this the committed data would only ever be as fresh as the last
+      # code push, which defeats the point of a fallback.
+      - if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/data
+          git commit -m 'chore: refresh nflverse data'
+          git push
+
+      - if: steps.diff.outputs.changed == 'true'
+        run: gh workflow run deploy.yml --ref "${{ github.ref_name }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

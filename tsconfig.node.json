@@ -21,5 +21,8 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["vite.config.ts"]
+  // The build-time ingest belongs to this project rather than the app: it runs
+  // in Node with no DOM, and reaches into src only for src/lib/csv and
+  // src/data/types, which it pulls in by import.
+  "include": ["vite.config.ts", "scripts"]
 }

@@ -75,15 +75,22 @@ See [`docs/DESIGN.md`](docs/DESIGN.md) for the full architecture and roadmap.
 
 ## How it works
 
-No backend, no accounts, no API keys. Every data source is public and CORS-enabled, so the whole app runs client-side as a static site.
+No backend, no accounts, no API keys. Every data source is public, so the whole app runs client-side as a static site.
 
-| Source | Provides |
-|---|---|
-| [Sleeper API](https://docs.sleeper.com/) | Leagues, rosters, settings, traded picks, transactions |
-| [FantasyCalc](https://fantasycalc.com/) | Player values, parameterized by dynasty/superflex/PPR/team count |
-| [DynastyProcess](https://github.com/dynastyprocess/data) | Draft pick values (FantasyCalc has none) |
+| Source | Provides | Fetched |
+|---|---|---|
+| [Sleeper API](https://docs.sleeper.com/) | Leagues, rosters, settings, traded picks, transactions | In the browser |
+| [FantasyCalc](https://fantasycalc.com/) | Player values, parameterized by dynasty/superflex/PPR/team count | In the browser |
+| [DynastyProcess](https://github.com/dynastyprocess/data) | Draft pick values (FantasyCalc has none), player ID crosswalk | Browser / build |
+| [nflverse](https://github.com/nflverse/nflverse-data) | Weekly snaps, target share, air yards, WOPR, depth charts | Build |
 
 FantasyCalc also supplies cross-platform player IDs (`sleeperId`, `mflId`, `espnId`, `fleaflickerId`), which is what makes supporting platforms beyond Sleeper tractable.
+
+nflverse is the one source a browser cannot reach. It publishes as GitHub release
+assets, which send no CORS header, and its depth chart file is 53 MB. `npm run
+ingest` fetches and reduces it in CI instead, shipping 346 KB of Sleeper-keyed
+JSON as static assets — so the app stays backend-free. See
+[`docs/DATA.md`](docs/DATA.md).
 
 ## Development
 
@@ -94,6 +101,7 @@ npm install
 npm run dev      # dev server
 npm run build    # typecheck + production build
 npm run lint
+npm run ingest   # refresh public/data from nflverse
 ```
 
 ## Stack
