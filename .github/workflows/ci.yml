@@ -1,0 +1,36 @@
+name: CI
+
+# Validation for pull requests.
+#
+# Separate from deploy.yml rather than bolted onto it: that workflow's whole
+# job is publishing to Pages, and adding a pull_request trigger there would
+# either deploy PR code to production or need the deploy job disabled by a
+# condition on every run. Pushes to main are already checked by deploy.yml, so
+# this only runs on PRs and nothing is validated twice.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+# A superseded run is wasted work — only the latest push to a PR matters.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      # tsc -b across all three projects, then the production build. Runs
+      # against the committed public/data, so it needs no network and an
+      # nflverse outage cannot fail a pull request.
+      - run: npm run build
