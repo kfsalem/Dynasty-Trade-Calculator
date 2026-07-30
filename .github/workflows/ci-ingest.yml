@@ -1,0 +1,50 @@
+name: CI — ingest
+
+# The ingest against the real nflverse, for pull requests that touch it.
+#
+# Its unit tests run on fixtures, which cannot tell us that nflverse still
+# publishes the columns and id formats the reducers read. That question only
+# has an answer against the live source, and it is the whole reason the schema
+# and match-rate checks exist.
+#
+# Split into its own workflow so GitHub's native `paths` filter can gate it —
+# a docs-only pull request should not pull 48 MB off a volunteer-run project.
+on:
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'src/data/**'
+      - 'src/lib/csv.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/ci-ingest.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-ingest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+
+      # Safe to run on a pull request despite the network dependency: a fetch
+      # failure falls back to the committed copy and exits 0 by design, so an
+      # nflverse outage cannot block a merge. Only schema drift or a collapse
+      # in the match rate fails this, and both should.
+      - run: npm run ingest
+
+      # The generated files are ephemeral here — nothing is committed from a
+      # pull request. Show what changed so a reviewer can see the effect of a
+      # reducer change on the real data, in a diff that stays readable.
+      - if: always()
+        run: git diff --stat -- public/data
