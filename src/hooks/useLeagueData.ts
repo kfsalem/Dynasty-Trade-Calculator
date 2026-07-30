@@ -6,6 +6,8 @@ import { fetchPickValues } from '../values/dynastyprocess';
 import type { RosterSummary } from '../engine/rosterValue';
 import { buildDraftPicks, tradeableSeasons } from '../engine/picks';
 import { valueLeague } from '../engine/replacement';
+import { snapShares } from '../engine/snapShare';
+import { fetchSnapCounts } from '../data/snaps';
 import type { DraftPick, LeagueSettings } from '../types';
 
 export function useLeague(leagueId: string | null) {
@@ -46,11 +48,29 @@ export function usePickValues(settings: LeagueSettings | undefined) {
   });
 }
 
+/**
+ * Weekly snap shares, from the static file the build-time ingest produces.
+ *
+ * Never blocks the app: `fetchSnapCounts` returns null rather than throwing, so
+ * a missing file costs a column of dashes and nothing else. `staleTime` is
+ * infinite because this is a build artifact — it cannot change without a
+ * redeploy, and a redeploy reloads the page.
+ */
+export function useSnapShares() {
+  return useQuery({
+    queryKey: ['snapCounts'],
+    queryFn: fetchSnapCounts,
+    staleTime: Infinity,
+    retry: 1,
+  });
+}
+
 export function useLeagueSummaries(leagueId: string | null) {
   const leagueQuery = useLeague(leagueId);
   const settings = leagueQuery.data?.league.settings;
   const valuesQuery = useValues(settings);
   const pickValuesQuery = usePickValues(settings);
+  const snapsQuery = useSnapShares();
 
   /**
    * Market values feed one pass of lineups, which reveals how many of each
@@ -102,6 +122,11 @@ export function useLeagueSummaries(leagueId: string | null) {
     );
   }, [leagueQuery.data, pickValuesQuery.data, adjusted, summaries]);
 
+  const snaps = useMemo(
+    () => (snapsQuery.data ? snapShares(snapsQuery.data) : undefined),
+    [snapsQuery.data],
+  );
+
   return {
     league: leagueQuery.data?.league,
     players: leagueQuery.data?.players,
@@ -110,6 +135,13 @@ export function useLeagueSummaries(leagueId: string | null) {
     summaries,
     picks,
     picksUnavailable: pickValuesQuery.isError,
+    snaps,
+    /** Dates the snap data so the UI can say what "recent" means. */
+    snapsMeta: snapsQuery.data
+      ? { season: snapsQuery.data.season, throughWeek: snapsQuery.data.throughWeek }
+      : undefined,
+    // Snap data deliberately absent: it enriches rows rather than gating them,
+    // so the league loads and renders whether or not it arrives.
     isLoading: leagueQuery.isLoading || valuesQuery.isLoading,
     error: leagueQuery.error ?? valuesQuery.error,
   };

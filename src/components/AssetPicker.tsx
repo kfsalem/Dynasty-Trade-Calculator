@@ -1,6 +1,8 @@
 import type { DraftPick, League, Player, PlayerValue } from '../types';
 import { POSITION_STYLES, formatInjury, formatValue } from '../lib/format';
 import { valuePlayers } from '../engine/rosterValue';
+import type { SnapShare } from '../engine/snapShare';
+import { SnapShareCell } from './SnapShareCell';
 
 interface Props {
   league: League;
@@ -16,6 +18,8 @@ interface Props {
   onTogglePlayer: (id: string) => void;
   onTogglePick: (id: string) => void;
   outgoingValue: number;
+  /** Snap shares by Sleeper id. Undefined until the static file loads. */
+  snaps?: Map<string, SnapShare>;
 }
 
 /**
@@ -54,6 +58,7 @@ export function AssetPicker({
   onTogglePlayer,
   onTogglePick,
   outgoingValue,
+  snaps,
 }: Props) {
   const roster = league.rosters.find((r) => r.rosterId === rosterId);
   const entries = roster ? valuePlayers(roster.playerIds, players, values) : [];
@@ -89,6 +94,9 @@ export function AssetPicker({
 
       {/* Widths mirror ValuePair so the headings sit above their columns. */}
       <div className="flex justify-end gap-2 border-b border-gray-100 px-2 py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide">
+        <span className="w-14 text-right text-gray-400" title="Offensive snap share this season">
+          Snaps
+        </span>
         <span className="w-12 text-right text-gray-400">Market</span>
         <span className="w-12 text-right text-primary-500">Yours</span>
       </div>
@@ -111,6 +119,8 @@ export function AssetPicker({
                   className="h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                 />
                 <span className="min-w-0 flex-1 truncate">{pick.label}</span>
+                {/* A pick has no snaps; hold the column so the grid lines up. */}
+                <span className="w-14 shrink-0" aria-hidden="true" />
                 <ValuePair market={pick.marketValue} league={pick.value} />
               </label>
             ))}
@@ -146,6 +156,7 @@ export function AssetPicker({
                   </span>
                 )}
               </span>
+              <SnapShareCell share={snaps?.get(entry.player.id)} />
               {entry.valued ? (
                 <ValuePair
                   market={values.get(entry.player.id)?.marketValue ?? entry.value}

@@ -70,6 +70,8 @@ const GATE: MatchGate = {
 interface Reduced {
   file: DatasetMeta & { players: Record<string, unknown> };
   stats: MatchStats;
+  /** Anything the reduction wants said in the build log. */
+  notes?: string[];
 }
 
 interface Dataset {
@@ -220,7 +222,7 @@ async function main(): Promise<void> {
         dataset.fileFor,
       );
       const csv = await fetchText(url);
-      const { file, stats } = dataset.reduce(csv, crosswalk, {
+      const { file, stats, notes } = dataset.reduce(csv, crosswalk, {
         season,
         source: url,
         generatedAt,
@@ -231,6 +233,7 @@ async function main(): Promise<void> {
 
       const through = file.throughWeek === null ? 'snapshot' : `through week ${file.throughWeek}`;
       console.log(`  ${dataset.name}  ${file.season} season, ${through}`);
+      for (const note of notes ?? []) console.warn(`    ${note}`);
       reportMatches(stats, GATE);
 
       // After the report, so a failing build still shows the evidence.
