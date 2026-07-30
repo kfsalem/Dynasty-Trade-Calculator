@@ -27,6 +27,11 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
+      # Refresh the nflverse data before building. nflverse publishes as GitHub
+      # release assets, which send no CORS header and run to 53 MB, so the app
+      # cannot fetch any of this itself. A failed fetch here falls back to the
+      # copy committed under public/data and only warns; schema drift fails.
+      - run: npm run ingest
       - run: npm run build
       - uses: actions/configure-pages@v5
         # Pages must already be enabled with "Source: GitHub Actions" under

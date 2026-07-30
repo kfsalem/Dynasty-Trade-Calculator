@@ -5,8 +5,7 @@
  * names contain commas), which is a few dozen lines to handle correctly and
  * not worth a dependency.
  */
-export function parseCsv(text: string): Record<string, string>[] {
-  const rows: string[][] = [];
+function* iterRawRows(text: string): Generator<string[]> {
   let row: string[] = [];
   let field = '';
   let inQuotes = false;
@@ -36,7 +35,7 @@ export function parseCsv(text: string): Record<string, string>[] {
       field = '';
     } else if (char === '\n') {
       row.push(field);
-      rows.push(row);
+      yield row;
       row = [];
       field = '';
     } else if (char !== '\r') {
@@ -47,20 +46,37 @@ export function parseCsv(text: string): Record<string, string>[] {
   // Trailing field/row when the file does not end in a newline.
   if (field !== '' || row.length > 0) {
     row.push(field);
-    rows.push(row);
+    yield row;
   }
+}
 
-  const [header, ...body] = rows;
-  if (!header) return [];
+/**
+ * Same parse as `parseCsv`, one row at a time.
+ *
+ * The build-time ingest reads a 53 MB nflverse depth-chart file and keeps only
+ * the newest snapshot inside it. Materializing all ~385,000 rows as objects
+ * first costs well over a gigabyte for data that is discarded a line later, so
+ * anything reading a release-sized file should iterate instead.
+ */
+export function* iterCsvRows(text: string): Generator<Record<string, string>> {
+  const rows = iterRawRows(text);
 
-  return body
+  const first = rows.next();
+  if (first.done) return;
+  const header = first.value;
+
+  for (const cells of rows) {
     // Skip blank trailing lines without discarding legitimate single-column rows.
-    .filter((cells) => cells.some((cell) => cell !== ''))
-    .map((cells) => {
-      const record: Record<string, string> = {};
-      header.forEach((key, i) => {
-        record[key] = cells[i] ?? '';
-      });
-      return record;
+    if (!cells.some((cell) => cell !== '')) continue;
+
+    const record: Record<string, string> = {};
+    header.forEach((key, i) => {
+      record[key] = cells[i] ?? '';
     });
+    yield record;
+  }
+}
+
+export function parseCsv(text: string): Record<string, string>[] {
+  return [...iterCsvRows(text)];
 }
