@@ -66,7 +66,7 @@ describe('reduceDepthCharts', () => {
     );
 
     expect(file.players['13287']).toEqual({ team: 'ND', pos: 'RB', rank: 1 });
-    expect(stats.unmatched).toBe(0);
+    expect(stats.unmatched).toEqual([]);
   });
 
   it('ranks receivers by depth, not by the alignment slot they are listed under', () => {
@@ -84,7 +84,7 @@ describe('reduceDepthCharts', () => {
   });
 
   it('keeps the better spot when a player is listed at two positions', () => {
-    const { file } = reduce(
+    const { file, stats } = reduce(
       csv(
         `${NEW},KC,Travis Kelce,15847,00-0030506,3WR 1TE,WR,8,4`,
         `${NEW},KC,Travis Kelce,15847,00-0030506,3WR 1TE,TE,10,1`,
@@ -92,6 +92,23 @@ describe('reduceDepthCharts', () => {
     );
 
     expect(file.players['1466']).toEqual({ team: 'KC', pos: 'TE', rank: 1 });
+    // One player, counted once. Pittsburgh carried a back at RB4 and WR7 in
+    // 2026; tallying listings rather than players would put him in the gate's
+    // denominator twice, under two positions.
+    expect(stats.all.total).toEqual({ matched: 1, unmatched: 0 });
+    expect(stats.all.byPosition.WR).toBeUndefined();
+  });
+
+  it('counts a listing with no usable id as unmatched, not as absent', () => {
+    const { file, stats } = reduce(
+      csv(
+        `${NEW},KC,Patrick Mahomes,3139477,00-0033873,3WR 1TE,QB,9,1`,
+        `${NEW},KC,No Id At All,NA,NA,3WR 1TE,WR,8,1`,
+      ),
+    );
+
+    expect(Object.keys(file.players)).toEqual(['4034']);
+    expect(stats.relevant.byPosition.WR).toEqual({ matched: 0, unmatched: 1 });
   });
 
   it('drops linemen, defenders and specialists', () => {

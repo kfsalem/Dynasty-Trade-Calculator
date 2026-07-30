@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { matchRate, newMatchStats, parseCrosswalk, recordMatch } from './crosswalk';
+import {
+  describeUnmatched,
+  matchRate,
+  newMatchStats,
+  observe,
+  parseCrosswalk,
+  recordMatch,
+  tallyCandidates,
+  type Candidate,
+} from './crosswalk';
 
 const HEADER = 'mfl_id,sleeper_id,gsis_id,pfr_id,espn_id,name';
 
@@ -64,19 +73,88 @@ describe('parseCrosswalk', () => {
 });
 
 describe('match accounting', () => {
+  const player = (over: Partial<Parameters<typeof recordMatch>[1]>) => ({
+    position: 'WR',
+    sleeperId: undefined,
+    name: 'Someone',
+    relevant: true,
+    note: 'WR1',
+    ...over,
+  });
+
   it('tracks matched and unmatched per position', () => {
     const stats = newMatchStats();
-    recordMatch(stats, 'WR', '7564', "Ja'Marr Chase");
-    recordMatch(stats, 'WR', undefined, 'Camp Body');
-    recordMatch(stats, 'QB', '4034', 'Patrick Mahomes');
+    recordMatch(stats, player({ position: 'WR', sleeperId: '7564', name: "Ja'Marr Chase" }));
+    recordMatch(stats, player({ position: 'WR', name: 'Camp Body' }));
+    recordMatch(stats, player({ position: 'QB', sleeperId: '4034', name: 'Patrick Mahomes' }));
 
-    expect(matchRate(stats)).toBeCloseTo(2 / 3);
-    expect(matchRate(stats.byPosition.WR)).toBe(0.5);
-    expect(matchRate(stats.byPosition.QB)).toBe(1);
-    expect(stats.unmatchedNames).toEqual(['Camp Body (WR)']);
+    expect(matchRate(stats.all.total)).toBeCloseTo(2 / 3);
+    expect(matchRate(stats.all.byPosition.WR)).toBe(0.5);
+    expect(matchRate(stats.all.byPosition.QB)).toBe(1);
+    expect(stats.unmatched.map((p) => p.name)).toEqual(['Camp Body']);
+  });
+
+  it('counts only players with a role toward the relevant tally', () => {
+    // The whole point of the split: a camp body who does not resolve must not
+    // drag down the number the build gate reads.
+    const stats = newMatchStats();
+    recordMatch(stats, player({ sleeperId: '7564', relevant: true }));
+    recordMatch(stats, player({ name: 'Camp Body', relevant: false, note: 'WR11' }));
+
+    expect(matchRate(stats.all.total)).toBe(0.5);
+    expect(matchRate(stats.relevant.total)).toBe(1);
+    expect(stats.relevant.byPosition.WR).toEqual({ matched: 1, unmatched: 0 });
+  });
+
+  it('records an unmatched player once, with the evidence that he mattered', () => {
+    const stats = newMatchStats();
+    recordMatch(stats, player({ name: 'Cody White', note: 'peak 73% snaps' }));
+
+    expect(stats.unmatched).toEqual([
+      { name: 'Cody White', position: 'WR', note: 'peak 73% snaps', relevant: true },
+    ]);
+  });
+
+  it('renders an unmatched player one way, for the log and the exception alike', () => {
+    expect(
+      describeUnmatched({
+        name: 'Cody White',
+        position: 'WR',
+        note: 'peak 73% snaps',
+        relevant: true,
+      }),
+    ).toBe('Cody White (WR, peak 73% snaps)');
   });
 
   it('reports zero rather than dividing by zero on an empty position', () => {
     expect(matchRate({ matched: 0, unmatched: 0 })).toBe(0);
+  });
+});
+
+describe('deferred candidates', () => {
+  it('keeps the best week, whatever order the rows arrive in', () => {
+    // Relevance has to survive row order: a starter eased in on 8% of snaps in
+    // week 1 must not be written off before week 9 is read.
+    const candidates = new Map<string, Candidate>();
+    const player = { name: 'Someone', position: 'TE', sleeperId: undefined };
+
+    observe(candidates, 'k', player, 0.81);
+    observe(candidates, 'k', player, 0.08);
+
+    expect(candidates.get('k')?.peak).toBe(0.81);
+  });
+
+  it('tallies each candidate once, against the relevance bar', () => {
+    const candidates = new Map<string, Candidate>();
+    observe(candidates, 'a', { name: 'Starter', position: 'WR', sleeperId: '1' }, 0.9);
+    observe(candidates, 'b', { name: 'Fringe', position: 'WR', sleeperId: undefined }, 0.05);
+
+    const stats = tallyCandidates(candidates.values(), 0.25, (peak) => `peak ${peak}`);
+
+    expect(stats.all.total).toEqual({ matched: 1, unmatched: 1 });
+    expect(stats.relevant.total).toEqual({ matched: 1, unmatched: 0 });
+    expect(stats.unmatched).toEqual([
+      { name: 'Fringe', position: 'WR', note: 'peak 0.05', relevant: false },
+    ]);
   });
 });

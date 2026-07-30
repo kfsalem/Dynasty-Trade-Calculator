@@ -74,44 +74,144 @@ export async function loadCrosswalk(): Promise<Crosswalk> {
 }
 
 /**
- * Per-position match accounting.
+ * Per-position match accounting, split by whether the player has a real role.
  *
  * A silent drop in match rate is how this rots: nflverse renames an id column or
  * DynastyProcess stops publishing a position, and the app quietly loses activity
  * data for a third of receivers while every build stays green.
+ *
+ * The split exists because the raw rate is close to meaningless as a signal. In
+ * an offseason 90-man depth chart the misses are almost entirely camp bodies —
+ * matching runs at 99% for the top of a depth chart and 35% at rank 11, giving
+ * an overall 83% that no useful threshold can be set against. Measured against
+ * players who actually have a role, the same data is 98%, and a threshold there
+ * means something.
  */
-export interface MatchStats {
+export interface MatchCounts {
   matched: number;
   unmatched: number;
-  byPosition: Record<string, { matched: number; unmatched: number }>;
-  /** Names of unmatched players, so they can be eyeballed rather than guessed at. */
-  unmatchedNames: string[];
 }
 
+export interface Tally {
+  total: MatchCounts;
+  byPosition: Record<string, MatchCounts>;
+}
+
+export interface UnmatchedPlayer {
+  name: string;
+  position: string;
+  /** What makes this one matter, e.g. "WR2" or "peak 73% snaps". */
+  note: string;
+  relevant: boolean;
+}
+
+export interface MatchStats {
+  /** Everyone the source lists at a skill position. */
+  all: Tally;
+  /** Only players with a role worth valuing. What the build gate reads. */
+  relevant: Tally;
+  unmatched: UnmatchedPlayer[];
+}
+
+const newTally = (): Tally => ({ total: { matched: 0, unmatched: 0 }, byPosition: {} });
+
 export function newMatchStats(): MatchStats {
-  return { matched: 0, unmatched: 0, byPosition: {}, unmatchedNames: [] };
+  return { all: newTally(), relevant: newTally(), unmatched: [] };
+}
+
+function tally(into: Tally, position: string, matched: boolean): void {
+  const bucket = (into.byPosition[position] ??= { matched: 0, unmatched: 0 });
+  if (matched) {
+    into.total.matched++;
+    bucket.matched++;
+  } else {
+    into.total.unmatched++;
+    bucket.unmatched++;
+  }
 }
 
 export function recordMatch(
   stats: MatchStats,
-  position: string,
-  sleeperId: string | undefined,
-  name: string,
+  player: {
+    position: string;
+    sleeperId: string | undefined;
+    name: string;
+    /** Whether this player's data would reach a valuation at all. */
+    relevant: boolean;
+    note: string;
+  },
 ): void {
-  const bucket = (stats.byPosition[position] ??= { matched: 0, unmatched: 0 });
+  const matched = Boolean(player.sleeperId);
 
-  if (sleeperId) {
-    stats.matched++;
-    bucket.matched++;
-    return;
+  tally(stats.all, player.position, matched);
+  if (player.relevant) tally(stats.relevant, player.position, matched);
+
+  if (!matched) {
+    stats.unmatched.push({
+      name: player.name,
+      position: player.position,
+      note: player.note,
+      relevant: player.relevant,
+    });
   }
-
-  stats.unmatched++;
-  bucket.unmatched++;
-  stats.unmatchedNames.push(`${name} (${position})`);
 }
 
-export function matchRate(stats: { matched: number; unmatched: number }): number {
-  const total = stats.matched + stats.unmatched;
-  return total === 0 ? 0 : stats.matched / total;
+export function matchRate(counts: MatchCounts): number {
+  const total = counts.matched + counts.unmatched;
+  return total === 0 ? 0 : counts.matched / total;
+}
+
+export const sampleSize = (counts: MatchCounts): number => counts.matched + counts.unmatched;
+
+/** One rendering of an unmatched player, so the log and the exception agree. */
+export const describeUnmatched = (player: UnmatchedPlayer): string =>
+  `${player.name} (${player.position}, ${player.note})`;
+
+/**
+ * A player seen in a weekly source, held until his best week is known.
+ *
+ * Whether a player has a role depends on his peak week, and the last row read
+ * can still change it — a starter eased in on 8% of snaps in week 1 must not be
+ * written off before week 9 is read. So the weekly reducers accumulate here and
+ * tally once at the end.
+ */
+export interface Candidate {
+  name: string;
+  position: string;
+  sleeperId: string | undefined;
+  peak: number;
+}
+
+export function observe(
+  candidates: Map<string, Candidate>,
+  key: string,
+  player: Omit<Candidate, 'peak'>,
+  peak: number,
+): void {
+  const candidate = candidates.get(key);
+  if (candidate) {
+    candidate.peak = Math.max(candidate.peak, peak);
+    return;
+  }
+  candidates.set(key, { ...player, peak });
+}
+
+export function tallyCandidates(
+  candidates: Iterable<Candidate>,
+  relevantAt: number,
+  note: (peak: number) => string,
+): MatchStats {
+  const stats = newMatchStats();
+
+  for (const candidate of candidates) {
+    recordMatch(stats, {
+      position: candidate.position,
+      sleeperId: candidate.sleeperId,
+      name: candidate.name,
+      relevant: candidate.peak >= relevantAt,
+      note: note(candidate.peak),
+    });
+  }
+
+  return stats;
 }

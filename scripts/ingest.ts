@@ -24,7 +24,15 @@ import {
 } from '../src/data/types';
 import { requireRows } from './ingest/columns';
 import { IngestError } from './ingest/errors';
-import { loadCrosswalk, matchRate, type Crosswalk, type MatchStats } from './ingest/crosswalk';
+import {
+  describeUnmatched,
+  loadCrosswalk,
+  matchRate,
+  sampleSize,
+  type Crosswalk,
+  type MatchStats,
+} from './ingest/crosswalk';
+import { requireMatchRates, type MatchGate } from './ingest/matchGate';
 import { fetchText, resolveLatestSeason } from './ingest/sources';
 import { reduceDepthCharts } from './ingest/depthCharts';
 import { reduceSnapCounts } from './ingest/snapCounts';
@@ -35,8 +43,29 @@ const OUT_DIR = fileURLToPath(new URL('../public/data/', import.meta.url));
 /** Everything in public/data ships to every visitor. Keep it honest. */
 const BUDGET_BYTES = 1_000_000;
 
-/** How many unmatched names to print before truncating. */
-const UNMATCHED_SHOWN = 15;
+/**
+ * Every player with a real role who did not resolve is named in full. Below the
+ * relevance line the list is a sample, because an offseason chart carries 150
+ * camp bodies and printing all of them buries the eight that matter.
+ */
+const IRRELEVANT_UNMATCHED_SHOWN = 10;
+
+/**
+ * The build gate. Measured against players with a role, never the raw rate.
+ *
+ * 90% sits well under the ~98% these datasets actually run at, which is
+ * deliberate: the gate is here to catch an id format changing upstream, not to
+ * police the handful of practice-squad call-ups DynastyProcess has not indexed
+ * yet. QB/RB/WR/TE only — see MatchGate.positions for why FB is excluded.
+ */
+const GATE: MatchGate = {
+  positions: ['QB', 'RB', 'WR', 'TE'],
+  minRate: 0.9,
+  minSample: 20,
+  // These datasets clear the bar with 400-500 players each; 200 is a collapse,
+  // not a quiet week.
+  minRelevantTotal: 200,
+};
 
 interface Reduced {
   file: DatasetMeta & { players: Record<string, unknown> };
@@ -108,23 +137,51 @@ async function readExistingMeta(path: string): Promise<DatasetMeta & { players: 
   };
 }
 
-function reportMatches(stats: MatchStats): void {
-  const total = stats.matched + stats.unmatched;
+function reportMatches(stats: MatchStats, gate: MatchGate): void {
   console.log(
-    `    ${total} players -> ${stats.matched} matched to Sleeper (${pct(matchRate(stats))})`,
+    `    all players    ${stats.all.total.matched}/${sampleSize(stats.all.total)} ` +
+      `matched to Sleeper (${pct(matchRate(stats.all.total))})`,
   );
 
-  const byPosition = Object.entries(stats.byPosition)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([position, counts]) => `${position} ${pct(matchRate(counts))}`)
-    .join('  ');
-  if (byPosition) console.log(`    ${byPosition}`);
+  const relevantSample = sampleSize(stats.relevant.total);
+  if (relevantSample === 0) {
+    // Distinguished from a 0% match rate on purpose: nothing was measured, and
+    // printing "0/0 (0.0%)" reads as a total collapse instead.
+    console.log('    with a role    no players cleared the relevance bar');
+  } else {
+    // Every gated position, so one that vanished shows as "absent" rather than
+    // simply not appearing in the line.
+    const positions = [...new Set([...gate.positions, ...Object.keys(stats.relevant.byPosition)])]
+      .sort()
+      .map((position) => {
+        const counts = stats.relevant.byPosition[position];
+        return counts ? `${position} ${pct(matchRate(counts))}` : `${position} absent`;
+      })
+      .join('  ');
 
-  if (stats.unmatchedNames.length > 0) {
-    const shown = stats.unmatchedNames.slice(0, UNMATCHED_SHOWN);
-    const rest = stats.unmatchedNames.length - shown.length;
     console.log(
-      `    unmatched: ${shown.join(', ')}${rest > 0 ? `, and ${rest} more` : ''}`,
+      `    with a role    ${stats.relevant.total.matched}/${relevantSample} ` +
+        `(${pct(matchRate(stats.relevant.total))})   ${positions}`,
+    );
+  }
+
+  // The gate reads the line above; this is the evidence behind it.
+  const relevant = stats.unmatched.filter((player) => player.relevant);
+  if (relevant.length > 0) {
+    console.log(`    ${relevant.length} unmatched despite having a role:`);
+    for (const player of relevant) {
+      console.log(`      ${describeUnmatched(player)}`);
+    }
+  }
+
+  const rest = stats.unmatched.filter((player) => !player.relevant);
+  if (rest.length > 0) {
+    const shown = rest.slice(0, IRRELEVANT_UNMATCHED_SHOWN);
+    const hidden = rest.length - shown.length;
+    console.log(
+      `    ${rest.length} unmatched below the relevance line: ` +
+        `${shown.map(describeUnmatched).join(', ')}` +
+        `${hidden > 0 ? `, and ${hidden} more` : ''}`,
     );
   }
 }
@@ -172,11 +229,15 @@ async function main(): Promise<void> {
       const players = Object.keys(file.players).length;
       requireRows(dataset.name, players, dataset.minPlayers);
 
-      await writeFile(path, `${JSON.stringify(file)}\n`);
-
       const through = file.throughWeek === null ? 'snapshot' : `through week ${file.throughWeek}`;
       console.log(`  ${dataset.name}  ${file.season} season, ${through}`);
-      reportMatches(stats);
+      reportMatches(stats, GATE);
+
+      // After the report, so a failing build still shows the evidence.
+      requireMatchRates(dataset.name, stats, GATE);
+
+      await writeFile(path, `${JSON.stringify(file)}\n`);
+
       console.log(`    ${DATA_FILES[dataset.name]}  ${kb((await fileSize(path)) ?? 0)}`);
 
       datasets[dataset.name] = {

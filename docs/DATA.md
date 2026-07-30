@@ -71,8 +71,8 @@ instead: a chart is a snapshot, not a season.
 
 ## Failure policy
 
-The two failure modes are deliberately different, because confusing them is how
-a data pipeline rots quietly.
+Three failure modes, of which exactly one is survivable. Confusing them is how a
+data pipeline rots quietly.
 
 **A network failure must not break a deploy.** nflverse being down does not make
 the committed copy of `public/data` wrong, only older. The ingest warns, keeps
@@ -86,7 +86,86 @@ naming the dataset and the columns involved. This matters more than it sounds:
 a source that parses into an empty result looks exactly like an offseason, and
 nobody would notice for weeks.
 
-Both paths are covered in `scripts/ingest/*.test.ts`.
+**A collapse in match rate must break the build.** See below — it is the one
+failure with no exception to catch.
+
+All three are covered in `scripts/ingest/*.test.ts`.
+
+## The match gate
+
+If an id format changes upstream, nothing throws. Every file arrives, every
+column is present, every reduction is the right size — and the app simply stops
+knowing anything about the players that stopped resolving. There is no exception
+to notice, which is why it needs a number.
+
+**The number is measured against players with a role, never the raw rate.** The
+raw rate is close to useless as a signal, because it is dominated by people
+nobody is trading. Match rate by depth-chart rank, on the 2026 preseason chart:
+
+| depth rank | players | matched |
+|---|---|---|
+| 1 | 143 | 99.3% |
+| 2 | 132 | 99.2% |
+| 3 | 128 | 95.3% |
+| 5 | 96 | 78.1% |
+| 11 | 29 | 34.5% |
+
+The same file is **83% overall but 98% at ranks 1–3**. A threshold set against
+83% would have to sit near 70% to survive an offseason, which is low enough to
+miss a real break. Set against players with a role, a 90% floor has genuine
+headroom and still catches one.
+
+Snap counts behave the same way: 91.4% for players who never cleared 10% of
+snaps, 99.0% for those above 50%.
+
+"Has a role" is per dataset, and deliberately a low bar — it is not a
+fantasy-relevance filter, just the line below which a missing id cannot change
+any number the app produces:
+
+| dataset | has a role |
+|---|---|
+| `snaps` | peak single-week snap share ≥ 25% |
+| `opportunity` | peak single-week targets + carries + pass attempts ≥ 3 |
+| `depth` | depth rank ≤ 3 |
+
+Pass attempts count, and have to. A pocket quarterback takes almost no targets
+and carries, so a targets-plus-carries bar left eight real starters outside the
+denominator in 2025 — the worst of them with a 35-attempt, 17-point game.
+`fantasy_points_ppr` ships in that file and a quarterback's points come from
+passing, so ignoring attempts would contradict the premise that below this line
+a missing id changes nothing.
+
+The gate covers QB/RB/WR/TE at a 90% floor, and skips any position with fewer
+than 20 players in the sample. FB is outside it on purpose: there are about
+nineteen in the league, so one miss is five percent and the gate would be
+measuring noise.
+
+Three things keep the gate from failing open, which matters more here than
+usual — a check that silently stops checking is worse than no check:
+
+- **A player whose id cannot be resolved counts as a miss, not as absent.** If
+  an unusable id were skipped before accounting, it would leave the denominator
+  too, and the rate would read 100% while coverage collapsed.
+- **A gated position that vanishes from the source fails.** A renamed position
+  code drops every player at it, and an empty bucket must not be read as
+  nothing to check.
+- **A collapse in the relevance signal itself fails.** Relevance is derived from
+  a source column, so if `pos_rank` became a team-wide ordering, nearly nobody
+  would qualify, every position would fall under the sample floor, and the gate
+  would go quiet exactly when it was needed.
+
+Rates as of 2026-07-30, against that 90% floor:
+
+| dataset | raw | with a role | weakest gated position |
+|---|---|---|---|
+| `snaps` | 97.0% | **98.4%** (504/512) | TE 95.9% |
+| `opportunity` | 98.0% | **99.6%** (489/491) | TE 99.0% |
+| `depth` | 83.0% | **98.0%** (395/403) | QB 95.8% |
+
+Every unmatched player with a role is named in full in the build log, with the
+evidence that they mattered — `Cody White (WR, peak 73% snaps)`. Players below
+the line are counted and sampled rather than listed, because an offseason chart
+carries 150 of them and printing all of them buries the eight that matter.
 
 ## Refresh
 
@@ -107,12 +186,10 @@ the offseason.
 
 ## Known limits
 
-- **Match rates are reported, not enforced.** The run prints per-position match
-  rates and names the unmatched. A threshold that fails the build is R2.
-- Match rates as of 2026-07-30: snaps 97.0%, opportunity 98.0%, depth 83.0%.
-  Depth is lower because an offseason 90-man chart is full of camp bodies who
-  are in no dynasty player database. A threshold has to survive that, which is
-  the main reason it is not set yet.
+- The unmatched who do have a role are real, and mostly the same story: late
+  practice-squad call-ups and camp-arm QB3s that DynastyProcess has not indexed.
+  They are named in the build log every run rather than hidden, so a change in
+  that population is visible.
 - Only offensive skill positions (QB/RB/FB/WR/TE) are ingested. K and DEF have
   no published values to attach activity to — see R10.
 - The reduction keeps every regular-season week rather than pre-aggregating.
