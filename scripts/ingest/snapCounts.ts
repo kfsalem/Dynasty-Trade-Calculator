@@ -23,6 +23,22 @@ const REQUIRED = [
 const SKILL = new Set<string>(SKILL_POSITIONS);
 
 /**
+ * Peak single-week snap share that counts as having a role.
+ *
+ * A quarter of a team's offensive snaps in at least one game is roughly the
+ * line between a rotational contributor and a body. Below it, whether we
+ * resolved the player's id has no bearing on any valuation.
+ */
+const RELEVANT_SNAP_PCT = 0.25;
+
+interface Candidate {
+  name: string;
+  position: string;
+  sleeperId: string | undefined;
+  peakPct: number;
+}
+
+/**
  * Reduce nflverse snap counts to one entry per Sleeper-keyed skill player.
  *
  * Drops the ~85% of rows belonging to linemen and defenders, and keeps every
@@ -36,8 +52,9 @@ export function reduceSnapCounts(
   meta: { season: number; source: string; generatedAt: string },
 ): { file: SnapCountsFile; stats: MatchStats } {
   const players: SnapCountsFile['players'] = {};
-  const stats = newMatchStats();
-  const seen = new Set<string>();
+  // Match accounting is deferred: whether a player has a role depends on his
+  // best week, which is not known until every row has been read.
+  const candidates = new Map<string, Candidate>();
   /** Week the current `team` came from, so a mid-season trade lands the right way. */
   const teamAsOf = new Map<string, number>();
   let throughWeek = 0;
@@ -57,17 +74,20 @@ export function reduceSnapCounts(
 
     const sleeperId = crosswalk.byPfr.get(pfrId);
 
-    // Count each player once, not once per week he appears.
-    if (!seen.has(pfrId)) {
-      seen.add(pfrId);
-      recordMatch(stats, row.position, sleeperId, row.player);
-    }
-    if (!sleeperId) continue;
-
     const week = num(row.week);
     const snaps = num(row.offense_snaps);
     const pct = num(row.offense_pct);
     if (week === null || snaps === null || pct === null) continue;
+
+    // Once per player, not once per week he appears.
+    let candidate = candidates.get(pfrId);
+    if (!candidate) {
+      candidate = { name: row.player, position: row.position, sleeperId, peakPct: 0 };
+      candidates.set(pfrId, candidate);
+    }
+    candidate.peakPct = Math.max(candidate.peakPct, pct);
+
+    if (!sleeperId) continue;
 
     throughWeek = Math.max(throughWeek, week);
 
@@ -81,6 +101,17 @@ export function reduceSnapCounts(
   }
 
   if (!checked) requireColumns('snap_counts', undefined, REQUIRED);
+
+  const stats = newMatchStats();
+  for (const candidate of candidates.values()) {
+    recordMatch(stats, {
+      position: candidate.position,
+      sleeperId: candidate.sleeperId,
+      name: candidate.name,
+      relevant: candidate.peakPct >= RELEVANT_SNAP_PCT,
+      note: `peak ${Math.round(candidate.peakPct * 100)}% snaps`,
+    });
+  }
 
   // Rows arrive game by game, which is close to week order but not guaranteed.
   for (const entry of Object.values(players)) {

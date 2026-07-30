@@ -16,6 +16,16 @@ const REQUIRED = [
 
 const SKILL = new Set<string>(SKILL_POSITIONS);
 
+/**
+ * Depth rank at or above which a chart entry counts as having a role.
+ *
+ * Three covers the QB1-3, the top of a backfield, the slot receiver and the
+ * second tight end. Below it a chart is camp bodies: matching runs at 99% for
+ * rank 1 and 35% by rank 11, so measuring the whole chart says nothing about
+ * whether the crosswalk is healthy.
+ */
+const RELEVANT_DEPTH_RANK = 3;
+
 interface Snapshot {
   dt: string;
   rows: {
@@ -98,7 +108,14 @@ export function reduceDepthCharts(
       const sleeperId =
         (row.gsis ? crosswalk.byGsis.get(row.gsis) : undefined) ??
         (row.espn ? crosswalk.byEspn.get(row.espn) : undefined);
-      recordMatch(stats, row.pos, sleeperId, row.name);
+
+      recordMatch(stats, {
+        position: row.pos,
+        sleeperId,
+        name: row.name,
+        relevant: row.rank <= RELEVANT_DEPTH_RANK,
+        note: `${row.pos}${row.rank}`,
+      });
       if (!sleeperId) continue;
 
       // A player listed at two positions keeps the higher spot on the chart.

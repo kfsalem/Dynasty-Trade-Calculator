@@ -66,7 +66,7 @@ describe('reduceDepthCharts', () => {
     );
 
     expect(file.players['13287']).toEqual({ team: 'ND', pos: 'RB', rank: 1 });
-    expect(stats.unmatched).toBe(0);
+    expect(stats.unmatched).toEqual([]);
   });
 
   it('ranks receivers by depth, not by the alignment slot they are listed under', () => {

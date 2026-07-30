@@ -28,6 +28,22 @@ const REQUIRED = [
 const SKILL = new Set<string>(SKILL_POSITIONS);
 
 /**
+ * Peak single-week targets plus carries that counts as having a role.
+ *
+ * Three is low on purpose. This is not a fantasy-relevance bar, it is the line
+ * below which whether we resolved a player's id cannot affect any number the
+ * app produces.
+ */
+const RELEVANT_OPPORTUNITIES = 3;
+
+interface Candidate {
+  name: string;
+  position: string;
+  sleeperId: string | undefined;
+  peak: number;
+}
+
+/**
  * Reduce nflverse weekly player stats to the opportunity columns.
  *
  * Of the 130-odd columns in the source, thirteen matter here. Target share, air
@@ -45,8 +61,9 @@ export function reduceWeeklyStats(
   meta: { season: number; source: string; generatedAt: string },
 ): { file: OpportunityFile; stats: MatchStats } {
   const players: OpportunityFile['players'] = {};
-  const stats = newMatchStats();
-  const seen = new Set<string>();
+  // Deferred for the same reason as the snap counts: whether a player has a
+  // role depends on his best week, which the last row can still change.
+  const candidates = new Map<string, Candidate>();
   const teamAsOf = new Map<string, number>();
   let throughWeek = 0;
   let checked = false;
@@ -65,24 +82,36 @@ export function reduceWeeklyStats(
 
     const sleeperId = crosswalk.byGsis.get(gsisId);
 
-    if (!seen.has(gsisId)) {
-      seen.add(gsisId);
-      recordMatch(stats, row.position, sleeperId, row.player_display_name);
-    }
-    if (!sleeperId) continue;
-
     const week = num(row.week);
     if (week === null) continue;
+
+    const targets = num(row.targets) ?? 0;
+    const carries = num(row.carries) ?? 0;
+
+    let candidate = candidates.get(gsisId);
+    if (!candidate) {
+      candidate = {
+        name: row.player_display_name,
+        position: row.position,
+        sleeperId,
+        peak: 0,
+      };
+      candidates.set(gsisId, candidate);
+    }
+    candidate.peak = Math.max(candidate.peak, targets + carries);
+
+    if (!sleeperId) continue;
+
     throughWeek = Math.max(throughWeek, week);
 
     const entry = (players[sleeperId] ??= { pos: row.position, team: row.team, weeks: [] });
     entry.weeks.push([
       week,
-      num(row.targets) ?? 0,
+      targets,
       round(num(row.target_share), 4),
       round(num(row.air_yards_share), 4),
       round(num(row.wopr), 4),
-      num(row.carries) ?? 0,
+      carries,
       num(row.receptions) ?? 0,
       round(num(row.fantasy_points_ppr), 2) ?? 0,
     ] satisfies OpportunityWeek);
@@ -94,6 +123,17 @@ export function reduceWeeklyStats(
   }
 
   if (!checked) requireColumns('stats_player_week', undefined, REQUIRED);
+
+  const stats = newMatchStats();
+  for (const candidate of candidates.values()) {
+    recordMatch(stats, {
+      position: candidate.position,
+      sleeperId: candidate.sleeperId,
+      name: candidate.name,
+      relevant: candidate.peak >= RELEVANT_OPPORTUNITIES,
+      note: `peak ${candidate.peak} targets+carries`,
+    });
+  }
 
   for (const entry of Object.values(players)) {
     entry.weeks.sort((a, b) => a[0] - b[0]);

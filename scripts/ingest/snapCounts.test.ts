@@ -64,7 +64,7 @@ describe('reduceSnapCounts', () => {
 
     expect(Object.keys(file.players)).toEqual(['7564']);
     // Non-skill players are not counted as match failures either.
-    expect(stats.matched + stats.unmatched).toBe(1);
+    expect(stats.all.total).toEqual({ matched: 1, unmatched: 0 });
   });
 
   it('reports a player as unmatched once, not once per week', () => {
@@ -76,9 +76,38 @@ describe('reduceSnapCounts', () => {
     );
 
     expect(file.players).toEqual({});
-    expect(stats.unmatched).toBe(1);
-    expect(stats.unmatchedNames).toEqual(['Practice Squad (TE)']);
-    expect(stats.byPosition.TE).toEqual({ matched: 0, unmatched: 1 });
+    expect(stats.unmatched).toEqual([
+      { name: 'Practice Squad', position: 'TE', note: 'peak 12% snaps', relevant: false },
+    ]);
+    expect(stats.all.byPosition.TE).toEqual({ matched: 0, unmatched: 1 });
+  });
+
+  it('rates a player by his best week, not his first', () => {
+    // Relevance has to survive row order: a starter who was eased in on 8% of
+    // snaps in week 1 must not be written off before week 9 is read.
+    const { stats } = reduce(
+      csv(
+        '2025,1,REG,Practice Squad,UnknoPl00,TE,NYJ,4,0.08',
+        '2025,9,REG,Practice Squad,UnknoPl00,TE,NYJ,52,0.81',
+      ),
+    );
+
+    expect(stats.unmatched).toEqual([
+      { name: 'Practice Squad', position: 'TE', note: 'peak 81% snaps', relevant: true },
+    ]);
+    expect(stats.relevant.byPosition.TE).toEqual({ matched: 0, unmatched: 1 });
+  });
+
+  it('leaves a fringe player out of the tally the build gate reads', () => {
+    const { stats } = reduce(
+      csv(
+        "2025,1,REG,Ja'Marr Chase,ChasJa00,WR,CIN,45,0.87",
+        '2025,1,REG,Camp Body,UnknoPl00,WR,CIN,3,0.05',
+      ),
+    );
+
+    expect(stats.all.total).toEqual({ matched: 1, unmatched: 1 });
+    expect(stats.relevant.total).toEqual({ matched: 1, unmatched: 0 });
   });
 
   it('reports the team a traded player finished on, whatever order rows arrive in', () => {
