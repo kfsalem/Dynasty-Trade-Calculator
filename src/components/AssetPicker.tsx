@@ -4,9 +4,11 @@ import { valuePlayers } from '../engine/rosterValue';
 import type { SnapShare } from '../engine/snapShare';
 import type { Opportunity } from '../engine/opportunity';
 import type { PlayerRole } from '../engine/role';
+import type { ActivityAdjustment } from '../engine/activityFactor';
 import { SnapShareCell } from './SnapShareCell';
 import { UsageCell } from './UsageCell';
 import { RoleMarker } from './RoleMarker';
+import { ActivityMarker } from './ActivityMarker';
 
 interface Props {
   league: League;
@@ -28,6 +30,8 @@ interface Props {
   usage?: Map<string, Opportunity>;
   roles?: Map<string, PlayerRole>;
   chartSeason?: number | null;
+  /** What a changing role did to each value, keyed by Sleeper id. */
+  adjustments?: Map<string, ActivityAdjustment>;
 }
 
 /**
@@ -70,6 +74,7 @@ export function AssetPicker({
   usage,
   roles,
   chartSeason,
+  adjustments,
 }: Props) {
   const roster = league.rosters.find((r) => r.rosterId === rosterId);
   const entries = roster ? valuePlayers(roster.playerIds, players, values) : [];
@@ -186,6 +191,7 @@ export function AssetPicker({
                 chartSeason={chartSeason}
               />
               <UsageCell usage={usage?.get(entry.player.id)} />
+              <ActivityMarker adjustment={adjustments?.get(entry.player.id)} />
               {entry.valued ? (
                 <ValuePair
                   market={values.get(entry.player.id)?.marketValue ?? entry.value}

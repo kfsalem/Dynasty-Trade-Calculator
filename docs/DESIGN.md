@@ -234,6 +234,14 @@ All of this runs on **replacement-adjusted** values, not raw market ones — see
 Phase 4.5. A player is worth what he adds over the best player at his position
 who starts for nobody in this league.
 
+On top of that sits an **activity multiplier** (R6): a bounded, continuous
+factor from the player's *change* in snap and usage share, weighted by age and
+by how many recent games back it. The level of a player's role is already in his
+price, so only the movement counts, and only in the season being played — the
+factor is exactly 1.0 through the offseason and whenever the data is missing.
+`marketValue` is never touched, so trade fairness stays arguable in the terms the
+other manager will quote.
+
 Do **not** just sum player values. Compute:
 
 - **Starter value** — value in actual starting slots, honoring the league's real lineup (including SUPERFLEX and FLEX, read from Sleeper's `roster_positions`)

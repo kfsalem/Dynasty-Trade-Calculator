@@ -52,6 +52,7 @@ function App() {
     usage,
     roles,
     snapsMeta,
+    adjustments,
     isLoading,
     error,
   } = useLeagueSummaries(leagueId);
@@ -180,6 +181,7 @@ function App() {
                   usage={usage}
                   roles={roles}
                   snapsMeta={snapsMeta}
+                  adjustments={adjustments}
                 />
               )}
 
@@ -197,6 +199,7 @@ function App() {
                   usage={usage}
                   roles={roles}
                   chartSeason={snapsMeta?.chartSeason ?? null}
+                  adjustments={adjustments}
                 />
               )}
             </div>

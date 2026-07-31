@@ -3,10 +3,12 @@ import type { RosterSummary, ValuedPlayer } from '../engine/rosterValue';
 import type { SnapShare } from '../engine/snapShare';
 import type { Opportunity } from '../engine/opportunity';
 import type { PlayerRole } from '../engine/role';
+import type { ActivityAdjustment } from '../engine/activityFactor';
 import type { League } from '../types';
 import { SnapShareCell } from './SnapShareCell';
 import { UsageCell } from './UsageCell';
 import { RoleMarker } from './RoleMarker';
+import { ActivityMarker } from './ActivityMarker';
 import {
   POSITION_ORDER,
   POSITION_STYLES,
@@ -32,6 +34,8 @@ interface Props {
   roles?: Map<string, PlayerRole>;
   /** Season the published chart covers, for the role description. */
   chartSeason?: number | null;
+  /** What a changing role did to each value, keyed by Sleeper id. */
+  adjustments?: Map<string, ActivityAdjustment>;
 }
 
 function PlayerLine({
@@ -40,12 +44,14 @@ function PlayerLine({
   usage,
   roles,
   chartSeason,
+  adjustments,
 }: {
   entry: ValuedPlayer;
   snaps?: Map<string, SnapShare>;
   usage?: Map<string, Opportunity>;
   roles?: Map<string, PlayerRole>;
   chartSeason?: number | null;
+  adjustments?: Map<string, ActivityAdjustment>;
 }) {
   const role = roles?.get(entry.player.id);
   const style = POSITION_STYLES[entry.player.position];
@@ -79,6 +85,7 @@ function PlayerLine({
       <RoleMarker role={role} chartSeason={chartSeason ?? null} />
       <SnapShareCell share={snaps?.get(entry.player.id)} role={role} chartSeason={chartSeason} />
       <UsageCell usage={usage?.get(entry.player.id)} />
+      <ActivityMarker adjustment={adjustments?.get(entry.player.id)} />
       <span className="shrink-0 tabular-nums text-gray-500">
         {entry.valued ? formatValue(entry.value) : '~0'}
       </span>
@@ -96,6 +103,7 @@ export function TeamCard({
   usage,
   roles,
   chartSeason,
+  adjustments,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -215,6 +223,7 @@ export function TeamCard({
                         usage={usage}
                         roles={roles}
                         chartSeason={chartSeason}
+                        adjustments={adjustments}
                       />
                     ) : (
                       <span className="flex-1 italic text-gray-400">empty</span>
@@ -238,6 +247,7 @@ export function TeamCard({
                       usage={usage}
                       roles={roles}
                       chartSeason={chartSeason}
+                      adjustments={adjustments}
                     />
                   </li>
                 ))}

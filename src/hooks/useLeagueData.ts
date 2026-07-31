@@ -5,7 +5,7 @@ import { fetchFantasyCalcValues } from '../values/fantasycalc';
 import { fetchPickValues } from '../values/dynastyprocess';
 import type { RosterSummary } from '../engine/rosterValue';
 import { buildDraftPicks, tradeableSeasons } from '../engine/picks';
-import { valueLeague } from '../engine/replacement';
+import { valueLeague, type LeagueActivity } from '../engine/replacement';
 import { snapShares } from '../engine/snapShare';
 import { opportunities } from '../engine/opportunity';
 import { playerRoles } from '../engine/role';
@@ -96,6 +96,46 @@ export function useLeagueSummaries(leagueId: string | null) {
   const opportunityQuery = useOpportunity();
   const depthQuery = useDepthCharts();
 
+  const snaps = useMemo(
+    () => (snapsQuery.data ? snapShares(snapsQuery.data) : undefined),
+    [snapsQuery.data],
+  );
+
+  const usage = useMemo(
+    () => (opportunityQuery.data ? opportunities(opportunityQuery.data) : undefined),
+    [opportunityQuery.data],
+  );
+
+  /**
+   * Activity, but only the part of it that describes the season being played.
+   *
+   * The columns above show whatever the ingest last produced, because a snap
+   * share from last November is still worth reading in July. Valuation is
+   * stricter: by July the market has had months to price that November, so
+   * feeding it back in is the same information twice rather than a signal. A
+   * file whose season no longer matches is therefore passed as empty, every
+   * factor comes out exactly 1, and the model is what it was before activity
+   * existed.
+   *
+   * The two files are dated independently — the snap ingest can roll to a new
+   * season a week before the opportunity ingest does — so each is checked on
+   * its own rather than trusting one to speak for both.
+   */
+  const activity = useMemo<LeagueActivity | undefined>(() => {
+    const season = leagueQuery.data?.currentSeason;
+    if (!season) return undefined;
+
+    const played = Number(season);
+    const snapsLive = snapsQuery.data?.season === played;
+    const usageLive = opportunityQuery.data?.season === played;
+
+    return {
+      snaps: snapsLive && snaps ? snaps : new Map(),
+      usage: usageLive && usage ? usage : new Map(),
+      current: snapsLive || usageLive,
+    };
+  }, [leagueQuery.data, snapsQuery.data, opportunityQuery.data, snaps, usage]);
+
   /**
    * Market values feed one pass of lineups, which reveals how many of each
    * position the league actually starts. That sets replacement level, which
@@ -118,8 +158,9 @@ export function useLeagueSummaries(leagueId: string | null) {
       bundle.players,
       market,
       bundle.league.settings,
+      activity,
     );
-  }, [leagueQuery.data, valuesQuery.data]);
+  }, [leagueQuery.data, valuesQuery.data, activity]);
 
   const summaries = useMemo<RosterSummary[]>(
     () => [...(adjusted?.summaries ?? [])].sort((a, b) => b.starterValue - a.starterValue),
@@ -147,11 +188,6 @@ export function useLeagueSummaries(leagueId: string | null) {
     );
   }, [leagueQuery.data, pickValuesQuery.data, adjusted, summaries]);
 
-  const snaps = useMemo(
-    () => (snapsQuery.data ? snapShares(snapsQuery.data) : undefined),
-    [snapsQuery.data],
-  );
-
   const roles = useMemo(() => {
     const snapFile = snapsQuery.data;
     const depthFile = depthQuery.data;
@@ -167,11 +203,6 @@ export function useLeagueSummaries(leagueId: string | null) {
     });
   }, [snaps, snapsQuery.data, depthQuery.data]);
 
-  const usage = useMemo(
-    () => (opportunityQuery.data ? opportunities(opportunityQuery.data) : undefined),
-    [opportunityQuery.data],
-  );
-
   return {
     league: leagueQuery.data?.league,
     players: leagueQuery.data?.players,
@@ -183,6 +214,8 @@ export function useLeagueSummaries(leagueId: string | null) {
     snaps,
     usage,
     roles,
+    /** What activity did to each value, so a moved number can explain itself. */
+    adjustments: adjusted?.adjustments,
     /** Dates the activity data so the UI can say what it is describing. */
     snapsMeta: snapsQuery.data
       ? {

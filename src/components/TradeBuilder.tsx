@@ -5,6 +5,7 @@ import { AssetPicker } from './AssetPicker';
 import type { SnapShare } from '../engine/snapShare';
 import type { Opportunity } from '../engine/opportunity';
 import type { PlayerRole } from '../engine/role';
+import type { ActivityAdjustment } from '../engine/activityFactor';
 import { formatValue } from '../lib/format';
 
 /**
@@ -28,6 +29,8 @@ interface Props {
   usage?: Map<string, Opportunity>;
   roles?: Map<string, PlayerRole>;
   chartSeason?: number | null;
+  /** What a changing role did to each value, keyed by Sleeper id. */
+  adjustments?: Map<string, ActivityAdjustment>;
   /** Claimed team, if any — anchors the left side to you. */
   myRosterId: number | null;
   /**
@@ -129,6 +132,7 @@ export function TradeBuilder({
   usage,
   roles,
   chartSeason,
+  adjustments,
 }: Props) {
   // Anchor the left side to the claimed team so the trade reads from your
   // perspective, and make sure the right side is never the same roster.
@@ -235,6 +239,7 @@ export function TradeBuilder({
           usage={usage}
           roles={roles}
           chartSeason={chartSeason}
+          adjustments={adjustments}
         />
         <AssetPicker
           league={league}
@@ -255,6 +260,7 @@ export function TradeBuilder({
           usage={usage}
           roles={roles}
           chartSeason={chartSeason}
+          adjustments={adjustments}
         />
       </div>
 
