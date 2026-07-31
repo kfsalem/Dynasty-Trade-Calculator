@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { RosterSummary, ValuedPlayer } from '../engine/rosterValue';
+import type { SnapShare } from '../engine/snapShare';
 import type { League } from '../types';
+import { SnapShareCell } from './SnapShareCell';
 import {
   POSITION_ORDER,
   POSITION_STYLES,
@@ -18,9 +20,17 @@ interface Props {
   topStarterValue: number;
   /** Highlights the claimed team so it's findable at a glance. */
   isMine?: boolean;
+  /** Snap shares by Sleeper id. Undefined until the static file loads. */
+  snaps?: Map<string, SnapShare>;
 }
 
-function PlayerLine({ entry }: { entry: ValuedPlayer }) {
+function PlayerLine({
+  entry,
+  snaps,
+}: {
+  entry: ValuedPlayer;
+  snaps?: Map<string, SnapShare>;
+}) {
   const style = POSITION_STYLES[entry.player.position];
   return (
     <>
@@ -45,6 +55,7 @@ function PlayerLine({ entry }: { entry: ValuedPlayer }) {
           </span>
         ) : null}
       </span>
+      <SnapShareCell share={snaps?.get(entry.player.id)} />
       <span className="shrink-0 tabular-nums text-gray-500">
         {entry.valued ? formatValue(entry.value) : '~0'}
       </span>
@@ -52,7 +63,14 @@ function PlayerLine({ entry }: { entry: ValuedPlayer }) {
   );
 }
 
-export function TeamCard({ summary, league, rank, topStarterValue, isMine }: Props) {
+export function TeamCard({
+  summary,
+  league,
+  rank,
+  topStarterValue,
+  isMine,
+  snaps,
+}: Props) {
   const [open, setOpen] = useState(false);
 
   const roster = league.rosters.find((r) => r.rosterId === summary.rosterId);
@@ -165,7 +183,7 @@ export function TeamCard({ summary, league, rank, topStarterValue, isMine }: Pro
                       {formatSlot(assignment.slot)}
                     </span>
                     {assignment.entry ? (
-                      <PlayerLine entry={assignment.entry} />
+                      <PlayerLine entry={assignment.entry} snaps={snaps} />
                     ) : (
                       <span className="flex-1 italic text-gray-400">empty</span>
                     )}
@@ -182,7 +200,7 @@ export function TeamCard({ summary, league, rank, topStarterValue, isMine }: Pro
                 {bench.length === 0 && <li className="text-gray-400">No bench players.</li>}
                 {bench.slice(0, 15).map((entry) => (
                   <li key={entry.player.id} className="flex items-center gap-2">
-                    <PlayerLine entry={entry} />
+                    <PlayerLine entry={entry} snaps={snaps} />
                   </li>
                 ))}
                 {bench.length > 15 && (

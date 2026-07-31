@@ -67,6 +67,70 @@ describe('reduceSnapCounts', () => {
     expect(stats.all.total).toEqual({ matched: 1, unmatched: 0 });
   });
 
+  it('reads a halfback as a running back', () => {
+    // Snap counts carry PFR roster positions — the only nflverse file that
+    // does — so a back can arrive as HB. Chase Brown and Samaje Perine were
+    // missing from the shipped data entirely until this was handled.
+    const { file, stats } = reduce(csv('2025,1,REG,Saquon Barkley,BarkSa00,HB,PHI,50,0.75'));
+
+    expect(file.players['4866']).toEqual({ pos: 'RB', team: 'PHI', weeks: [[1, 50, 0.75]] });
+    expect(stats.relevant.byPosition.RB).toEqual({ matched: 1, unmatched: 0 });
+  });
+
+  it('reports a position code that took real snaps and was not ingested', () => {
+    // The check the match gate cannot make: anything filtered out by position
+    // never reaches the tally, so a code we stopped recognizing is invisible to
+    // every rate while the build stays green. This is how HB hid.
+    const { notes } = reduce(
+      csv(
+        '2025,1,REG,JaMarr Chase,ChasJa00,WR,CIN,45,0.87',
+        '2025,1,REG,Converted Corner,CornCo00,CB,CIN,40,0.6',
+      ),
+    );
+
+    expect(notes).toEqual([
+      '1 of 1 players at "CB" took real offensive snaps but are not an ingested position',
+    ]);
+  });
+
+  it('stays quiet about positions that took no offensive snaps', () => {
+    // Every defender appears on every snap report with zero offensive snaps.
+    // Reporting them would bury the one line that matters.
+    const { notes } = reduce(
+      csv(
+        '2025,1,REG,JaMarr Chase,ChasJa00,WR,CIN,45,0.87',
+        '2025,1,REG,A Linebacker,LineA000,LB,CIN,0,0',
+      ),
+    );
+
+    expect(notes).toEqual([]);
+  });
+
+  it('stays quiet about linemen, who take snaps but are skipped deliberately', () => {
+    const { notes } = reduce(
+      csv(
+        '2025,1,REG,JaMarr Chase,ChasJa00,WR,CIN,45,0.87',
+        '2025,1,REG,Some Tackle,TackSo00,T,CIN,70,1',
+        '2025,1,REG,Some Guard,GuarSo00,G,CIN,70,1',
+      ),
+    );
+
+    expect(notes).toEqual([]);
+  });
+
+  it('fails the build when a whole position looks renamed', () => {
+    // A few players at an odd position is a converted receiver. Ten is the
+    // source having changed a position code under us.
+    const rows = Array.from(
+      { length: 10 },
+      (_, i) => `2025,1,REG,Back ${i},Back${i}0000,TAILBACK,CIN,50,0.8`,
+    );
+
+    expect(() => reduce(csv(...rows))).toThrowError(
+      /10 players listed at "TAILBACK" took a real share of their team's offensive snaps/,
+    );
+  });
+
   it('reports a player as unmatched once, not once per week', () => {
     const { file, stats } = reduce(
       csv(

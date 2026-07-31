@@ -1,0 +1,70 @@
+import { MATERIAL_DELTA, RECENT_WEEKS, type SnapShare } from '../engine/snapShare';
+
+const pct = (share: number): string => `${Math.round(share * 100)}%`;
+
+/**
+ * Why the number shown is the season share rather than the recent one.
+ *
+ * The recent window is the more interesting figure, but it is empty for anyone
+ * who has not played in a month — and a column that shows "—" for both an
+ * injured starter and a player we have no data for is exactly the confusion
+ * this feature is supposed to remove. So the column means one thing, always:
+ * snap share across the season. The movement rides alongside it as a delta,
+ * which is the part worth acting on.
+ */
+function describe(share: SnapShare): string {
+  const season = `Season ${pct(share.season)} over ${share.games} ${
+    share.games === 1 ? 'game' : 'games'
+  }`;
+
+  if (share.recent === null) {
+    return `${season}. No offensive snaps in the last ${RECENT_WEEKS} weeks.`;
+  }
+
+  const recent = `Last ${RECENT_WEEKS} weeks ${pct(share.recent)} over ${share.recentGames} ${
+    share.recentGames === 1 ? 'game' : 'games'
+  }`;
+  const points = Math.round((share.delta ?? 0) * 100);
+  const move =
+    points === 0 ? 'unchanged' : `${points > 0 ? '+' : ''}${points} points on the season`;
+
+  return `${season}. ${recent} — ${move}.`;
+}
+
+export function SnapShareCell({ share }: { share: SnapShare | undefined }) {
+  if (!share) {
+    return (
+      <span
+        className="w-14 shrink-0 text-right tabular-nums text-gray-300"
+        title="No snap data for this player"
+      >
+        —
+      </span>
+    );
+  }
+
+  const points = share.delta === null ? 0 : Math.round(share.delta * 100);
+  const material = share.delta !== null && Math.abs(share.delta) >= MATERIAL_DELTA;
+  const rising = points > 0;
+
+  return (
+    <span
+      className="flex w-14 shrink-0 items-baseline justify-end gap-0.5 tabular-nums"
+      title={describe(share)}
+    >
+      <span className="text-gray-500">{pct(share.season)}</span>
+      {material && (
+        // Never colour alone: the arrow carries the direction for anyone who
+        // cannot separate the emerald from the red.
+        <span
+          className={`text-[10px] font-semibold ${
+            rising ? 'text-emerald-600' : 'text-fantasy-red'
+          }`}
+          aria-label={`${rising ? 'up' : 'down'} ${Math.abs(points)} points in the last ${RECENT_WEEKS} weeks`}
+        >
+          {rising ? '▲' : '▼'}
+        </span>
+      )}
+    </span>
+  );
+}

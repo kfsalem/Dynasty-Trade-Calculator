@@ -1,5 +1,6 @@
 import type { League } from '../types';
 import type { RosterSummary } from '../engine/rosterValue';
+import type { SnapShare } from '../engine/snapShare';
 import { TeamCard } from './TeamCard';
 import { formatValue } from '../lib/format';
 
@@ -7,9 +8,11 @@ interface Props {
   league: League;
   summaries: RosterSummary[];
   myRosterId: number | null;
+  snaps?: Map<string, SnapShare>;
+  snapsMeta?: { season: number; throughWeek: number | null };
 }
 
-export function RosterList({ league, summaries, myRosterId }: Props) {
+export function RosterList({ league, summaries, myRosterId, snaps, snapsMeta }: Props) {
   const topStarterValue = summaries[0]?.starterValue ?? 0;
 
   // Kickers and defenses have no dynasty market, so their absence is expected.
@@ -33,6 +36,17 @@ export function RosterList({ league, summaries, myRosterId }: Props) {
         <em>in this league</em>.
       </p>
 
+      {snapsMeta && (
+        <p className="mt-2 text-sm text-gray-400">
+          Expand a team to see each player's offensive snap share
+          {snapsMeta.throughWeek === null
+            ? ` (${snapsMeta.season})`
+            : `, ${snapsMeta.season} through Week ${snapsMeta.throughWeek}`}
+          . A ▲ or ▼ marks someone whose last four weeks differ from his season by more
+          than ten points — a role change is the slowest thing the market reprices.
+        </p>
+      )}
+
       {unvalued > 0 && (
         <p className="mt-2 text-sm text-gray-400">
           {unvalued} rostered skill {unvalued === 1 ? 'player is' : 'players are'} unranked
@@ -50,6 +64,7 @@ export function RosterList({ league, summaries, myRosterId }: Props) {
             rank={i + 1}
             topStarterValue={topStarterValue}
             isMine={summary.rosterId === myRosterId}
+            snaps={snaps}
           />
         ))}
       </div>

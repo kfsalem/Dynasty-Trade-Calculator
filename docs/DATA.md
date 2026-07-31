@@ -140,8 +140,33 @@ than 20 players in the sample. FB is outside it on purpose: there are about
 nineteen in the league, so one miss is five percent and the gate would be
 measuring noise.
 
-Three things keep the gate from failing open, which matters more here than
-usual — a check that silently stops checking is worse than no check:
+### What the gate cannot see
+
+The gate measures whether players *resolve to a Sleeper id*. It cannot see a
+player who never reached it, and anything filtered out by **position** is
+filtered before any tally.
+
+That is not hypothetical. Snap counts carry Pro Football Reference *roster*
+positions — the only nflverse file that does — so running backs can arrive as
+`HB`, and two did. Chase Brown and Samaje Perine were missing from the shipped
+data entirely: every match rate read 98%, the row count cleared its floor, and
+nothing anywhere said a position had been dropped. It surfaced only when a real
+roster rendered a dash next to a starting running back.
+
+So the snap reducer also reports any position code that took a **real share of
+offensive snaps** and was not ingested, and fails the build past ten players at
+one such code — a few is a converted receiver lining up at cornerback, a
+hundred is a position that got renamed. Codes with no offensive role are
+ignored, which is what keeps it quiet: every defender appears on every snap
+report with zero offensive snaps.
+
+Linemen have to be named rather than filtered by usage, since they take most of
+a team's snaps. `IGNORED_POSITIONS` in `snapCounts.ts` is that list.
+
+### Keeping the gate from failing open
+
+Three things, which matter more here than usual — a check that silently stops
+checking is worse than no check:
 
 - **A player whose id cannot be resolved counts as a miss, not as absent.** If
   an unusable id were skipped before accounting, it would leave the denominator

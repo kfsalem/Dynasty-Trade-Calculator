@@ -48,6 +48,8 @@ function App() {
     summaries,
     picks,
     picksUnavailable,
+    snaps,
+    snapsMeta,
     isLoading,
     error,
   } = useLeagueSummaries(leagueId);
@@ -172,6 +174,8 @@ function App() {
                   league={league}
                   summaries={summaries}
                   myRosterId={myRosterId}
+                  snaps={snaps}
+                  snapsMeta={snapsMeta}
                 />
               )}
 
@@ -185,6 +189,7 @@ function App() {
                   picksUnavailable={picksUnavailable}
                   myRosterId={myRosterId}
                   initial={pending?.trade ?? null}
+                  snaps={snaps}
                 />
               )}
             </div>
