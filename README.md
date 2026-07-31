@@ -50,9 +50,12 @@ players who matter in their first two years, so pick value falls off a cliff
 after about pick 15 and late picks are lottery tickets. The curve reads *absolute
 pick number*, never round, because the supply of NFL talent does not care how
 many teams are in your league — which is why a third-rounder is worth more in a
-10-team league than in a 14-team one. Draft slots are projected from the
-standings, so a bottom team's first is worth several times the champion's, and
-this year's class disappears once your league has actually drafted.
+10-team league than in a 14-team one. Draft slots come from the league's own
+published order once it is set, so a pick is priced as the 1.09 it actually is
+rather than as a generic first; for seasons nobody has drafted yet they are
+projected from roster strength and labelled as projections. Either way a bottom
+team's first is worth several times the champion's, and this year's class
+disappears once your league has actually drafted.
 
 Trades are still *balanced* on market value, because that is the number the
 other manager will check. Whether a trade helps is judged on the league-adjusted

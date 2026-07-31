@@ -143,6 +143,7 @@ export function useLeagueSummaries(leagueId: string | null) {
       table,
       worstFirst,
       adjusted.shrink,
+      bundle.draftOrders,
     );
   }, [leagueQuery.data, pickValuesQuery.data, adjusted, summaries]);
 

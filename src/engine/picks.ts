@@ -51,13 +51,50 @@ export function pickRealismFactor(overallPick: number): number {
 }
 
 /**
+ * A draft order the platform actually knows, rather than one we inferred.
+ *
+ * Sleeper publishes the real order the moment a commissioner sets it, and it
+ * is frequently nothing like a strength ranking — leagues use lotteries, prior
+ * seasons' standings, or simply decide. On a league whose season has not
+ * started every roster is 0-0, so a projection has only roster strength to go
+ * on and will confidently produce a different answer to the truth sitting in
+ * the API.
+ */
+export interface KnownDraftOrder {
+  season: string;
+  /** Roster id to draft slot, from Sleeper's `slot_to_roster_id`. */
+  slots: Map<number, number>;
+  /** Snake reverses even rounds; linear repeats the same order every round. */
+  snake: boolean;
+}
+
+/**
+ * The overall pick number a slot lands on in a given round.
+ *
+ * Linear repeats the order every round. Snake reverses the even ones, so the
+ * team holding 1.01 picks last in the second round — pricing its second as
+ * though it picked first overstates it by roughly double, which matters
+ * because the realism curve reads the absolute pick number and nothing else.
+ */
+export function overallPickNumber(
+  round: number,
+  slot: number,
+  teamCount: number,
+  snake: boolean,
+): number {
+  const withinRound = snake && round % 2 === 0 ? teamCount - slot + 1 : slot;
+  return (round - 1) * teamCount + withinRound;
+}
+
+/**
  * Where a team is likely to pick, from how good it is now.
  *
- * Rookie draft order is the reverse of the standings, so the worst roster holds
- * 1.01. Valuing every first identically ignores the largest single factor in
- * what a pick is worth — a bottom team's first and the champion's first are not
- * remotely the same asset, and treating them as equal is how you end up trading
- * one for the other.
+ * Only used for seasons Sleeper has no draft for — usually everything past
+ * next year. Rookie draft order is the reverse of the standings, so the worst
+ * roster holds 1.01. Valuing every first identically ignores the largest
+ * single factor in what a pick is worth — a bottom team's first and the
+ * champion's first are not remotely the same asset, and treating them as equal
+ * is how you end up trading one for the other.
  */
 export function projectedSlots(rosterIdsWorstFirst: number[]): Map<number, number> {
   const slots = new Map<number, number>();
@@ -83,6 +120,10 @@ export interface TradedPickRef {
   ownerRosterId: number;
 }
 
+/** "1.09" — round and pick within it, the way drafters say it. */
+const format = (round: number, overall: number, teamCount: number): string =>
+  `${round}.${String(((overall - 1) % teamCount) + 1).padStart(2, '0')}`;
+
 const ordinal = (round: number): string =>
   ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th'][round] ?? `${round}th`;
 
@@ -104,11 +145,17 @@ export function buildDraftPicks(
   rosterIdsWorstFirst: number[] = [],
   /** Scales pick values onto the league-adjusted player scale. */
   shrink = 1,
+  /** Orders Sleeper already knows, which beat any projection. */
+  knownOrders: KnownDraftOrder[] = [],
 ): DraftPick[] {
   const rounds = Math.max(1, league.settings.draftRounds);
   const rosterName = new Map(league.rosters.map((r: Roster) => [r.rosterId, r.teamName]));
   const teamCount = league.rosters.length;
-  const slots = projectedSlots(rosterIdsWorstFirst);
+  const projected = projectedSlots(rosterIdsWorstFirst);
+  const known = new Map(knownOrders.map((order) => [order.season, order]));
+  // A league's draft format does not change year to year, so the one Sleeper
+  // reports is the best guess for seasons it has no draft for yet.
+  const defaultSnake = knownOrders.some((order) => order.snake);
 
   // season-round-originalRoster -> current owner
   const traded = new Map<string, number>();
@@ -128,14 +175,21 @@ export function buildDraftPicks(
         const viaOther = ownerRosterId !== roster.rosterId;
 
         // The slot belongs to the roster the pick came *from* — that is whose
-        // record decides where it lands, no matter who holds it now.
-        const slot = slots.get(roster.rosterId) ?? null;
+        // finish decides where it lands, no matter who holds it now.
+        const order = known.get(season);
+        const realSlot = order?.slots.get(roster.rosterId) ?? null;
+        const slot = realSlot ?? projected.get(roster.rosterId) ?? null;
+        const snake = order?.snake ?? defaultSnake;
         // With no standings to project from, fall back to the middle of the
         // round. The curve reads absolute pick number only, so the round still
         // places the pick correctly on it even when the slot is a guess —
         // skipping the curve entirely here once priced a third at full value.
-        const overall =
-          (round - 1) * teamCount + (slot ?? Math.ceil(teamCount / 2));
+        const overall = overallPickNumber(
+          round,
+          slot ?? Math.ceil(teamCount / 2),
+          teamCount,
+          snake,
+        );
 
         // The realism curve is applied to the market figure too, not only the
         // league-adjusted one. It corrects a market that overprices late picks,
@@ -153,6 +207,13 @@ export function buildDraftPicks(
           marketValue = Math.round(quoted * pickRealismFactor(overall));
         }
 
+        // Pick value swings ninefold inside a single round, so the slot is part
+        // of the pick's name rather than something to infer from the number.
+        const via = viaOther ? `via ${rosterName.get(roster.rosterId) ?? 'unknown'}` : '';
+        const where =
+          slot === null ? '' : realSlot === null ? `proj ${format(round, overall, teamCount)}` : format(round, overall, teamCount);
+        const note = [where, via].filter(Boolean).join(', ');
+
         picks.push({
           id,
           season,
@@ -162,9 +223,8 @@ export function buildDraftPicks(
           value: Math.round(marketValue * shrink),
           marketValue,
           slot,
-          label: viaOther
-            ? `${season} ${ordinal(round)} (via ${rosterName.get(roster.rosterId) ?? 'unknown'})`
-            : `${season} ${ordinal(round)}`,
+          slotKnown: realSlot !== null,
+          label: note ? `${season} ${ordinal(round)} (${note})` : `${season} ${ordinal(round)}`,
         });
       }
     }

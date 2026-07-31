@@ -63,6 +63,7 @@ export function makePick(
     ownerRosterId: originalRosterId,
     value,
     marketValue: value,
+    slotKnown: false,
     slot: null,
     label: `${season} round ${round}`,
     ...overrides,

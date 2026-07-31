@@ -1,5 +1,5 @@
 import type { League, Player } from '../types';
-import type { TradedPickRef } from '../engine/picks';
+import type { KnownDraftOrder, TradedPickRef } from '../engine/picks';
 
 /**
  * Everything a loaded league needs, already in canonical form.
@@ -15,6 +15,12 @@ export interface LeagueBundle {
   tradedPicks: TradedPickRef[];
   /** Current real-world season, for deciding which draft classes are tradeable. */
   currentSeason: string;
+  /**
+   * Draft orders the platform publishes, which beat any projection. Empty when
+   * no draft has been set up yet, which is the normal state for seasons past
+   * the next one.
+   */
+  draftOrders: KnownDraftOrder[];
 }
 
 /**

@@ -108,8 +108,15 @@ export interface DraftPick {
    * shows far below what KeepTradeCut would quote for it.
    */
   marketValue: number;
-  /** Projected draft slot from the original owner's standing, when known. */
+  /** Draft slot of the original owner: the real one when known, else projected. */
   slot: number | null;
+  /**
+   * True when `slot` came from the platform's published draft order rather
+   * than from a projection. Worth distinguishing: leagues set rookie order by
+   * lottery or by decree as often as by standings, so a projection can be
+   * confidently wrong in a way the published order never is.
+   */
+  slotKnown: boolean;
   /** Display label, e.g. "2027 1st (via Ben)". */
   label: string;
 }
