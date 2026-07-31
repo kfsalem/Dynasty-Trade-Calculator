@@ -7,6 +7,7 @@ import {
   valueLeague,
 } from './replacement';
 import { summarizeRoster, type RosterSummary } from './rosterValue';
+import type { SnapShare } from './snapShare';
 import type { LineupSlot, Player, PlayerValue, Position, Roster } from '../types';
 import { makePlayer, makeRoster, makeSettings, makeValue } from './testFixtures';
 
@@ -66,6 +67,55 @@ function league(teams = 10) {
   );
 
   return { values, summaries, teams };
+}
+
+/**
+ * Four teams whose every position is packed with exact ties.
+ *
+ * The hardest case for a total order to survive, and the shape both roster-order
+ * tests run on: ranks collapse onto shared values in fours, so ties are
+ * everywhere and the id tiebreaker is doing real work.
+ */
+function tiedPool(age = 25) {
+  const settings = makeSettings(
+    ['QB', 'RB', 'RB', 'WR', 'WR', 'WR', 'TE', 'FLEX'],
+    { teamCount: 4 },
+  );
+  const players = new Map<string, Player>();
+  const values = new Map<string, PlayerValue>();
+  const ids: string[] = [];
+
+  for (const position of ['QB', 'RB', 'WR', 'TE'] as Position[]) {
+    for (let rank = 1; rank <= 20; rank++) {
+      const id = `${position}${rank}`;
+      players.set(id, makePlayer(id, position, age));
+      values.set(id, makeValue(id, 4000 - Math.floor((rank - 1) / 4) * 700, position));
+      ids.push(id);
+    }
+  }
+
+  const rosters = [0, 1, 2, 3].map((t) =>
+    makeRoster(t + 1, ids.filter((_, i) => i % 4 === t)),
+  );
+
+  return { settings, players, values, ids, rosters };
+}
+
+/** Reorderings of the same rosters, from a seeded Fisher-Yates so they repeat. */
+function shuffles(rosters: Roster[], trials = 25): Roster[][] {
+  let seed = 20260729;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+
+  return Array.from({ length: trials }, () =>
+    rosters.map((roster) => {
+      const list = [...roster.playerIds];
+      for (let i = list.length - 1; i > 0; i--) {
+        const j = Math.floor(rnd() * (i + 1));
+        [list[i], list[j]] = [list[j], list[i]];
+      }
+      return { ...roster, playerIds: list };
+    }),
+  );
 }
 
 describe('startersByPosition', () => {
@@ -297,7 +347,7 @@ describe('valueLeague', () => {
     expect(first.values.get('rb_star')!.value).toBe(second.values.get('rb_star')!.value);
 
     // A different pass cap must not change the answer either.
-    const capped = valueLeague(rosters, players, values, settings, 2);
+    const capped = valueLeague(rosters, players, values, settings, undefined, 2);
     expect(capped.starters).toEqual(first.starters);
   });
 
@@ -312,49 +362,11 @@ describe('valueLeague', () => {
      * level, and replacement level decided who got clamped. On a real 10-team
      * league, reshuffling player lists moved RB replacement level between 1,900
      * and 2,709 and flipped individual players between 0 and 807.
-     *
-     * Every position here is deliberately packed with exact ties, which is the
-     * hardest case for a total order to survive.
      */
-    const settings = makeSettings(
-      ['QB', 'RB', 'RB', 'WR', 'WR', 'WR', 'TE', 'FLEX'],
-      { teamCount: 4 },
-    );
-    const players = new Map<string, Player>();
-    const values = new Map<string, PlayerValue>();
-    const ids: string[] = [];
-
-    for (const position of ['QB', 'RB', 'WR', 'TE'] as Position[]) {
-      for (let rank = 1; rank <= 20; rank++) {
-        const id = `${position}${rank}`;
-        players.set(id, makePlayer(id, position, 25));
-        // Ranks collapse onto shared values in fours, so ties are everywhere
-        // and the id tiebreaker is doing real work.
-        values.set(id, makeValue(id, 4000 - Math.floor((rank - 1) / 4) * 700, position));
-        ids.push(id);
-      }
-    }
-
-    const rosters = [0, 1, 2, 3].map((t) =>
-      makeRoster(t + 1, ids.filter((_, i) => i % 4 === t)),
-    );
-
+    const { settings, players, values, ids, rosters } = tiedPool();
     const baseline = valueLeague(rosters, players, values, settings);
 
-    // A seeded Fisher-Yates, so the shuffle itself is reproducible.
-    let seed = 20260729;
-    const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
-
-    for (let trial = 0; trial < 25; trial++) {
-      const shuffled = rosters.map((roster) => {
-        const list = [...roster.playerIds];
-        for (let i = list.length - 1; i > 0; i--) {
-          const j = Math.floor(rnd() * (i + 1));
-          [list[i], list[j]] = [list[j], list[i]];
-        }
-        return { ...roster, playerIds: list };
-      });
-
+    for (const shuffled of shuffles(rosters)) {
       const result = valueLeague(shuffled, players, values, settings);
 
       expect(result.starters).toEqual(baseline.starters);
@@ -364,6 +376,83 @@ describe('valueLeague', () => {
         expect(result.values.get(id)!.value).toBe(baseline.values.get(id)!.value);
       }
     }
+  });
+
+  it('does not depend on roster order once activity has moved the values', () => {
+    /**
+     * The same property, with the R6 multiplier switched on — and the reason
+     * the factors are computed once, outside the pass loop.
+     *
+     * An activity factor perturbs a value, values decide the FLEX slot, the
+     * slot sets the starter counts, and the counts set replacement level. That
+     * is precisely the feedback path the clamp bug ran on. What keeps it safe
+     * is that a factor reads one player and his own weekly row and nothing
+     * else, so it can perturb the loop but never answer back to it. This pins
+     * that as a property instead of trusting the argument.
+     */
+    // Thirty-year-olds, where the age weight is 1 and the multiplier is
+    // trusted furthest — a player whose price is very nearly a statement about
+    // his current role is exactly the one whose changing role should move it.
+    const { settings, players, values, ids, rosters } = tiedPool(30);
+
+    // Backs surging while the tight ends collapse — opposite directions, so
+    // the pool is pulled apart rather than scaled by one constant, which is
+    // the case that could not disturb an ordering even in principle. The
+    // per-player term on top keeps it from being a single constant per
+    // position either, so ties break unevenly.
+    //
+    // The counts themselves do not move here, and cannot: with two RB slots
+    // against one TE, a team's third back is always deeper than its second
+    // tight end, so the FLEX belongs to a tight end by a margin no bounded
+    // multiplier can close. What this pool exercises is the ordering under
+    // perturbed values; `starters` and `levels` are asserted below as the
+    // things that must stay put.
+    const snaps = new Map<string, SnapShare>();
+    ids.forEach((id, i) => {
+      if (i % 3 === 0) return;
+      const bias = id.startsWith('RB') ? 0.3 : id.startsWith('TE') ? -0.3 : 0;
+      const delta = bias + ((i % 5) - 2) * 0.02;
+      const season = 0.45;
+      snaps.set(id, { season, recent: season + delta, delta, games: 12, recentGames: 9 });
+    });
+
+    const activity = { snaps, usage: new Map(), current: true };
+    const baseline = valueLeague(rosters, players, values, settings, activity);
+    const inert = valueLeague(rosters, players, values, settings);
+
+    // The factors have to actually reach the values, or everything below is
+    // the previous test wearing a different name.
+    expect(baseline.adjustments.size).toBeGreaterThan(0);
+    expect(
+      ids.some((id) => baseline.values.get(id)!.value !== inert.values.get(id)!.value),
+    ).toBe(true);
+    // A third of the pool is deliberately left without activity, so it keeps
+    // the exact tier ties while the rest move off them. That mixture — some
+    // values still tied, some nudged just past each other — is the state the
+    // tiebreaker has to survive.
+    expect(ids.some((id) => !baseline.adjustments.has(id))).toBe(true);
+
+    for (const shuffled of shuffles(rosters)) {
+      const result = valueLeague(shuffled, players, values, settings, activity);
+
+      expect(result.starters).toEqual(baseline.starters);
+      expect(result.levels).toEqual(baseline.levels);
+      expect(result.shrink).toBe(baseline.shrink);
+      // The factors themselves must not have noticed the reordering. This is
+      // the invariant the whole design rests on: a factor reads one player and
+      // his own weekly row, so nothing about the league — not the lineups it
+      // perturbs, not the pass it is read on — can feed back into it.
+      expect(result.adjustments).toEqual(baseline.adjustments);
+      for (const id of ids) {
+        expect(result.values.get(id)!.value).toBe(baseline.values.get(id)!.value);
+      }
+    }
+
+    // Same reason, along the other axis: more passes cannot move a factor, so
+    // capping the loop must not change the answer either.
+    const capped = valueLeague(rosters, players, values, settings, activity, 2);
+    expect(capped.adjustments).toEqual(baseline.adjustments);
+    expect(capped.starters).toEqual(baseline.starters);
   });
 
   it('reports scarcity pointing the same way as value', () => {

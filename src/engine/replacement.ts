@@ -1,5 +1,8 @@
 import type { LeagueSettings, Player, PlayerValue, Position, Roster } from '../types';
 import { summarizeRoster, type RosterSummary } from './rosterValue';
+import { activityFactor, type ActivityAdjustment } from './activityFactor';
+import type { SnapShare } from './snapShare';
+import type { Opportunity } from './opportunity';
 
 /**
  * Replacement level: what a position is actually worth in *this* league.
@@ -147,6 +150,16 @@ export const leagueValue = (market: number, replacement: number): number =>
 export function applyReplacement(
   values: Map<string, PlayerValue>,
   levels: Partial<Record<Position, ReplacementLevel>>,
+  /**
+   * Activity multipliers, already computed per player.
+   *
+   * Applied on top of the replacement adjustment rather than folded into it,
+   * because the two answer different questions: replacement asks what the
+   * position costs to fill in this league, activity asks whether this player is
+   * currently doing the job. Empty is the neutral case and leaves every value
+   * exactly as it was.
+   */
+  adjustments: Map<string, ActivityAdjustment> = new Map(),
 ): Map<string, PlayerValue> {
   // An unknown position fails *closed*. Charging nothing would let a player the
   // feed failed to classify keep his full market value while every classified
@@ -160,7 +173,8 @@ export function applyReplacement(
     const replacement = value.position
       ? (levels[value.position]?.value ?? strictest)
       : strictest;
-    out.set(id, { ...value, value: leagueValue(value.marketValue, replacement) });
+    const factor = adjustments.get(id)?.factor ?? 1;
+    out.set(id, { ...value, value: leagueValue(value.marketValue, replacement) * factor });
   }
   return out;
 }
@@ -234,6 +248,18 @@ export function positionScarcity(
   return out;
 }
 
+/**
+ * Weekly activity for the whole league, as the valuation consumes it.
+ *
+ * `current` is false through the offseason, which makes every factor exactly 1
+ * and leaves the model as it was before activity existed.
+ */
+export interface LeagueActivity {
+  snaps: Map<string, SnapShare>;
+  usage: Map<string, Opportunity>;
+  current: boolean;
+}
+
 export interface LeagueValuation {
   /** Replacement-adjusted values, for every downstream consumer. */
   values: Map<string, PlayerValue>;
@@ -243,6 +269,8 @@ export interface LeagueValuation {
   /** Summaries built from the adjusted values, already converged. */
   summaries: RosterSummary[];
   shrink: number;
+  /** What activity did to each player, for explaining a value that moved. */
+  adjustments: Map<string, ActivityAdjustment>;
 }
 
 const sameCounts = (a: StarterCounts, b: StarterCounts): boolean => {
@@ -273,17 +301,38 @@ export function valueLeague(
   players: Map<string, Player>,
   market: Map<string, PlayerValue>,
   settings: LeagueSettings,
+  activity?: LeagueActivity,
   maxPasses = 5,
 ): LeagueValuation {
   const summarize = (values: Map<string, PlayerValue>) =>
     rosters.map((roster) => summarizeRoster(roster, players, values, settings));
+
+  /**
+   * Computed once, outside the loop, and deliberately so.
+   *
+   * A factor is a pure function of a player and his own weekly data — it does
+   * not read any other player's value, so it cannot vary between passes. That
+   * is what keeps it out of the feedback path that the clamp bug ran on: it
+   * perturbs the lineups, but it can never respond to the perturbation.
+   */
+  const adjustments = new Map<string, ActivityAdjustment>();
+  if (activity) {
+    for (const [id, player] of players) {
+      const adjustment = activityFactor(player, {
+        snaps: activity.snaps.get(id),
+        usage: activity.usage.get(id),
+        current: activity.current,
+      });
+      if (adjustment.factor !== 1) adjustments.set(id, adjustment);
+    }
+  }
 
   // Every pass recomputes levels, values and summaries together, so whatever is
   // returned is internally consistent — the counts describe the very lineups
   // the returned values produce.
   const pass = (counts: StarterCounts) => {
     const levels = replacementLevels(market, counts);
-    const values = applyReplacement(market, levels);
+    const values = applyReplacement(market, levels, adjustments);
     const summaries = summarize(values);
     return { levels, values, summaries, starters: counts };
   };
@@ -309,5 +358,6 @@ export function valueLeague(
     ...state,
     scarcity: positionScarcity(market, state.levels),
     shrink: leagueShrinkFactor(state.summaries, state.values),
+    adjustments,
   };
 }

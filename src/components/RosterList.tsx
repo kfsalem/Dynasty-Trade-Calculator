@@ -3,6 +3,7 @@ import type { RosterSummary } from '../engine/rosterValue';
 import type { SnapShare } from '../engine/snapShare';
 import type { Opportunity } from '../engine/opportunity';
 import type { PlayerRole } from '../engine/role';
+import type { ActivityAdjustment } from '../engine/activityFactor';
 import { TeamCard } from './TeamCard';
 import { formatValue } from '../lib/format';
 
@@ -14,6 +15,8 @@ interface Props {
   usage?: Map<string, Opportunity>;
   roles?: Map<string, PlayerRole>;
   snapsMeta?: { season: number; throughWeek: number | null; chartSeason: number | null };
+  /** What a changing role did to each value, keyed by Sleeper id. */
+  adjustments?: Map<string, ActivityAdjustment>;
 }
 
 export function RosterList({
@@ -24,6 +27,7 @@ export function RosterList({
   usage,
   roles,
   snapsMeta,
+  adjustments,
 }: Props) {
   const topStarterValue = summaries[0]?.starterValue ?? 0;
 
@@ -57,7 +61,10 @@ export function RosterList({
           , alongside his share of the team's work in his own role — targets for a
           receiver, carries for a back. A ▲ or ▼ marks someone whose last four weeks
           differ from his season by more than ten points; a role change is the slowest
-          thing the market reprices. Hover any number for the full breakdown.
+          thing the market reprices. Where that change is big enough to matter, a signed
+          percentage shows how much it moved the value itself — always a fraction of the
+          move in snap share, because a dynasty price is mostly a bet on future role and
+          already carries most of this. Hover any number for the full breakdown.
           {snapsMeta.chartSeason === snapsMeta.season
             ? ' A PLAYS UP or PLAYS DOWN badge marks someone the depth chart and the field disagree about — the chart is the slower of the two.'
             : ` Depth chart positions are ${snapsMeta.chartSeason ?? 'a later season'}, so they are not compared against ${snapsMeta.season} snaps.`}
@@ -85,6 +92,7 @@ export function RosterList({
             usage={usage}
             roles={roles}
             chartSeason={snapsMeta?.chartSeason ?? null}
+            adjustments={adjustments}
           />
         ))}
       </div>
