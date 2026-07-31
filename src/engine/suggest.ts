@@ -452,8 +452,16 @@ function explain(
     // it applies — the rest is why the fit works once you have him.
     const rising = findTrend(trends, player.id);
     if (rising && rising.gap > 0) {
+      // Only claim the gap is money when the model actually banked it. Through
+      // the offseason `applied` is false — the role change happened, but the
+      // market has had months to price it, so no value on the page includes it
+      // and neither does `benefit`. Asserting it here regardless put the card in
+      // direct contradiction with the Role trends panel three feet above it,
+      // which says in as many words that none of it is applied.
       lines.push(
-        `${player.name} is playing more than his price says: ${trendEvidence(rising)}. That's worth about ${round(rising.gap)} the market hasn't charged for yet.`,
+        trends?.applied
+          ? `${player.name} is playing more than his price says: ${trendEvidence(rising)}. That's worth about ${round(rising.gap)} the market hasn't charged for yet.`
+          : `${player.name} finished last season playing more than his price says: ${trendEvidence(rising)}. Not counted in any number here — the market has had all offseason to price it — but it is the shape of a player worth asking about.`,
       );
     }
 
@@ -471,7 +479,9 @@ function explain(
     const falling = findTrend(trends, player.id);
     if (falling && falling.gap < 0) {
       lines.push(
-        `${player.name} is selling at a price his current role no longer supports: ${trendEvidence(falling)}. Moving him now is ${round(Math.abs(falling.gap))} of name value ${they === 'You' ? 'you' : 'they'} would otherwise watch the market take back.`,
+        trends?.applied
+          ? `${player.name} is selling at a price his current role no longer supports: ${trendEvidence(falling)}. Moving him now is ${round(Math.abs(falling.gap))} of name value ${they === 'You' ? 'you' : 'they'} would otherwise watch the market take back.`
+          : `${player.name} finished last season at a price his role no longer supported: ${trendEvidence(falling)}. Not counted in any number here, but it is why he is on the block.`,
       );
       continue;
     }

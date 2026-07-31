@@ -719,6 +719,79 @@ reject. `stratified()` deals in blocks instead, with decay rates calibrated to
 produce a 1.68x market spread against the real league's 1.82x. All six
 assertions fail against the old model and pass against the new one.
 
+**"Buy low" was measuring the wrong thing.** *(2026-07-31)*
+
+R7 ranked both lists on `roleShift`, which compares a player **only against
+himself**: did his usage move? On the real league that put **Jahmyr Gibbs at the
+top of the buy-low list** — 64% of the snaps to 76% over the last month of 2025,
+correctly detected, and completely useless. Gibbs is the second-most-expensive
+asset in dynasty football. There is no reading of the market under which it has
+failed to notice that he is a workhorse, and a rising workload on a player
+already priced as one is a *reason he is expensive*, not a discount.
+
+The error is systematic rather than incidental. The gap is measured in value
+points — correctly, since a 3% move on a 6,000-point starter beats a 20% move on
+a bench body — so the most expensive players clear any threshold on the smallest
+percentage move. Ranking on change alone therefore fills the list with precisely
+the players whose roles are most thoroughly priced. Josh Allen was second on it.
+
+A row now needs two things, not one:
+
+1. **His role moved** — `roleShift`, unchanged, and still what prices a value.
+2. **The role he moved to is not already in his price** — `rolePricing`, new.
+
+The second is a percentile comparison inside his own position: where his current
+usage ranks against where his price ranks. Gibbs is the 96th percentile on role
+and the 99th on price, so his headroom is **−0.03** and he is filtered as fairly
+priced. A back playing like the RB8 while priced like the RB25 is what survives,
+which is what "buy low" has always meant to a dynasty manager — a good player
+whose *price* is depressed, not merely one whose usage ticked up.
+
+The pool is drawn from every player with both a market value and snap data, not
+from the league's rosters, so the same player does not rank differently in a
+10-team and a 14-team league for reasons that have nothing to do with him.
+Percentiles are midranks, because at quarterback ties are the normal case —
+every healthy starter sits at or near 100% of the snaps.
+
+A third gate came out of the same review. The lists required only that the
+*factor* move half a percent, while the roster snap column draws its arrow at
+`MATERIAL_DELTA`, ten share points. So the panel listed Ja'Marr Chase as a
+sell-high on a five-point snap dip with flat targets, while the column three
+inches away showed nothing for him — and `MIN_SHARE`'s own comment already said
+that a list disagreeing with its neighbour reads as a bug in one of the two. A
+row now needs one metric to have moved ten points. It reads the *largest* metric
+rather than the average `roleShift` prices on, because averaging snaps and usage
+is right for a factor and wrong for a threshold: Jonathan Taylor went from 73% to
+85% of the carries on unchanged snaps and averaged out to under six.
+
+Before and after on the real league, buy-low side:
+
+```
+was: Gibbs +316, Josh Allen +229, Smith-Njigba +204, St. Brown +202, ...
+now: Jonathan Taylor +213, Travis Etienne +108, RJ Harvey +103, Chris Godwin +63,
+     Travis Kelce +59, Tyrone Tracy +49, Wan'Dale Robinson +34, Woody Marks +32
+```
+
+Every surviving row is a player who took on work his price has not caught up
+with. Sell-high keeps Achane, Hampton, Lamar Jackson, Javonte Williams and Josh
+Jacobs, and loses Chase.
+
+Also fixed here: `suggest.ts` asserted "that's worth about N the market hasn't
+charged for yet" in trade rationales **regardless of `applied`**. Through the
+offseason `applied` is false, no value on the page includes the gap, and the
+Role trends panel says so in as many words — so a suggestion card three feet
+below it was directly contradicting the panel. The offseason wording now says
+the move happened and is not counted.
+
+**Still open, and deliberately not changed:** `ageWeight` gives a 30-year-old
+1.0 and a 22-year-old 0.35. That is right for *pricing* — an old player's value
+is very nearly a statement about his current role — but it tilts both lists
+toward older players, which is backwards for dynasty. Travis Kelce at 36 is on
+the buy-low list because of it. Changing the weight for the lists alone would
+make them disagree with the values they are denominated in, which is a worse
+inconsistency than the one it fixes; the honest fix is a separate horizon-aware
+score, not a second weighting of the same one.
+
 **The rookie-pick curve had the same disease.** *(2026-07-29)*
 
 `pickRealismFactor` short-circuited on `round >= 3` *before* consulting the pick

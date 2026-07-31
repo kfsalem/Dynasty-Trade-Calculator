@@ -166,6 +166,13 @@ function trend(
     games: 5,
     reasons: [{ label: 'snaps', from: 0.35, to: 0.7 }],
     thin: false,
+    // Clearing the headroom gate is what puts a row on a list at all, so a
+    // hand-built trend has to look like one that did: role ranked above price
+    // on the buy side, below it on the sell side.
+    pricing:
+      gap > 0
+        ? { role: 0.8, price: 0.4, headroom: 0.4 }
+        : { role: 0.4, price: 0.8, headroom: -0.4 },
     ...overrides,
   };
 }
