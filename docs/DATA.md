@@ -40,7 +40,7 @@ Four files, 346 KB total against a 1 MB budget enforced by the ingest.
 | file | contents |
 |---|---|
 | `snaps.json` | Offensive snaps and snap share, per player-week |
-| `opportunity.json` | Targets, target share, air yards share, WOPR, carries, receptions, PPR points, per player-week |
+| `opportunity.json` | Targets, target share, air yards share, WOPR, carries, carry share, receptions, PPR points, per player-week |
 | `depth.json` | Current depth chart position and rank, one row per player |
 | `index.json` | What shipped and how fresh it is |
 
@@ -50,6 +50,23 @@ app so the two cannot drift.
 Weekly rows are number tuples rather than objects, with the column order
 published in the file as `columns`. Repeating eight keys on every player-week
 costs roughly half the budget for nothing.
+
+### Carry share is the one number we compute
+
+nflverse publishes `target_share`, `air_yards_share` and `wopr` precomputed, so
+they are ingested rather than recalculated — recomputing WOPR from a reduced
+file would only introduce a way to get it wrong.
+
+It does not publish carry share, so the ingest derives it: a player's carries
+over his team's carries that week. The denominator is summed from **every row
+in the source**, including players who never survive the skill filter or
+resolve to a Sleeper id. They still took the ball out of everyone else's hands,
+and dividing by the shipped subset instead would overstate every back that
+remains.
+
+That needs a second pass over the file, because a share cannot be written until
+its denominator is final and the denominator is only final once the whole file
+has been read.
 
 Everything is **keyed by Sleeper id**. Each nflverse dataset keys on a different
 id and none of them is Sleeper's — snap counts use `pfr_player_id`, weekly stats

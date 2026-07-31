@@ -47,10 +47,11 @@ describe('reduceWeeklyStats', () => {
       'airYardsShare',
       'wopr',
       'carries',
+      'carryShare',
       'receptions',
       'fantasyPointsPpr',
     ]);
-    expect(file.players['7564'].weeks).toEqual([[2, 16, 0.3721, 0.3111, 0.7759, 0, 14, 36.5]]);
+    expect(file.players['7564'].weeks).toEqual([[2, 16, 0.3721, 0.3111, 0.7759, 0, null, 14, 36.5]]);
   });
 
   it('keeps a missing share as null rather than zero', () => {
@@ -60,7 +61,7 @@ describe('reduceWeeklyStats', () => {
     const { file } = reduce(csv('00-0034857,Saquon Barkley,RB,2025,1,REG,PHI,0,0,NA,NA,NA,22,0,14.2'));
 
     const [week] = file.players['4866'].weeks;
-    expect(week).toEqual([1, 0, null, null, null, 22, 0, 14.2]);
+    expect(week).toEqual([1, 0, null, null, null, 22, 1, 0, 14.2]);
   });
 
   it('ignores the postseason', () => {
@@ -81,7 +82,34 @@ describe('reduceWeeklyStats', () => {
       csv('00-0036900,"Chase, Jr.",WR,2025,1,REG,CIN,0,5,0.2,0.5,0.69,0,2,4.6'),
     );
 
-    expect(file.players['7564'].weeks).toEqual([[1, 5, 0.2, 0.5, 0.69, 0, 2, 4.6]]);
+    expect(file.players['7564'].weeks).toEqual([[1, 5, 0.2, 0.5, 0.69, 0, null, 2, 4.6]]);
+  });
+
+  it('computes carry share against the whole team, not the shipped subset', () => {
+    // nflverse publishes target share and air yards share but not carry share,
+    // so it is derived here. The denominator has to include players who never
+    // reach the output — an unresolved back still took the ball out of
+    // everyone else's hands, and dividing by the survivors overstates the rest.
+    const { file } = reduce(
+      csv(
+        '00-0034857,Saquon Barkley,RB,2025,1,REG,PHI,0,0,NA,NA,NA,18,0,14.2',
+        'NA,Unresolved Back,RB,2025,1,REG,PHI,0,0,NA,NA,NA,20,0,9.1',
+        '00-0000002,A Quarterback,QB,2025,1,REG,PHI,30,0,NA,NA,NA,2,0,18.0',
+      ),
+    );
+
+    // 18 of 40, not 18 of 18 — the unresolved back and the quarterback count.
+    const carryShare = file.columns.indexOf('carryShare');
+    expect(file.players['4866'].weeks[0][carryShare]).toBeCloseTo(0.45);
+  });
+
+  it('leaves carry share null when a team has no carries on record', () => {
+    const { file } = reduce(
+      csv("00-0036900,Ja'Marr Chase,WR,2025,1,REG,CIN,0,9,0.3,0.4,0.7,0,6,14.2"),
+    );
+
+    const carryShare = file.columns.indexOf('carryShare');
+    expect(file.players['7564'].weeks[0][carryShare]).toBeNull();
   });
 
   it('counts a quarterback by his pass attempts', () => {

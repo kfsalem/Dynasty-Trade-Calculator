@@ -2,7 +2,9 @@ import type { DraftPick, League, Player, PlayerValue } from '../types';
 import { POSITION_STYLES, formatInjury, formatValue } from '../lib/format';
 import { valuePlayers } from '../engine/rosterValue';
 import type { SnapShare } from '../engine/snapShare';
+import type { Opportunity } from '../engine/opportunity';
 import { SnapShareCell } from './SnapShareCell';
+import { UsageCell } from './UsageCell';
 
 interface Props {
   league: League;
@@ -20,6 +22,8 @@ interface Props {
   outgoingValue: number;
   /** Snap shares by Sleeper id. Undefined until the static file loads. */
   snaps?: Map<string, SnapShare>;
+  /** Position-appropriate opportunity metrics by Sleeper id. */
+  usage?: Map<string, Opportunity>;
 }
 
 /**
@@ -59,6 +63,7 @@ export function AssetPicker({
   onTogglePick,
   outgoingValue,
   snaps,
+  usage,
 }: Props) {
   const roster = league.rosters.find((r) => r.rosterId === rosterId);
   const entries = roster ? valuePlayers(roster.playerIds, players, values) : [];
@@ -94,8 +99,17 @@ export function AssetPicker({
 
       {/* Widths mirror ValuePair so the headings sit above their columns. */}
       <div className="flex justify-end gap-2 border-b border-gray-100 px-2 py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide">
-        <span className="w-14 text-right text-gray-400" title="Offensive snap share this season">
+        <span
+          className="hidden w-14 text-right text-gray-400 sm:inline-block"
+          title="Offensive snap share this season"
+        >
           Snaps
+        </span>
+        <span
+          className="hidden w-14 text-right text-gray-400 sm:inline-block"
+          title="Share of his team's work in his own role — targets for a receiver, carries for a back"
+        >
+          Usage
         </span>
         <span className="w-12 text-right text-gray-400">Market</span>
         <span className="w-12 text-right text-primary-500">Yours</span>
@@ -119,8 +133,9 @@ export function AssetPicker({
                   className="h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                 />
                 <span className="min-w-0 flex-1 truncate">{pick.label}</span>
-                {/* A pick has no snaps; hold the column so the grid lines up. */}
-                <span className="w-14 shrink-0" aria-hidden="true" />
+                {/* A pick has no activity; hold the columns so the grid lines up. */}
+                <span className="hidden w-14 shrink-0 sm:inline-block" aria-hidden="true" />
+                <span className="hidden w-14 shrink-0 sm:inline-block" aria-hidden="true" />
                 <ValuePair market={pick.marketValue} league={pick.value} />
               </label>
             ))}
@@ -148,7 +163,7 @@ export function AssetPicker({
               >
                 {style.label}
               </span>
-              <span className="min-w-0 flex-1 truncate">
+              <span className="min-w-0 flex-1 truncate" title={entry.player.name}>
                 {entry.player.name}
                 {entry.player.injury && (
                   <span className="ml-1.5 text-xs font-semibold text-fantasy-red">
@@ -157,6 +172,7 @@ export function AssetPicker({
                 )}
               </span>
               <SnapShareCell share={snaps?.get(entry.player.id)} />
+              <UsageCell usage={usage?.get(entry.player.id)} />
               {entry.valued ? (
                 <ValuePair
                   market={values.get(entry.player.id)?.marketValue ?? entry.value}

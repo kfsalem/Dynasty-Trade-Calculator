@@ -1,6 +1,7 @@
 import type { League } from '../types';
 import type { RosterSummary } from '../engine/rosterValue';
 import type { SnapShare } from '../engine/snapShare';
+import type { Opportunity } from '../engine/opportunity';
 import { TeamCard } from './TeamCard';
 import { formatValue } from '../lib/format';
 
@@ -9,10 +10,18 @@ interface Props {
   summaries: RosterSummary[];
   myRosterId: number | null;
   snaps?: Map<string, SnapShare>;
+  usage?: Map<string, Opportunity>;
   snapsMeta?: { season: number; throughWeek: number | null };
 }
 
-export function RosterList({ league, summaries, myRosterId, snaps, snapsMeta }: Props) {
+export function RosterList({
+  league,
+  summaries,
+  myRosterId,
+  snaps,
+  usage,
+  snapsMeta,
+}: Props) {
   const topStarterValue = summaries[0]?.starterValue ?? 0;
 
   // Kickers and defenses have no dynasty market, so their absence is expected.
@@ -42,8 +51,10 @@ export function RosterList({ league, summaries, myRosterId, snaps, snapsMeta }: 
           {snapsMeta.throughWeek === null
             ? ` (${snapsMeta.season})`
             : `, ${snapsMeta.season} through Week ${snapsMeta.throughWeek}`}
-          . A ▲ or ▼ marks someone whose last four weeks differ from his season by more
-          than ten points — a role change is the slowest thing the market reprices.
+          , alongside his share of the team's work in his own role — targets for a
+          receiver, carries for a back. A ▲ or ▼ marks someone whose last four weeks
+          differ from his season by more than ten points; a role change is the slowest
+          thing the market reprices. Hover any number for the full breakdown.
         </p>
       )}
 
@@ -65,6 +76,7 @@ export function RosterList({ league, summaries, myRosterId, snaps, snapsMeta }: 
             topStarterValue={topStarterValue}
             isMine={summary.rosterId === myRosterId}
             snaps={snaps}
+            usage={usage}
           />
         ))}
       </div>

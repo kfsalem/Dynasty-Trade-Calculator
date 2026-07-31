@@ -49,6 +49,7 @@ function App() {
     picks,
     picksUnavailable,
     snaps,
+    usage,
     snapsMeta,
     isLoading,
     error,
@@ -175,6 +176,7 @@ function App() {
                   summaries={summaries}
                   myRosterId={myRosterId}
                   snaps={snaps}
+                  usage={usage}
                   snapsMeta={snapsMeta}
                 />
               )}
@@ -190,6 +192,7 @@ function App() {
                   myRosterId={myRosterId}
                   initial={pending?.trade ?? null}
                   snaps={snaps}
+                  usage={usage}
                 />
               )}
             </div>

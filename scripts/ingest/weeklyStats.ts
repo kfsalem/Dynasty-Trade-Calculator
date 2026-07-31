@@ -68,6 +68,13 @@ export function reduceWeeklyStats(
   crosswalk: Crosswalk,
   meta: { season: number; source: string; generatedAt: string },
 ): { file: OpportunityFile; stats: MatchStats } {
+  // Carry share is the one share nflverse does not publish, so it is computed
+  // here. This pass sums every player's carries per team-week — including
+  // players who will not survive the skill filter or resolve to a Sleeper id,
+  // because they still took the ball out of everyone else's hands. Dividing by
+  // the shipped subset instead would overstate every back on the roster.
+  const teamCarries = teamCarriesByWeek(csv);
+
   const players: OpportunityFile['players'] = {};
   // Deferred for the same reason as the snap counts: whether a player has a
   // role depends on his best week, which the last row can still change.
@@ -106,6 +113,8 @@ export function reduceWeeklyStats(
 
     throughWeek = Math.max(throughWeek, week);
 
+    const teamTotal = teamCarries.get(`${row.team}|${week}`) ?? 0;
+
     const entry = (players[sleeperId] ??= { pos: row.position, team: row.team, weeks: [] });
     entry.weeks.push([
       week,
@@ -114,6 +123,9 @@ export function reduceWeeklyStats(
       round(num(row.air_yards_share), 4),
       round(num(row.wopr), 4),
       carries,
+      // Null rather than 0 when the team has no carries on record: unknown and
+      // "took none of them" are different, exactly as for the published shares.
+      teamTotal > 0 ? round(carries / teamTotal, 4) : null,
       num(row.receptions) ?? 0,
       round(num(row.fantasy_points_ppr), 2) ?? 0,
     ] satisfies OpportunityWeek);
@@ -147,4 +159,27 @@ export function reduceWeeklyStats(
     },
     stats,
   };
+}
+
+/**
+ * Total carries per team-week, over every row in the source.
+ *
+ * A second pass rather than a running tally, because a share cannot be written
+ * until its denominator is final, and the denominator is only final once the
+ * whole file has been read. Parsing 8 MB twice costs a second or so; carrying
+ * every row in memory to avoid it would cost far more.
+ */
+function teamCarriesByWeek(csv: string): Map<string, number> {
+  const totals = new Map<string, number>();
+
+  for (const row of iterCsvRows(csv)) {
+    if (row.season_type !== 'REG') continue;
+    const carries = num(row.carries);
+    if (!carries) continue;
+
+    const key = `${row.team}|${num(row.week)}`;
+    totals.set(key, (totals.get(key) ?? 0) + carries);
+  }
+
+  return totals;
 }

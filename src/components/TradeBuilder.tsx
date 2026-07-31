@@ -3,6 +3,7 @@ import type { DraftPick, League, Player, PlayerValue, TradeSideResult } from '..
 import { evaluateTrade, FAIRNESS_LABEL, type TradeContext } from '../engine/trade';
 import { AssetPicker } from './AssetPicker';
 import type { SnapShare } from '../engine/snapShare';
+import type { Opportunity } from '../engine/opportunity';
 import { formatValue } from '../lib/format';
 
 /**
@@ -23,6 +24,7 @@ interface Props {
   picks: DraftPick[];
   picksUnavailable: boolean;
   snaps?: Map<string, SnapShare>;
+  usage?: Map<string, Opportunity>;
   /** Claimed team, if any — anchors the left side to you. */
   myRosterId: number | null;
   /**
@@ -121,6 +123,7 @@ export function TradeBuilder({
   myRosterId,
   initial,
   snaps,
+  usage,
 }: Props) {
   // Anchor the left side to the claimed team so the trade reads from your
   // perspective, and make sure the right side is never the same roster.
@@ -224,6 +227,7 @@ export function TradeBuilder({
           onTogglePick={(id) => setGivesA((s) => ({ ...s, pickIds: toggle(s.pickIds, id) }))}
           outgoingValue={sumValue(givesA.playerIds, givesA.pickIds)}
           snaps={snaps}
+          usage={usage}
         />
         <AssetPicker
           league={league}
@@ -241,6 +245,7 @@ export function TradeBuilder({
           onTogglePick={(id) => setGivesB((s) => ({ ...s, pickIds: toggle(s.pickIds, id) }))}
           outgoingValue={sumValue(givesB.playerIds, givesB.pickIds)}
           snaps={snaps}
+          usage={usage}
         />
       </div>
 
