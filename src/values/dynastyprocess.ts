@@ -124,19 +124,46 @@ export async function fetchPickValues(settings: LeagueSettings): Promise<PickVal
 }
 
 /**
- * Value a pick, degrading gracefully as precision drops.
+ * The board DynastyProcess names its picks on.
  *
- * Order of preference: exact slot -> tier -> generic round -> round average.
- * A pick in a season past what the source publishes falls back to the furthest
- * season available, which understates nothing meaningfully — pick values flatten
- * hard that far out.
+ * Every pick row is "1.01" through "1.12", and the tiered rows for future
+ * seasons split those twelve slots into early/mid/late. The source has no
+ * notion of your league's size, so "2.09" means the 21st player off the board
+ * and nothing else.
+ *
+ * Which is exactly why a lookup must go through the **overall pick number**
+ * rather than your own slot label. A 10-team league's 2.09 is the 19th pick,
+ * and asking DynastyProcess for its "2.09" prices it as the 21st — two picks
+ * deeper into a talent pool that does not care how many teams you have. Round 1
+ * happens to be immune, since slot and overall coincide there, which is what
+ * kept the mismatch invisible.
+ *
+ * It also fixes larger leagues outright. A 14-team league has slots 13 and 14
+ * that no DynastyProcess row names, and those fell through the whole chain onto
+ * the round's median — its 1.13 and 1.14 were priced identically, and as
+ * mid-firsts. Through overall pick number they are the 13th and 14th picks, so
+ * they read off the front of the second round where they belong.
+ */
+export const BOARD_SIZE = 12;
+
+/** Where a slot sits within the board, for seasons named only by tier. */
+const tierOf = (slot: number): PickTier =>
+  slot <= BOARD_SIZE / 3 ? 'early' : slot <= (BOARD_SIZE * 2) / 3 ? 'mid' : 'late';
+
+/**
+ * Value a pick from its overall position in the draft.
+ *
+ * Degrades gracefully as the source's precision drops: exact slot for the
+ * imminent draft, tier for the next one, generic round after that. A season past
+ * what the source publishes falls back to the furthest available, which
+ * understates nothing meaningfully — pick values flatten hard that far out — and
+ * a round past the deepest published one clamps to it rather than pricing at
+ * zero.
  */
 export function lookupPickValue(
   table: PickValueTable,
   season: string,
-  round: number,
-  slot: number | null = null,
-  tier: PickTier = null,
+  overallPick: number,
 ): number {
   const effectiveSeason = table.seasons.includes(season)
     ? season
@@ -144,26 +171,32 @@ export function lookupPickValue(
       ? (table.seasons.at(-1) as string)
       : (table.seasons[0] as string);
 
-  const inSeason = table.rows.filter(
-    (r) => r.season === effectiveSeason && r.round === round,
-  );
-  if (inSeason.length === 0) return 0;
+  const pick = Math.max(1, Math.round(overallPick));
+  const wanted = Math.ceil(pick / BOARD_SIZE);
+  const slot = ((pick - 1) % BOARD_SIZE) + 1;
 
-  if (slot !== null) {
-    const exact = inSeason.find((r) => r.slot === slot);
-    if (exact) return exact.value;
-  }
+  const seasonRows = table.rows.filter((r) => r.season === effectiveSeason);
+  if (seasonRows.length === 0) return 0;
 
-  if (tier) {
-    const tiered = inSeason.find((r) => r.tier === tier);
-    if (tiered) return tiered.value;
-  }
+  // A draft deeper than the source covers clamps to its last round instead of
+  // falling to zero. Priced at zero, a 6th-rounder in a six-round rookie draft
+  // is an asset the engine will hand over for free.
+  const deepest = Math.max(...seasonRows.map((r) => r.round));
+  const round = Math.min(wanted, deepest);
+  const inRound = seasonRows.filter((r) => r.round === round);
+  if (inRound.length === 0) return 0;
 
-  const generic = inSeason.find((r) => r.slot === null && r.tier === null);
+  const exact = inRound.find((r) => r.slot === slot);
+  if (exact) return exact.value;
+
+  const tiered = inRound.find((r) => r.tier === tierOf(slot));
+  if (tiered) return tiered.value;
+
+  const generic = inRound.find((r) => r.slot === null && r.tier === null);
   if (generic) return generic.value;
 
   // Seasons with exact slots have no generic row; the round's median slot is
   // the honest neutral estimate when we don't know where a team will pick.
-  const sorted = [...inSeason].sort((a, b) => a.value - b.value);
+  const sorted = [...inRound].sort((a, b) => a.value - b.value);
   return sorted[Math.floor(sorted.length / 2)]?.value ?? 0;
 }

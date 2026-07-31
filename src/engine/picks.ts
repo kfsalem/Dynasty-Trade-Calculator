@@ -1,54 +1,41 @@
 import type { DraftPick, League, Roster } from '../types';
-import { lookupPickValue, type PickTier, type PickValueTable } from '../values/dynastyprocess';
+import { lookupPickValue, type PickValueTable } from '../values/dynastyprocess';
 
 /**
- * What a rookie pick is really worth, as a share of its quoted value.
+ * A note on where the rookie-pick cliff comes from, since it used to come from
+ * here twice.
  *
  * An NFL draft class yields roughly 10-15 offensive players good enough to
- * matter in fantasy in their first two years — first and early second round
- * talent. After that the hit rate falls off a cliff: most later picks never
- * become starters and never see meaningful snaps. Market pick values are
- * smoother than that, because they average across league formats and because
- * hope is priced in. This curve reimposes the cliff.
+ * matter in fantasy in their first two years. After that the hit rate falls off
+ * a cliff, and a pick model that does not show one is wrong.
  *
- * Anchors are absolute pick numbers, because the supply of NFL talent does not
- * care how many teams are in your league. That has a consequence worth stating:
- * a third-rounder is worth appreciably more in a 10-team league (picks 21-30)
- * than in a 14-team one (picks 29-42), which is correct — the bigger league is
- * drafting further into the same pool.
+ * `pickRealismFactor` used to impose that cliff on top of DynastyProcess, on the
+ * argument that market pick values are smoother than reality because hope is
+ * priced in. Checked against the source, they are not. DynastyProcess's own 2026
+ * curve, read by overall pick number, is:
  *
- * An earlier version short-circuited on `round >= 3` before consulting the pick
- * number at all, which contradicted the paragraph above and produced an 11x drop
- * between two *adjacent* picks in a 10-team league: 2.10 kept 33% and 3.01 kept
- * 3%. Projected draft slots are not precise to one pick, so a discontinuity that
- * large was an artifact rather than a model. It also flattened every third-round
- * pick onto the same near-zero number, losing the ordering between them for the
- * same reason the old value clamp did — see `replacement.leagueValue`.
+ *     1: 5505   5: 2514   10: 1004   13: 598   20: 195   25: 95   30: 49   45: 11
+ *
+ * A **28x** drop by pick 20 and 112x by pick 30, before anything of ours ran.
+ * The extra factor then took another 70% off at pick 20 and 92% at pick 30, and
+ * the compounded result priced a 2026 second-rounder in this league at **44 out
+ * of 10,000** — a sixth of a waiver-wire running back, and about a fiftieth of
+ * what anyone in the league would accept for one.
+ *
+ * The curve was also doing a job that belongs to the lookup. Its anchors were
+ * absolute pick numbers "because the supply of NFL talent does not care how many
+ * teams are in your league" — but the *lookup beneath it* was reading the
+ * league's own slot label off DynastyProcess's 12-team board, so the same
+ * argument was being made in one direction and contradicted in the other. Going
+ * through the overall pick number (see `dynastyprocess.BOARD_SIZE`) delivers the
+ * league-size property directly from the source: a 10-team 3.01 is the 21st pick
+ * and prices at 168, a 12-team 3.01 is the 25th and prices at 95, a 14-team 3.01
+ * is the 29th and prices at 56.
+ *
+ * So there is no curve here any more. The cliff is real, it is in the data, and
+ * imposing it a second time was not conservatism — it was an error large enough
+ * to make the app hand out draft capital for nothing.
  */
-const REALISM_ANCHORS: readonly (readonly [pick: number, factor: number])[] = [
-  [10, 1], //  the class's genuine fantasy contributors
-  [15, 0.7], // real talent, fading
-  [20, 0.3], // the cliff
-  [30, 0.08], // dart throws
-  [45, 0.03], // lottery tickets, and the floor past here
-];
-
-export function pickRealismFactor(overallPick: number): number {
-  const first = REALISM_ANCHORS[0];
-  const last = REALISM_ANCHORS[REALISM_ANCHORS.length - 1];
-  if (overallPick <= first[0]) return first[1];
-  if (overallPick >= last[0]) return last[1];
-
-  for (let i = 1; i < REALISM_ANCHORS.length; i++) {
-    const [prevPick, prevFactor] = REALISM_ANCHORS[i - 1];
-    const [pick, factor] = REALISM_ANCHORS[i];
-    if (overallPick > pick) continue;
-    // Linear between anchors, so the curve is continuous everywhere and no two
-    // adjacent picks can differ by more than one segment's slope.
-    return prevFactor + ((overallPick - prevPick) / (pick - prevPick)) * (factor - prevFactor);
-  }
-  return last[1];
-}
 
 /**
  * A draft order the platform actually knows, rather than one we inferred.
@@ -100,15 +87,6 @@ export function projectedSlots(rosterIdsWorstFirst: number[]): Map<number, numbe
   const slots = new Map<number, number>();
   rosterIdsWorstFirst.forEach((rosterId, index) => slots.set(rosterId, index + 1));
   return slots;
-}
-
-/** Slot to early/mid/late, for seasons too far out for the source to name slots. */
-export function slotTier(slot: number, teamCount: number): PickTier {
-  if (teamCount <= 0) return null;
-  const third = teamCount / 3;
-  if (slot <= third) return 'early';
-  if (slot <= third * 2) return 'mid';
-  return 'late';
 }
 
 export interface TradedPickRef {
@@ -191,21 +169,13 @@ export function buildDraftPicks(
           snake,
         );
 
-        // The realism curve is applied to the market figure too, not only the
-        // league-adjusted one. It corrects a market that overprices late picks,
-        // and applying it to only one side would let the engine hand over
-        // third-rounders that "balance" a trade while costing it nothing.
-        let marketValue = 0;
-        if (pickValues) {
-          const quoted = lookupPickValue(
-            pickValues,
-            season,
-            round,
-            slot,
-            slot === null ? null : slotTier(slot, teamCount),
-          );
-          marketValue = Math.round(quoted * pickRealismFactor(overall));
-        }
+        // Straight from the source, by overall pick number. `marketValue` means
+        // "the number the other manager will quote" everywhere else in the app,
+        // and trade fairness is argued in it — so a private correction applied
+        // here would settle every fairness verdict in units nobody else uses.
+        const marketValue = pickValues
+          ? Math.round(lookupPickValue(pickValues, season, overall))
+          : 0;
 
         // Pick value swings ninefold inside a single round, so the slot is part
         // of the pick's name rather than something to infer from the number.

@@ -2,10 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDraftPicks,
   overallPickNumber,
-  pickRealismFactor,
   picksForRoster,
   projectedSlots,
-  slotTier,
   tradeableSeasons,
   type KnownDraftOrder,
 } from './picks';
@@ -29,8 +27,9 @@ const table: PickValueTable = {
 };
 
 /**
- * Every round quoted identically, so anything that differs between two picks
- * priced off this table came from the realism curve and nowhere else.
+ * Every round on the source's own board quoted identically, so two picks that
+ * differ in price here differ because they land in different *rounds of the
+ * board* — never because of anything applied on top of it.
  */
 const flat: PickValueTable = {
   seasons: ['2026'],
@@ -41,6 +40,19 @@ const flat: PickValueTable = {
     slot: null,
     tier: null,
     value: 1000,
+  })),
+};
+
+/** The same board named slot by slot, for tests that need adjacent picks to differ. */
+const bySlot: PickValueTable = {
+  seasons: ['2026'],
+  fetchedAt: 0,
+  rows: Array.from({ length: 36 }, (_, i) => ({
+    season: '2026',
+    round: Math.floor(i / 12) + 1,
+    slot: (i % 12) + 1,
+    tier: null,
+    value: 6000 - i * 150,
   })),
 };
 
@@ -79,10 +91,13 @@ describe('buildDraftPicks', () => {
     expect(picks.find((p) => p.id === '2027-1-1')?.label).toBe('2027 1st');
   });
 
-  it('prices picks from the value table', () => {
+  it('prices picks from the value table, by overall pick number', () => {
     const picks = buildDraftPicks(league, [], ['2026'], table);
     expect(picks.find((p) => p.id === '2026-1-1')?.value).toBe(5000);
-    expect(picks.find((p) => p.id === '2026-2-1')?.value).toBe(2000);
+    // A three-team league's "2.01" is the *fourth* pick overall, which is still
+    // a first-round talent — so it takes the source's first-round price. The
+    // round number in your league's own labelling is not a fact about the class.
+    expect(picks.find((p) => p.id === '2026-2-1')?.value).toBe(5000);
   });
 
   it('degrades to zero-value picks when the value table is missing', () => {
@@ -148,36 +163,86 @@ describe('tradeableSeasons', () => {
   });
 });
 
-describe('pickRealismFactor', () => {
-  it('keeps the first ten picks at full value', () => {
-    expect(pickRealismFactor(1)).toBe(1);
-    expect(pickRealismFactor(10)).toBe(1);
+describe('the rookie-pick cliff', () => {
+  /** A board with the shape of the real source: steep, and named by exact slot. */
+  const steep: PickValueTable = {
+    seasons: ['2026'],
+    fetchedAt: 0,
+    rows: Array.from({ length: 36 }, (_, i) => ({
+      season: '2026',
+      round: Math.floor(i / 12) + 1,
+      slot: (i % 12) + 1,
+      tier: null,
+      // Roughly DynastyProcess's own 2026 curve: 5,500 at 1.01, a 28x drop by
+      // the twentieth pick, and still ordered at the end of the third round.
+      value: Math.round(5500 * 0.85 ** i),
+    })),
+  };
+
+  const build = (teams: number, rounds: number) =>
+    buildDraftPicks(
+      makeLeague(
+        Array.from({ length: teams }, (_, i) => makeRoster(i + 1, [])),
+        makeSettings(['QB'], { draftRounds: rounds }),
+      ),
+      [],
+      ['2026'],
+      steep,
+      Array.from({ length: teams }, (_, i) => i + 1),
+    );
+
+  const at = (picks: ReturnType<typeof build>, round: number, slot: number) =>
+    picks.find((p) => p.id === `2026-${round}-${slot}`)!.marketValue;
+
+  it('comes from the source, and is not imposed a second time on top of it', () => {
+    /**
+     * The regression. `pickRealismFactor` multiplied DynastyProcess's own curve
+     * by a second one — 0.30 at pick 20, 0.08 at pick 30 — on the theory that
+     * market pick values are smoother than reality because hope is priced in.
+     * They are not: the source already drops 28x by pick 20 before anything of
+     * ours runs. Compounded, a 2026 second-rounder in the real 10-team league
+     * priced at **44 out of 10,000** — a sixth of a waiver-wire running back.
+     *
+     * A pick is now worth exactly what the source says for its overall position,
+     * with nothing applied on top.
+     */
+    const picks = build(10, 3);
+
+    // Overall pick 11 in a 10-team league is the source's 1.11, not its 2.01.
+    expect(at(picks, 2, 1)).toBe(steep.rows[10].value);
+    // Overall 20 is its 2.08, and overall 21 its 2.09.
+    expect(at(picks, 2, 10)).toBe(steep.rows[19].value);
+    expect(at(picks, 3, 1)).toBe(steep.rows[20].value);
   });
 
-  it('falls off a cliff past the fifteenth pick', () => {
-    // An NFL class yields ~10-15 offensive players who matter early. Past that
-    // the supply is gone, and the curve has to say so.
-    expect(pickRealismFactor(15)).toBeGreaterThan(0.65);
-    expect(pickRealismFactor(22)).toBeLessThan(pickRealismFactor(15) * 0.4);
+  it('still falls off a cliff, because the source does', () => {
+    const picks = build(10, 3);
+
+    expect(at(picks, 2, 10)).toBeLessThan(at(picks, 1, 1) * 0.1);
+    // Small, but ordered and never zero: flattening late picks onto one number
+    // loses the real difference between an early third and a late one.
+    expect(at(picks, 3, 1)).toBeGreaterThan(at(picks, 3, 10));
+    expect(at(picks, 3, 10)).toBeGreaterThan(0);
   });
 
-  it('prices late picks as lottery tickets without erasing them', () => {
-    // Small, but ordered: flattening them onto one number loses the difference
-    // between an early third and a late fourth, which is a real difference.
-    expect(pickRealismFactor(30)).toBeLessThan(0.1);
-    expect(pickRealismFactor(60)).toBeGreaterThan(0);
-    expect(pickRealismFactor(25)).toBeGreaterThan(pickRealismFactor(35));
-  });
+  it('has no step between adjacent picks', () => {
+    // A `round >= 3` short-circuit once put an 11x drop between picks 20 and 21
+    // in a 10-team league, which no projected slot is precise enough to justify.
+    // Reading the source by overall pick number cannot reintroduce one: round
+    // boundaries in *this* league no longer mean anything to the lookup.
+    const picks = build(10, 3).sort(
+      (a, b) => a.round - b.round || (a.slot as number) - (b.slot as number),
+    );
 
-  it('is continuous — no two adjacent picks differ by a step', () => {
-    // The regression. A `round >= 3` short-circuit put an 11x drop between
-    // picks 20 and 21 in a 10-team league, which no projected slot is precise
-    // enough to justify.
-    for (let pick = 1; pick < 60; pick++) {
-      const drop = pickRealismFactor(pick) - pickRealismFactor(pick + 1);
-      expect(drop).toBeGreaterThanOrEqual(0);
-      expect(drop).toBeLessThan(0.1);
+    for (let i = 1; i < picks.length; i++) {
+      expect(picks[i - 1].marketValue / Math.max(1, picks[i].marketValue)).toBeLessThan(2);
     }
+  });
+
+  it('prices a pick deeper than the source publishes rather than at zero', () => {
+    // A six-round rookie draft against a source covering three. Priced at zero,
+    // those are assets the suggestion engine hands over for free.
+    for (const pick of build(10, 6)) expect(pick.marketValue).toBeGreaterThan(0);
   });
 
   it('measures the cliff in absolute picks, not rounds', () => {
@@ -215,41 +280,48 @@ describe('projected draft slots', () => {
     expect(slots.get(2)).toBe(3);
   });
 
-  it('buckets slots into thirds for seasons priced by tier', () => {
-    expect(slotTier(1, 12)).toBe('early');
-    expect(slotTier(6, 12)).toBe('mid');
-    expect(slotTier(12, 12)).toBe('late');
-  });
-
   it('prices a bottom team’s first well above the champion’s', () => {
     // DynastyProcess names the imminent draft by exact slot and the next one by
-    // tier. The realism curve is only a correction to the market's shape, so
-    // within-round differences have to come from these rows.
+    // tier, so within-round differences come from these rows and nowhere else.
     const slotted: PickValueTable = {
       seasons: ['2026', '2027'],
       fetchedAt: 0,
       rows: [
-        { season: '2026', round: 1, slot: 1, tier: null, value: 8000 },
-        { season: '2026', round: 1, slot: 2, tier: null, value: 6000 },
-        { season: '2026', round: 1, slot: 3, tier: null, value: 4500 },
-        { season: '2027', round: 1, slot: null, tier: 'early', value: 7000 },
-        { season: '2027', round: 1, slot: null, tier: 'mid', value: 5500 },
-        { season: '2027', round: 1, slot: null, tier: 'late', value: 4000 },
+        ...Array.from({ length: 12 }, (_, i) => ({
+          season: '2026',
+          round: 1,
+          slot: i + 1,
+          tier: null,
+          value: 8000 - i * 600,
+        })),
+        { season: '2027', round: 1, slot: null, tier: 'early' as const, value: 7000 },
+        { season: '2027', round: 1, slot: null, tier: 'mid' as const, value: 5500 },
+        { season: '2027', round: 1, slot: null, tier: 'late' as const, value: 4000 },
       ],
     };
 
+    // Twelve teams, so the tier buckets a season out land on distinct thirds of
+    // the board. On a three-team league every slot is an early pick by overall
+    // number, and correctly so — the supply of NFL talent does not shrink
+    // because your league is small.
+    const twelve = makeLeague(
+      Array.from({ length: 12 }, (_, i) => makeRoster(i + 1, [])),
+      makeSettings(['QB', 'WR'], { draftRounds: 1 }),
+    );
+    const order = Array.from({ length: 12 }, (_, i) => 12 - i);
+
     // Same round, same season — the only difference is who it came from.
-    const picks = buildDraftPicks(league, [], ['2026', '2027'], slotted, [3, 2, 1]);
-    const worst = picks.find((p) => p.id === '2026-1-3');
+    const picks = buildDraftPicks(twelve, [], ['2026', '2027'], slotted, order);
+    const worst = picks.find((p) => p.id === '2026-1-12');
     const best = picks.find((p) => p.id === '2026-1-1');
 
     expect(worst!.slot).toBe(1);
-    expect(best!.slot).toBe(3);
+    expect(best!.slot).toBe(12);
     expect(worst!.marketValue).toBe(8000);
-    expect(best!.marketValue).toBe(4500);
+    expect(best!.marketValue).toBe(1400);
 
     // A season out, the same ordering survives through the tier buckets.
-    expect(picks.find((p) => p.id === '2027-1-3')!.marketValue).toBe(7000);
+    expect(picks.find((p) => p.id === '2027-1-12')!.marketValue).toBe(7000);
     expect(picks.find((p) => p.id === '2027-1-1')!.marketValue).toBe(4000);
   });
 
@@ -347,17 +419,17 @@ describe('published draft order', () => {
 
     // Roster 1 holds 1.01: it picks last in round two under snake, first under
     // linear. Pricing its second as though it picked first overstates it badly.
-    const snake = buildDraftPicks(big, [], ['2026'], flat, [], 1, [
+    const snake = buildDraftPicks(big, [], ['2026'], bySlot, [], 1, [
       { ...straight, snake: true },
     ]);
-    const linear = buildDraftPicks(big, [], ['2026'], flat, [], 1, [straight]);
+    const linear = buildDraftPicks(big, [], ['2026'], bySlot, [], 1, [straight]);
 
     const snakeSecond = snake.find((p) => p.id === '2026-2-1')!;
     const linearSecond = linear.find((p) => p.id === '2026-2-1')!;
 
     expect(snakeSecond.label).toBe('2026 2nd (2.12)');
     expect(linearSecond.label).toBe('2026 2nd (2.01)');
-    expect(snakeSecond.marketValue).toBeLessThan(linearSecond.marketValue / 2);
+    expect(snakeSecond.marketValue).toBeLessThan(linearSecond.marketValue);
 
     // Round one is identical either way — only the even rounds reverse.
     expect(snake.find((p) => p.id === '2026-1-1')!.marketValue).toBe(

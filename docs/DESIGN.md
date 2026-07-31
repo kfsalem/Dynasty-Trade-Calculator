@@ -819,6 +819,62 @@ single-pick drop is now 0.08, down from 0.30. Rounds 1 and 2 barely move
 the league prices to zero. A third-rounder is now worth appreciably more in a
 10-team league than a 14-team one, which is correct.
 
+**The cliff was in the data all along, and we were charging for it twice.**
+*(2026-07-31)*
+
+`pickRealismFactor` existed on the argument that "market pick values are smoother
+than reality, because they average across league formats and because hope is
+priced in." Checked against the source, they are not. DynastyProcess's own 2026
+curve, read by overall pick number, is:
+
+```
+pick   1: 5505    5: 2514   10: 1004   13: 598   20: 195   25: 95   30: 49   45: 11
+```
+
+A **28x** drop by pick 20 and 112x by pick 30, before anything of ours runs. The
+realism curve then took another 70% off at pick 20 and 92% at pick 30. Compounded
+on the real league, a 2026 second-rounder priced at **44 out of 10,000** — a
+sixth of a waiver-wire running back, and roughly a fiftieth of what anybody in
+the league would accept for one. Third-rounders ran 2 to 26.
+
+Worse, the curve was arguing against the lookup underneath it. Its anchors were
+absolute pick numbers "because the supply of NFL talent does not care how many
+teams are in your league" — while `lookupPickValue` was reading the league's
+*own slot label* off DynastyProcess's twelve-team board. A 10-team league's 2.09
+is the 19th pick; asking the source for its "2.09" prices it as the 21st. Round 1
+was immune, since slot and overall pick coincide there, which is what kept it
+invisible for so long.
+
+Both are fixed by the same change: `lookupPickValue` now takes an **overall pick
+number** and maps it onto the source's board internally, and nothing is applied
+on top of the result.
+
+The league-size property the curve was hand-drawn to produce now falls out of the
+source directly, and more precisely:
+
+| | 1.01 | 2.01 | 3.01 |
+|---|---|---|---|
+| 10-team | 5,505 (pick 1) | 842 (pick 11) | 168 (pick 21) |
+| 12-team | 5,505 (pick 1) | 598 (pick 13) | 95 (pick 25) |
+| 14-team | 5,505 (pick 1) | 429 (pick 15) | 56 (pick 29) |
+
+It also fixes larger leagues outright. A 14-team league has slots 13 and 14 that
+no DynastyProcess row names; those fell through the entire chain onto the round's
+median, so its 1.13 and 1.14 were priced identically *and* as mid-firsts. As
+picks 13 and 14 they now read off the front of the second round, where they
+belong. And a round deeper than the source publishes clamps to the deepest
+available rather than pricing at zero — a 6th-rounder in a six-round rookie draft
+was an asset the suggestion engine would hand over for free.
+
+On the real league the whole board is now smooth and monotone from 5,505 down to
+49 with no step at any round boundary: 2.10 went 44 → 195, 3.01 went 26 → 168,
+3.10 went 2 → 49. Firsts are unchanged, as they should be.
+
+`marketValue` for a pick is now the source's number untouched, which matters
+beyond accuracy. It is defined everywhere else as "what the other manager will
+quote", and trade fairness is *argued* in it — so a private correction applied
+there settled every fairness verdict in units nobody else in the league uses.
+
 **`tradeableSeasons` — a latent bug, not a live one.** The first review claimed
 the app was listing 2026 rookie picks after that draft had happened. That was
 wrong, and checking beat assuming: this league's status is `pre_draft` and its
