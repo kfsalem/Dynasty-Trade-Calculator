@@ -98,22 +98,46 @@ export interface ActivityAdjustment {
   factor: number;
   /** Combined share-point move behind the factor, for explaining it. */
   signal: number;
+  /**
+   * Games in the recent window behind the move.
+   *
+   * Carried out of here rather than recomputed downstream, because the number
+   * that decides whether a trend is worth showing has to be the same one that
+   * decided how far to trust it. A two-game trend is noise, and a consumer
+   * working that out from a different column would eventually disagree.
+   */
+  games: number;
   /** Metrics that contributed, most telling first, for explaining it. */
   reasons: { label: string; from: number; to: number }[];
 }
 
-const NEUTRAL: ActivityAdjustment = { factor: 1, signal: 0, reasons: [] };
+const NEUTRAL: ActivityAdjustment = { factor: 1, signal: 0, games: 0, reasons: [] };
 
 /**
- * A player's activity multiplier.
+ * A player's activity multiplier, as valuation consumes it.
+ *
+ * The season gate lives here rather than in `roleShift` because it is a
+ * statement about *pricing*, not about evidence: a role really did change last
+ * November, and saying otherwise would be false. What is not true in July is
+ * that the change is news the market has yet to absorb, and only pricing
+ * depends on that. R7 reads `roleShift` directly for exactly this reason.
+ */
+export function activityFactor(player: Player, activity: ActivityInputs): ActivityAdjustment {
+  if (!activity.current) return NEUTRAL;
+  return roleShift(player, activity);
+}
+
+/**
+ * The same computation with no season gate: what this player's role did.
  *
  * Pure, and total: every path returns a finite number, because this multiplies
  * a value that decides lineups. A NaN here would not throw, it would silently
  * sort a roster wrong.
  */
-export function activityFactor(player: Player, activity: ActivityInputs): ActivityAdjustment {
-  if (!activity.current) return NEUTRAL;
-
+export function roleShift(
+  player: Player,
+  activity: Omit<ActivityInputs, 'current'>,
+): ActivityAdjustment {
   const moves: { label: string; delta: number; from: number; to: number }[] = [];
   let games = 0;
 
@@ -158,6 +182,7 @@ export function activityFactor(player: Player, activity: ActivityInputs): Activi
   return {
     factor,
     signal,
+    games,
     reasons: moves
       .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
       .map(({ label, from, to }) => ({ label, from, to })),

@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { Player } from '../types';
 import type { SnapShare } from './snapShare';
 import type { Metric, Opportunity } from './opportunity';
-import { MAX_SWING, activityFactor, ageWeight, type ActivityInputs } from './activityFactor';
+import {
+  MAX_SWING,
+  activityFactor,
+  ageWeight,
+  roleShift,
+  type ActivityInputs,
+} from './activityFactor';
 import { makePlayer } from './testFixtures';
 
 const snaps = (season: number, recent: number | null, recentGames = 4): SnapShare => ({
@@ -138,6 +144,14 @@ describe('activityFactor', () => {
     }
   });
 
+  it('reports the games behind the move, so a consumer can judge the sample', () => {
+    const result = activityFactor(player(27), { current: true, snaps: snaps(0.35, 0.7, 6) });
+
+    expect(result.games).toBe(6);
+    // Nothing to judge when nothing moved, rather than a stale count.
+    expect(activityFactor(player(27), { current: false, snaps: snaps(0.35, 0.7, 6) }).games).toBe(0);
+  });
+
   it('explains itself with the numbers behind the move', () => {
     const result = activityFactor(player(27), {
       current: true,
@@ -148,6 +162,29 @@ describe('activityFactor', () => {
     // Largest mover first, so the explanation leads with what actually changed.
     expect(result.reasons[0]).toEqual({ label: 'snaps', from: 0.35, to: 0.7 });
     expect(result.reasons).toHaveLength(2);
+  });
+});
+
+describe('roleShift', () => {
+  it('sees the role change that activityFactor declines to price', () => {
+    // The season gate is a statement about pricing, not about evidence. A role
+    // really did change last November; what is untrue in July is that the
+    // market has yet to absorb it. R7 ranks trends off this, so it must still
+    // report the move that valuation deliberately ignores.
+    const loud = { snaps: snaps(0.3, 0.9) };
+
+    expect(activityFactor(player(29), { ...loud, current: false }).factor).toBe(1);
+    expect(roleShift(player(29), loud).factor).toBeGreaterThan(1);
+  });
+
+  it('agrees exactly with activityFactor once the season is current', () => {
+    // Two entry points, one computation. If these ever diverged, a previewed
+    // gap would stop matching the adjustment actually applied to the value.
+    const activity = { snaps: snaps(0.35, 0.7), usage: usage(metric(0.2, 0.3)) };
+
+    expect(roleShift(player(27), activity)).toEqual(
+      activityFactor(player(27), { ...activity, current: true }),
+    );
   });
 });
 

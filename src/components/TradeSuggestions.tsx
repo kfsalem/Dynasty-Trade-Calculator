@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import type { DraftPick, League, Player, PlayerValue } from '../types';
 import type { RosterSummary } from '../engine/rosterValue';
 import { suggestTrades, type SuggestContext, type SuggestedTrade, type TradeAsset } from '../engine/suggest';
+import type { RoleTrends } from '../engine/roleTrend';
+import { RoleTrendPanel } from './RoleTrendPanel';
 import { FAIRNESS_LABEL } from '../engine/trade';
 import { POSITION_STYLES, formatValue } from '../lib/format';
 import type { PendingTrade } from './TradeBuilder';
@@ -14,6 +16,10 @@ interface Props {
   summaries: RosterSummary[];
   myRosterId: number;
   onOpenInCalculator: (trade: PendingTrade) => void;
+  /** Role trends, so the engine can propose and explain mispriced roles. */
+  trends?: RoleTrends;
+  /** Season the activity data covers, for labelling an offseason preview. */
+  season?: number;
 }
 
 function AssetChip({ asset }: { asset: TradeAsset }) {
@@ -187,11 +193,13 @@ export function TradeSuggestions({
   summaries,
   myRosterId,
   onOpenInCalculator,
+  trends,
+  season,
 }: Props) {
   const result = useMemo(() => {
-    const ctx: SuggestContext = { league, players, values, picks, summaries };
+    const ctx: SuggestContext = { league, players, values, picks, summaries, trends };
     return suggestTrades(myRosterId, ctx);
-  }, [league, players, values, picks, summaries, myRosterId]);
+  }, [league, players, values, picks, summaries, myRosterId, trends]);
 
   return (
     <div>
@@ -200,6 +208,13 @@ export function TradeSuggestions({
         Offers where both teams come out ahead — measured in what each team actually
         wants, which is not the same thing for a contender and a rebuilder.
       </p>
+
+      {/* Above the offers on purpose. These are the players the suggestions
+          below are reaching for, and seeing why makes the offers legible
+          instead of arbitrary. */}
+      <div className="mt-6">
+        <RoleTrendPanel trends={trends} league={league} season={season} />
+      </div>
 
       {result.trades.length === 0 ? (
         <p className="mt-6 rounded-lg border border-gray-200 bg-white p-5 text-sm text-gray-600">

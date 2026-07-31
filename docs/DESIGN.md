@@ -307,6 +307,11 @@ Given a proposed trade, report:
 The hardest and most valuable feature. Approach:
 
 1. Compute surpluses and needs for **all 12 teams**
+1a. Add **role trends** (R7) to the candidate pool: players whose price has
+    outlived their role, and benched players whose role has outgrown their
+    price. The surplus test in step 1 is a *value* test — it asks who would
+    out-rank a weakest starter elsewhere — so a player whose role has changed
+    but whose price has not is exactly the player it misses.
 2. Find complementary pairs — your surplus ↔ their need, and their surplus ↔ your need
 3. Generate candidate packages (players and picks) within a value tolerance (~±5–8%)
 4. Score by: value balance × **your** VORS gain × **their** VORS gain × contention-window fit
