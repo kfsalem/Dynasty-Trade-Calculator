@@ -6,12 +6,15 @@ import { activityFactor } from './activityFactor';
 import { MIN_GAMES, roleTrends, trendsForRoster } from './roleTrend';
 import { makePlayer, makeValue } from './testFixtures';
 
-const snaps = (season: number, recent: number, recentGames = 4): SnapShare => ({
-  season,
+/** First argument is the prior window; `season` spans both and is display-only. */
+const snaps = (prior: number, recent: number, recentGames = 4): SnapShare => ({
+  season: (8 * prior + 4 * recent) / 12,
   recent,
-  delta: recent - season,
+  prior,
+  delta: recent - prior,
   games: 12,
   recentGames,
+  priorGames: 8,
 });
 
 /**

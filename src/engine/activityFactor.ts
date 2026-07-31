@@ -142,8 +142,18 @@ export function roleShift(
   let games = 0;
 
   const snaps = activity.snaps;
-  if (snaps && snaps.recent !== null && snaps.delta !== null && Number.isFinite(snaps.delta)) {
-    moves.push({ label: 'snaps', delta: snaps.delta, from: snaps.season, to: snaps.recent });
+  if (
+    snaps &&
+    snaps.recent !== null &&
+    snaps.prior !== null &&
+    snaps.delta !== null &&
+    Number.isFinite(snaps.delta)
+  ) {
+    // `from` is the prior window, not the season mean. They are different
+    // numbers and only one of them is a period the player actually had — see
+    // `activity.MetricWindow.prior`. `describeAdjustment` prints this verbatim
+    // as "up from X%", so a season mean here is a claim that is not true.
+    moves.push({ label: 'snaps', delta: snaps.delta, from: snaps.prior, to: snaps.recent });
     games = Math.max(games, snaps.recentGames);
   }
 
@@ -155,13 +165,14 @@ export function roleShift(
     headline &&
     headline.kind === 'share' &&
     headline.window.recent !== null &&
+    headline.window.prior !== null &&
     headline.window.delta !== null &&
     Number.isFinite(headline.window.delta)
   ) {
     moves.push({
       label: headline.label.toLowerCase(),
       delta: headline.window.delta,
-      from: headline.window.season,
+      from: headline.window.prior,
       to: headline.window.recent,
     });
     games = Math.max(games, headline.window.recentGames);

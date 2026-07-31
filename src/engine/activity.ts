@@ -40,16 +40,45 @@ export const FINAL_REGULAR_WEEK = 18;
 export const MATERIAL_DELTA = 0.1;
 
 export interface MetricWindow {
-  /** Mean across every week with a value, 0-1 for shares. */
+  /**
+   * Mean across every week with a value, 0-1 for shares.
+   *
+   * A genuine season-to-date figure, Week 18 included — this is what `role.ts`
+   * classifies on and what the roster column displays. It is deliberately *not*
+   * what `delta` measures against; see `prior`.
+   */
   season: number;
   /** Mean across the recent window, or null if he has no week in it. */
   recent: number | null;
-  /** `recent - season`. Null when there is no recent window. */
+  /**
+   * Mean across the weeks *before* the recent window, or null if there are none.
+   *
+   * The baseline `delta` is measured from, and the reason it is not `season`.
+   * A season mean contains the recent window, so `recent - season` compares a
+   * period against a set it belongs to and understates every move — measured
+   * across 101 players on the 2025 file, the median reported delta was **0.724**
+   * of the true one. Worse, the "up from X%" the UI prints was then a blend the
+   * player never had: Gibbs read "76% snaps, up from 67%" when his weeks 1-13
+   * were 63.6%.
+   *
+   * It also removes the Week 18 asymmetry at the root. Week 18 was excluded from
+   * `recent` (see `FINAL_REGULAR_WEEK`) but left inside `season`, which dropped
+   * the baseline of every rested starter and flipped him to a *positive* delta —
+   * 14 of the 25 players who sat Week 18 in 2025, Josh Allen among them, who
+   * played 83-100% every week of the season and was reported as "100% snaps, up
+   * from 92%". The old bug had simply changed sign. Week 18 falls after the
+   * recent window, so it is outside `prior` by construction and neither side of
+   * the comparison can see it.
+   */
+  prior: number | null;
+  /** `recent - prior`. Null unless both windows have a week in them. */
   delta: number | null;
   /** Weeks with a value, all season. */
   games: number;
   /** Weeks with a value inside the recent window. */
   recentGames: number;
+  /** Weeks with a value before the recent window. */
+  priorGames: number;
 }
 
 export interface Sample {
@@ -76,24 +105,48 @@ const mean = (values: number[]): number =>
  *
  * It also stops short of Week 18 — see `FINAL_REGULAR_WEEK`. Mid-season this
  * changes nothing, because the window has not reached that far.
+ *
+ * The two windows are disjoint: `recent` is the four weeks up to the anchor and
+ * `prior` is everything before them, so `delta` compares two periods that share
+ * no game. `season` spans both and is reported for display and classification
+ * only. Comparing against a mean that contains the window being measured is what
+ * made every delta 28% too small and turned rested Week 18 starters into buy-low
+ * signals; see `MetricWindow.prior`.
+ *
+ * Through the first four weeks of a season nothing is before the window, so
+ * `delta` is null rather than zero. That is the honest answer — you cannot
+ * measure a change in role in Week 3 — and the same applies to a player whose
+ * first appearance falls inside the window.
  */
 export function summarize(samples: Sample[], throughWeek: number): MetricWindow | null {
   const played = samples.filter((sample) => sample.value !== null);
   if (played.length === 0) return null;
 
   const anchor = Math.min(throughWeek, FINAL_REGULAR_WEEK - 1);
+  const opens = anchor - RECENT_WEEKS;
+
   const recentPlayed = played.filter(
-    (sample) => sample.week > anchor - RECENT_WEEKS && sample.week <= anchor,
+    (sample) => sample.week > opens && sample.week <= anchor,
   );
-  const recent =
-    recentPlayed.length > 0 ? mean(recentPlayed.map((sample) => sample.value as number)) : null;
+  // Everything before the recent window opens. Week 18 sits *after* the anchor,
+  // so it is excluded here as well — which is the point: it must not reach
+  // either side of the comparison.
+  const priorPlayed = played.filter((sample) => sample.week <= opens);
+
+  const meanOf = (samples: Sample[]) =>
+    samples.length > 0 ? mean(samples.map((sample) => sample.value as number)) : null;
+
+  const recent = meanOf(recentPlayed);
+  const prior = meanOf(priorPlayed);
   const season = mean(played.map((sample) => sample.value as number));
 
   return {
     season,
     recent,
-    delta: recent === null ? null : recent - season,
+    prior,
+    delta: recent === null || prior === null ? null : recent - prior,
     games: played.length,
     recentGames: recentPlayed.length,
+    priorGames: priorPlayed.length,
   };
 }

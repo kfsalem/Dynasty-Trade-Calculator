@@ -11,24 +11,39 @@ import {
 } from './activityFactor';
 import { makePlayer } from './testFixtures';
 
-const snaps = (season: number, recent: number | null, recentGames = 4): SnapShare => ({
-  season,
+/**
+ * The first argument is the **prior** window, not the season mean.
+ *
+ * `roleShift` measures `recent - prior` across two disjoint periods. `season`
+ * spans both and is only ever displayed, so it is filled in here as the weighted
+ * blend it really is — that way nothing can read `season` and accidentally agree
+ * with `prior`, which is exactly the confusion the old fixture encoded.
+ */
+const blend = (prior: number, recent: number | null): number =>
+  recent === null ? prior : (13 * prior + 4 * recent) / 17;
+
+const snaps = (prior: number, recent: number | null, recentGames = 4): SnapShare => ({
+  season: blend(prior, recent),
   recent,
-  delta: recent === null ? null : recent - season,
+  prior,
+  delta: recent === null ? null : recent - prior,
   games: 17,
   recentGames: recent === null ? 0 : recentGames,
+  priorGames: 13,
 });
 
-const metric = (season: number, recent: number | null, recentGames = 4): Metric => ({
+const metric = (prior: number, recent: number | null, recentGames = 4): Metric => ({
   key: 'targetShare',
   label: 'Target share',
   kind: 'share',
   window: {
-    season,
+    season: blend(prior, recent),
     recent,
-    delta: recent === null ? null : recent - season,
+    prior,
+    delta: recent === null ? null : recent - prior,
     games: 17,
     recentGames: recent === null ? 0 : recentGames,
+    priorGames: 13,
   },
 });
 

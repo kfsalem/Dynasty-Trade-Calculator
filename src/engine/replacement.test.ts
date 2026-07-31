@@ -620,8 +620,16 @@ describe('valueLeague', () => {
       if (i % 3 === 0) return;
       const bias = id.startsWith('RB') ? 0.3 : id.startsWith('TE') ? -0.3 : 0;
       const delta = bias + ((i % 5) - 2) * 0.02;
-      const season = 0.45;
-      snaps.set(id, { season, recent: season + delta, delta, games: 12, recentGames: 9 });
+      const prior = 0.45;
+      snaps.set(id, {
+        season: prior + delta / 3,
+        recent: prior + delta,
+        prior,
+        delta,
+        games: 12,
+        recentGames: 9,
+        priorGames: 3,
+      });
     });
 
     const activity = { snaps, usage: new Map(), current: true };

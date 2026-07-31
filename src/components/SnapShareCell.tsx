@@ -26,9 +26,22 @@ function describe(share: SnapShare): string {
   const recent = `Last ${RECENT_WEEKS} weeks ${pct(share.recent)} over ${share.recentGames} ${
     share.recentGames === 1 ? 'game' : 'games'
   }`;
-  const points = Math.round((share.delta ?? 0) * 100);
+
+  // The move is against the weeks *before* the window, not against the season —
+  // a season mean contains the window, so comparing to it understates every
+  // move and names a baseline the player never had. Saying which number it is
+  // measured from matters here, because the two differ and both are on screen.
+  if (share.prior === null || share.delta === null) {
+    return `${season}. ${recent}. No earlier weeks to compare against.`;
+  }
+
+  const points = Math.round(share.delta * 100);
   const move =
-    points === 0 ? 'unchanged' : `${points > 0 ? '+' : ''}${points} points on the season`;
+    points === 0
+      ? 'unchanged'
+      : `${points > 0 ? '+' : ''}${points} points against ${pct(share.prior)} over the ${
+          share.priorGames
+        } ${share.priorGames === 1 ? 'week' : 'weeks'} before`;
 
   return `${season}. ${recent} — ${move}.`;
 }
@@ -78,7 +91,7 @@ export function SnapShareCell({
           className={`text-[10px] font-semibold ${
             rising ? 'text-emerald-600' : 'text-fantasy-red'
           }`}
-          aria-label={`${rising ? 'up' : 'down'} ${Math.abs(points)} points in the last ${RECENT_WEEKS} weeks`}
+          aria-label={`${rising ? 'up' : 'down'} ${Math.abs(points)} points over the last ${RECENT_WEEKS} weeks, against the weeks before them`}
         >
           {rising ? '▲' : '▼'}
         </span>

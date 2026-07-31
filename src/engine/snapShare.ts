@@ -15,12 +15,22 @@ export interface SnapShare {
   season: number;
   /** Mean across the recent window, or null if he did not play in it. */
   recent: number | null;
-  /** `recent - season`, in share points. Null when there is no recent window. */
+  /** Mean across the weeks before the recent window, or null if there are none. */
+  prior: number | null;
+  /**
+   * `recent - prior`, in share points. Null unless both windows have a game.
+   *
+   * Measured against `prior` rather than `season` on purpose — the two windows
+   * are disjoint, so this is a comparison between two periods rather than
+   * between a period and a set containing it. See `activity.MetricWindow.prior`.
+   */
   delta: number | null;
   /** Weeks he appeared in, all season. */
   games: number;
   /** Weeks he appeared in during the recent window. */
   recentGames: number;
+  /** Weeks he appeared in before the recent window. */
+  priorGames: number;
 }
 
 const WEEK = SNAP_COLUMNS.indexOf('week');
