@@ -11,6 +11,26 @@
 export const RECENT_WEEKS = 4;
 
 /**
+ * Last week of the regular season, and the one week that never counts.
+ *
+ * Week 18 does not measure a player's role — it measures playoff seeding. Teams
+ * with a locked seed rest their starters and teams still alive do not, so the
+ * same 25% of a four-week window means "his job is gone" for one player and
+ * nothing at all for another.
+ *
+ * Left in, it is not a small bias, it is a wrong answer: run against the real
+ * 2025 file, the sharpest declines in the league were Josh Allen at 75% snaps
+ * from 92%, and the starting quarterbacks in Tennessee and Minnesota alongside
+ * him. Every one of them rested a meaningless game, and every one was reported
+ * as a collapsing role — which, on the sell-high list, is advice to trade the
+ * best quarterback in football because he sat out Week 18.
+ *
+ * So the recent window ends at Week 17. The season average still counts Week 18,
+ * where one game in seventeen cannot do any damage.
+ */
+export const FINAL_REGULAR_WEEK = 18;
+
+/**
  * Movement below which a delta is noise rather than a role change.
  *
  * Ten points is roughly a rotational back going from a third of the work to
@@ -53,12 +73,18 @@ const mean = (values: number[]): number =>
  * four appearances. That way a starter who has not played since Week 14 reads
  * as having no recent role, which is true, instead of borrowing his October
  * form.
+ *
+ * It also stops short of Week 18 — see `FINAL_REGULAR_WEEK`. Mid-season this
+ * changes nothing, because the window has not reached that far.
  */
 export function summarize(samples: Sample[], throughWeek: number): MetricWindow | null {
   const played = samples.filter((sample) => sample.value !== null);
   if (played.length === 0) return null;
 
-  const recentPlayed = played.filter((sample) => sample.week > throughWeek - RECENT_WEEKS);
+  const anchor = Math.min(throughWeek, FINAL_REGULAR_WEEK - 1);
+  const recentPlayed = played.filter(
+    (sample) => sample.week > anchor - RECENT_WEEKS && sample.week <= anchor,
+  );
   const recent =
     recentPlayed.length > 0 ? mean(recentPlayed.map((sample) => sample.value as number)) : null;
   const season = mean(played.map((sample) => sample.value as number));

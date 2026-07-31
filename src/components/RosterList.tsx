@@ -61,7 +61,9 @@ export function RosterList({
           , alongside his share of the team's work in his own role — targets for a
           receiver, carries for a back. A ▲ or ▼ marks someone whose last four weeks
           differ from his season by more than ten points; a role change is the slowest
-          thing the market reprices. Where that change is big enough to matter, a signed
+          thing the market reprices. That window stops at Week 17 — a locked playoff seed
+          rests its starters in Week 18, so the week says more about seeding than about
+          anyone's role. Where that change is big enough to matter, a signed
           percentage shows how much it moved the value itself — always a fraction of the
           move in snap share, because a dynasty price is mostly a bet on future role and
           already carries most of this. Hover any number for the full breakdown.

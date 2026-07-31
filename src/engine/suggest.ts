@@ -10,6 +10,7 @@ import {
 import { picksForRoster } from './picks';
 import { bestLineup, valuePlayers, type RosterSummary } from './rosterValue';
 import { evaluateTrade, type TradeContext } from './trade';
+import type { RoleTrend, RoleTrends } from './roleTrend';
 
 /**
  * Trade suggestions: search the league for offers that help both sides.
@@ -84,6 +85,14 @@ export interface SuggestionResult {
 
 export interface SuggestContext extends TradeContext {
   summaries: RosterSummary[];
+  /**
+   * Role trends, when activity data is available.
+   *
+   * Optional because the engine has to keep working without it — the static
+   * activity files are allowed to fail to load, and a league that cannot value
+   * a role change must still be able to suggest a trade.
+   */
+  trends?: RoleTrends;
 }
 
 export interface SuggestOptions {
@@ -199,12 +208,24 @@ function lineupIds(playerIds: string[], ctx: SuggestContext): Set<string> {
  * limited to assets a manager has an actual reason to sell:
  *
  * - **Surplus** — bench players who would start elsewhere. Always movable.
+ * - **Sell-high** — anyone whose price is outliving his role. The reason to
+ *   move him is the whole definition of the category.
+ * - **Buy-low on the bench** — a player whose role has outgrown his price but
+ *   who is still benched here. His owner is sitting him, so he is genuinely
+ *   available; that he is *underpriced* is the acquiring side's edge, not a
+ *   reason his owner holds him. Restricted to the bench on purpose: a riser
+ *   already in the lineup is not something his manager sells.
  * - **Contenders** additionally spend **picks**, which are the currency of a
  *   team trying to win before its window shuts.
  * - **Rebuilders** additionally sell **aging starters**, whose value is highest
  *   today and falls every year they are held.
  *
  * Drawing from anywhere else produces offers that get declined on sight.
+ *
+ * The trend categories matter because the surplus test is a *value* test — it
+ * asks who would out-rank a weakest starter elsewhere. A player whose role has
+ * changed but whose price has not is exactly the player that test misses, and
+ * exactly the one worth trading for.
  */
 export function movableAssets(
   analysis: TeamAnalysis,
@@ -220,6 +241,16 @@ export function movableAssets(
     assets.set(
       surplus.player.id,
       playerAsset(surplus.player, surplus.value, market(surplus.player.id, surplus.value)),
+    );
+  }
+
+  for (const trend of rosterTrends(ctx.trends, summary.rosterId)) {
+    if (trend.gap > 0 && summary.starterIds.has(trend.player.id)) continue;
+    const entry = summary.players.find((p) => p.player.id === trend.player.id);
+    if (!entry || entry.value <= 0) continue;
+    assets.set(
+      trend.player.id,
+      playerAsset(trend.player, entry.value, market(trend.player.id, entry.value)),
     );
   }
 
@@ -337,6 +368,37 @@ function sideBenefit(
 
 const round = (n: number): string => Math.round(n).toLocaleString('en-US');
 
+const pct = (share: number): string => `${Math.round(share * 100)}%`;
+
+/** Every trend on one roster, both directions, in one list. */
+function rosterTrends(trends: RoleTrends | undefined, rosterId: number): RoleTrend[] {
+  if (!trends) return [];
+  return [...trends.buyLow, ...trends.sellHigh].filter((t) => t.rosterId === rosterId);
+}
+
+function findTrend(trends: RoleTrends | undefined, playerId: string): RoleTrend | undefined {
+  if (!trends) return undefined;
+  return [...trends.buyLow, ...trends.sellHigh].find((t) => t.player.id === playerId);
+}
+
+/**
+ * The evidence behind a trend, in the sentence a manager would say it in.
+ *
+ * The games count is not decoration. It is the difference between a role change
+ * and a game script, and a claim about someone's usage that does not say how
+ * much of it was measured is not a claim anyone should act on.
+ */
+function trendEvidence(trend: RoleTrend): string {
+  const lead = trend.reasons[0];
+  if (!lead) return `${trend.games} games of usage data`;
+
+  const direction = lead.to > lead.from ? 'up from' : 'down from';
+  const window = `over ${trend.games} ${trend.games === 1 ? 'game' : 'games'}`;
+  const caveat = trend.thin ? ', a short window' : '';
+
+  return `${pct(lead.to)} ${lead.label}, ${direction} ${pct(lead.from)} ${window}${caveat}`;
+}
+
 /** Bullets explaining a trade from one team's point of view. */
 function explain(
   side: TradeSideResult,
@@ -345,6 +407,7 @@ function explain(
   analysis: TeamAnalysis,
   summary: RosterSummary,
   perspective: 'mine' | 'theirs',
+  trends?: RoleTrends,
 ): string[] {
   const they = perspective === 'mine' ? 'You' : side.teamName;
   const their = perspective === 'mine' ? 'your' : 'their';
@@ -384,6 +447,16 @@ function explain(
   }
 
   for (const player of side.incomingPlayers) {
+    // Stated before the lineup and positional reasons, because a role the
+    // market has not caught up with is the whole argument for the trade where
+    // it applies — the rest is why the fit works once you have him.
+    const rising = findTrend(trends, player.id);
+    if (rising && rising.gap > 0) {
+      lines.push(
+        `${player.name} is playing more than his price says: ${trendEvidence(rising)}. That's worth about ${round(rising.gap)} the market hasn't charged for yet.`,
+      );
+    }
+
     const position = analysis.positions.find((p) => p.position === player.position);
     if (position?.verdict === 'weakness') {
       lines.push(
@@ -395,6 +468,14 @@ function explain(
   }
 
   for (const player of side.outgoingPlayers) {
+    const falling = findTrend(trends, player.id);
+    if (falling && falling.gap < 0) {
+      lines.push(
+        `${player.name} is selling at a price his current role no longer supports: ${trendEvidence(falling)}. Moving him now is ${round(Math.abs(falling.gap))} of name value ${they === 'You' ? 'you' : 'they'} would otherwise watch the market take back.`,
+      );
+      continue;
+    }
+
     const surplus = analysis.surpluses.find((s) => s.player.id === player.id);
     if (surplus) {
       lines.push(
@@ -490,6 +571,7 @@ function buildSuggestion(
       mine.analysis,
       mine.summary,
       'mine',
+      ctx.trends,
     ),
     whyTheySayYes: explain(
       theirSide,
@@ -498,6 +580,7 @@ function buildSuggestion(
       partner.analysis,
       partner.summary,
       'theirs',
+      ctx.trends,
     ),
   };
 }

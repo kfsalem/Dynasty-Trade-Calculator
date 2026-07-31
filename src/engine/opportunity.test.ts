@@ -110,10 +110,10 @@ describe('opportunity', () => {
         'WR',
         { week: 1, targetShare: 0.1, airYardsShare: 0.1, wopr: 0.2 },
         { week: 2, targetShare: 0.1, airYardsShare: 0.1, wopr: 0.2 },
+        { week: 16, targetShare: 0.3, airYardsShare: 0.3, wopr: 0.6 },
         { week: 17, targetShare: 0.3, airYardsShare: 0.3, wopr: 0.6 },
-        { week: 18, targetShare: 0.3, airYardsShare: 0.3, wopr: 0.6 },
       ),
-      18,
+      17,
     );
 
     const targets = derived?.metrics[0].window;
@@ -122,6 +122,25 @@ describe('opportunity', () => {
     expect(targets?.delta).toBeCloseTo(0.1);
     expect(targets?.games).toBe(4);
     expect(targets?.recentGames).toBe(2);
+  });
+
+  it('ends the recent window at Week 17, exactly as snap share does', () => {
+    // The two have to draw the window identically or the columns beside each
+    // other stop being comparable, which is the whole reason `activity.ts`
+    // holds one implementation.
+    const derived = opportunity(
+      player(
+        'WR',
+        { week: 16, targetShare: 0.3, airYardsShare: 0.3, wopr: 0.6 },
+        { week: 17, targetShare: 0.3, airYardsShare: 0.3, wopr: 0.6 },
+        { week: 18, targetShare: 0.02, airYardsShare: 0.02, wopr: 0.04 },
+      ),
+      18,
+    );
+
+    const targets = derived?.metrics[0].window;
+    expect(targets?.recentGames).toBe(2);
+    expect(targets?.recent).toBeCloseTo(0.3);
   });
 
   it('drops a metric the source never published, rather than showing it as zero', () => {

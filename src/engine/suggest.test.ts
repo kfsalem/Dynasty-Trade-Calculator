@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { movableAssets, suggestTrades, type SuggestContext } from './suggest';
+import type { RoleTrend, RoleTrends } from './roleTrend';
 import { analyzeTeam } from './analysis';
 import { summarizeRoster, type RosterSummary } from './rosterValue';
 import type { DraftPick, LineupSlot, Player, PlayerValue, Position, Roster } from '../types';
@@ -109,6 +110,13 @@ const COMPLEMENTARY: Spec[] = [
   },
 ];
 
+/** The same league, plus a bench receiver too cheap to register as surplus. */
+const WITH_BENCH: Spec[] = COMPLEMENTARY.map((spec) =>
+  spec.rosterId === 1
+    ? { ...spec, players: [...spec.players, ['wr3', 'WR', 300, 24] as Spec['players'][number]] }
+    : spec,
+);
+
 describe('movableAssets', () => {
   it('offers picks from a contender, since picks are what a contender spends', () => {
     const ctx = world(COMPLEMENTARY, 1200);
@@ -136,7 +144,123 @@ describe('movableAssets', () => {
   });
 });
 
+/**
+ * A role trend, as `roleTrend.ts` would have produced it.
+ *
+ * Built by hand rather than run through `roleTrends` so these tests are about
+ * what the suggestion engine does with a trend, not about how one is detected.
+ */
+function trend(
+  ctx: SuggestContext,
+  playerId: string,
+  rosterId: number,
+  gap: number,
+  overrides: Partial<RoleTrend> = {},
+): RoleTrend {
+  return {
+    player: ctx.players.get(playerId) as Player,
+    rosterId,
+    gap,
+    base: 1000,
+    factor: gap > 0 ? 1.1 : 0.9,
+    games: 5,
+    reasons: [{ label: 'snaps', from: 0.35, to: 0.7 }],
+    thin: false,
+    ...overrides,
+  };
+}
+
+const trends = (buyLow: RoleTrend[], sellHigh: RoleTrend[] = []): RoleTrends => ({
+  buyLow,
+  sellHigh,
+  applied: true,
+});
+
+describe('movableAssets with role trends', () => {
+  it('offers a starter whose price has outlived his role', () => {
+    // t1_wr1 is a 25-year-old starter on a juggernaut: not surplus, not past an
+    // age cliff, and so invisible to every existing rule. Selling high is the
+    // one reason a manager would move him, which is exactly the gap R7 fills.
+    const base = world(COMPLEMENTARY, 1200);
+    const ctx: SuggestContext = {
+      ...base,
+      trends: trends([], [trend(base, 't1_wr1', 1, -400)]),
+    };
+    const summary = ctx.summaries.find((s) => s.rosterId === 1) as RosterSummary;
+    const analysis = analyzeTeam(1, ctx.summaries, settings);
+
+    expect(movableAssets(analysis!, summary, base, 8).map((a) => a.id)).not.toContain('t1_wr1');
+    expect(movableAssets(analysis!, summary, ctx, 8).map((a) => a.id)).toContain('t1_wr1');
+  });
+
+  it('offers a benched riser the surplus test misses', () => {
+    // The surplus test is a *value* test — it asks who would out-rank a weakest
+    // starter elsewhere. t1_wr3 is worth 300 and clears nobody, so he is not
+    // surplus; a role that has grown while his price has not is precisely the
+    // case that test cannot see.
+    const base = world(WITH_BENCH, 1200);
+    const ctx: SuggestContext = { ...base, trends: trends([trend(base, 't1_wr3', 1, 250)]) };
+    const summary = ctx.summaries.find((s) => s.rosterId === 1) as RosterSummary;
+    const analysis = analyzeTeam(1, ctx.summaries, settings);
+
+    expect(analysis!.surpluses.map((s) => s.player.id)).not.toContain('t1_wr3');
+    expect(movableAssets(analysis!, summary, base, 8).map((a) => a.id)).not.toContain('t1_wr3');
+    expect(movableAssets(analysis!, summary, ctx, 8).map((a) => a.id)).toContain('t1_wr3');
+  });
+
+  it('will not sell a riser who is already in the lineup', () => {
+    // Nobody trades away the back who just took over their backfield. That he
+    // is underpriced is the *acquiring* side's edge, not a reason his manager
+    // parts with him.
+    const base = world(COMPLEMENTARY, 1200);
+    const ctx: SuggestContext = { ...base, trends: trends([trend(base, 't1_wr1', 1, 400)]) };
+    const summary = ctx.summaries.find((s) => s.rosterId === 1) as RosterSummary;
+    const analysis = analyzeTeam(1, ctx.summaries, settings);
+
+    expect(summary.starterIds.has('t1_wr1')).toBe(true);
+    expect(movableAssets(analysis!, summary, ctx, 8).map((a) => a.id)).not.toContain('t1_wr1');
+  });
+});
+
 describe('suggestTrades', () => {
+  it('states the role evidence behind an incoming player', () => {
+    const base = world(COMPLEMENTARY, 1200);
+    const ctx: SuggestContext = { ...base, trends: trends([trend(base, 't2_rb', 2, 620)]) };
+
+    const { trades } = suggestTrades(1, ctx);
+    const acquiring = trades.find((t) => t.get.some((a) => a.id === 't2_rb'));
+
+    expect(acquiring).toBeDefined();
+    const line = acquiring!.rationale.find((l) => l.includes('playing more than his price'));
+    // The claim is worthless without the sample behind it: a usage number with
+    // no games attached is not something anyone should trade on.
+    expect(line).toContain('70% snaps, up from 35% over 5 games');
+    expect(line).toContain('620');
+  });
+
+  it('caveats a trend drawn from a short window', () => {
+    const base = world(COMPLEMENTARY, 1200);
+    const ctx: SuggestContext = {
+      ...base,
+      trends: trends([trend(base, 't2_rb', 2, 620, { games: 3, thin: true })]),
+    };
+
+    const { trades } = suggestTrades(1, ctx);
+    const acquiring = trades.find((t) => t.get.some((a) => a.id === 't2_rb'));
+
+    expect(acquiring!.rationale.some((l) => l.includes('a short window'))).toBe(true);
+  });
+
+  it('is unchanged when no trend data is available at all', () => {
+    // The static activity files are allowed to fail to load, and a league that
+    // cannot value a role change must still be able to suggest a trade.
+    const ctx = world(COMPLEMENTARY, 1200);
+
+    expect(suggestTrades(1, { ...ctx, trends: undefined }).trades.map((t) => t.id)).toEqual(
+      suggestTrades(1, ctx).trades.map((t) => t.id),
+    );
+  });
+
   it('finds the complementary trade across contention windows', () => {
     const ctx = world(COMPLEMENTARY);
     const result = suggestTrades(1, ctx);

@@ -22,12 +22,34 @@ describe('snapShare', () => {
 
   it('reads the recent window as the last four weeks of the season', () => {
     const share = snapShare(
-      player([1, 0.3], [2, 0.3], [3, 0.3], [15, 0.7], [16, 0.7], [17, 0.7], [18, 0.7]),
-      18,
+      player([1, 0.3], [2, 0.3], [3, 0.3], [14, 0.7], [15, 0.7], [16, 0.7], [17, 0.7]),
+      17,
     );
 
     expect(share?.recent).toBeCloseTo(0.7);
     expect(share?.recentGames).toBe(4);
+  });
+
+  it('ends the recent window at Week 17, because Week 18 is not about role', () => {
+    // Weeks 15-18 played; only 15, 16 and 17 count. A team with a locked seed
+    // rests its starters in Week 18 and a team still alive does not, so the
+    // same week means "his job is gone" for one player and nothing for another.
+    const share = snapShare(player([15, 0.7], [16, 0.7], [17, 0.7], [18, 0.7]), 18);
+
+    expect(share?.recentGames).toBe(3);
+    // Still counted in the season average, where one game in seventeen is
+    // harmless — it is only the four-week window it distorts.
+    expect(share?.games).toBe(4);
+  });
+
+  it('does not read a rested Week 18 as a collapsing role', () => {
+    // The regression this rule exists for. Against the real 2025 file this
+    // shape described Josh Allen, and the sell-high list called him a fading
+    // asset on the strength of one meaningless game.
+    const rested = snapShare(player([14, 0.92], [15, 0.92], [16, 0.92], [18, 0.1]), 18);
+
+    expect(rested?.recent).toBeCloseTo(0.92);
+    expect(rested?.delta).toBeGreaterThanOrEqual(0);
   });
 
   it('surfaces a rising role as a positive delta', () => {

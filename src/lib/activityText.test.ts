@@ -5,7 +5,7 @@ import { describeAdjustment } from './activityText';
 const adjustment = (
   factor: number,
   reasons: ActivityAdjustment['reasons'],
-): ActivityAdjustment => ({ factor, signal: 0, reasons });
+): ActivityAdjustment => ({ factor, signal: 0, games: 4, reasons });
 
 describe('describeAdjustment', () => {
   it('leads with where the player is now and follows with where he was', () => {

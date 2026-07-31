@@ -53,6 +53,7 @@ function App() {
     roles,
     snapsMeta,
     adjustments,
+    trends,
     isLoading,
     error,
   } = useLeagueSummaries(leagueId);
@@ -165,6 +166,8 @@ function App() {
                     picks={picks}
                     summaries={summaries}
                     myRosterId={myRosterId}
+                    trends={trends}
+                    season={snapsMeta?.season}
                     onOpenInCalculator={(trade) => {
                       setPending((prev) => ({ trade, seq: (prev?.seq ?? 0) + 1 }));
                       setTab('trade');

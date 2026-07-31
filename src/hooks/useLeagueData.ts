@@ -9,6 +9,7 @@ import { valueLeague, type LeagueActivity } from '../engine/replacement';
 import { snapShares } from '../engine/snapShare';
 import { opportunities } from '../engine/opportunity';
 import { playerRoles } from '../engine/role';
+import { roleTrends } from '../engine/roleTrend';
 import { fetchDepthCharts, fetchOpportunity, fetchSnapCounts } from '../data/activity';
 import type { DraftPick, LeagueSettings } from '../types';
 
@@ -203,6 +204,27 @@ export function useLeagueSummaries(leagueId: string | null) {
     });
   }, [snaps, snapsQuery.data, depthQuery.data]);
 
+  /**
+   * Buy-low and sell-high, league-wide.
+   *
+   * Deliberately fed the *ungated* snap and usage maps rather than `activity`.
+   * The season gate is a rule about pricing — it stops the model charging twice
+   * for a role change the market has already absorbed — and it is not a claim
+   * that the change never happened. Out of season these still compute, and
+   * `applied` carries the distinction so a previewed gap is never read as money
+   * already inside the value.
+   */
+  const trends = useMemo(() => {
+    if (!adjusted) return undefined;
+    return roleTrends({
+      summaries: adjusted.summaries,
+      values: adjusted.values,
+      snaps,
+      usage,
+      current: activity?.current ?? false,
+    });
+  }, [adjusted, snaps, usage, activity]);
+
   return {
     league: leagueQuery.data?.league,
     players: leagueQuery.data?.players,
@@ -216,6 +238,8 @@ export function useLeagueSummaries(leagueId: string | null) {
     roles,
     /** What activity did to each value, so a moved number can explain itself. */
     adjustments: adjusted?.adjustments,
+    /** Players whose role has outgrown their price, and the reverse. */
+    trends,
     /** Dates the activity data so the UI can say what it is describing. */
     snapsMeta: snapsQuery.data
       ? {
