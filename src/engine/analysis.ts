@@ -68,6 +68,22 @@ export interface ContentionProfile {
    */
   retainedShare: number;
   teamCount: number;
+  /**
+   * Where this team sits on each axis, 0 (weakest / oldest) to 1.
+   *
+   * The quadrant is a median split, so exactly half the league is "weak now" by
+   * construction — on a ten-team league that hands four teams the danger-zone
+   * verdict every season, including one sitting sixth of ten and four percent
+   * below the median. As a *label* that is only unkind. As an input it was
+   * worse: `WINDOW_WEIGHTS` read the quadrant and nothing else, so a team a
+   * hair below the median was scored on trades as though it had given up on the
+   * season, while the team a hair above was scored as a contender.
+   *
+   * These carry the distance the label throws away, so a consumer can be
+   * continuous where the label cannot. See `suggest.windowWeights`.
+   */
+  nowShare: number;
+  youthShare: number;
   quadrant: Quadrant;
   label: string;
   advice: string;
@@ -183,9 +199,10 @@ export function contentionProfile(
   const retained = (n: number, f: number) => f / (n || 1);
   const retainedShare = retained(now, future);
 
+  const retainedShares = nowScores.map((n, i) => retained(n, futureScores[i]));
+
   const strongNow = now >= median(nowScores);
-  const strongFuture =
-    retainedShare >= median(nowScores.map((n, i) => retained(n, futureScores[i])));
+  const strongFuture = retainedShare >= median(retainedShares);
 
   const quadrant: Quadrant = strongNow
     ? strongFuture
@@ -195,6 +212,13 @@ export function contentionProfile(
       ? 'rebuilding'
       : 'danger';
 
+  // Fraction of the league this team is at or above. A single team is its own
+  // whole league and sits in the middle of it rather than at an extreme.
+  const share = (value: number, population: number[]) =>
+    population.length <= 1
+      ? 0.5
+      : population.filter((v) => v < value).length / (population.length - 1);
+
   return {
     nowScore: now,
     futureScore: future,
@@ -202,6 +226,8 @@ export function contentionProfile(
     futureRank: futureScores.filter((v) => v > future).length + 1,
     retainedShare,
     teamCount: all.length,
+    nowShare: share(now, nowScores),
+    youthShare: share(retainedShare, retainedShares),
     quadrant,
     ...QUADRANTS[quadrant],
   };

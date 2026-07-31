@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { movableAssets, suggestTrades, type SuggestContext } from './suggest';
+import {
+  WINDOW_WEIGHTS,
+  movableAssets,
+  suggestTrades,
+  windowWeights,
+  type SuggestContext,
+} from './suggest';
 import type { RoleTrend, RoleTrends } from './roleTrend';
-import { analyzeTeam } from './analysis';
+import { analyzeTeam, type ContentionProfile } from './analysis';
 import { summarizeRoster, type RosterSummary } from './rosterValue';
 import type { DraftPick, LineupSlot, Player, PlayerValue, Position, Roster } from '../types';
 import {
@@ -456,5 +462,81 @@ describe('suggestTrades', () => {
     const result = suggestTrades(99, world(COMPLEMENTARY));
     expect(result.trades).toHaveLength(0);
     expect(result.note).toContain('no longer in this league');
+  });
+});
+
+describe('windowWeights', () => {
+  const profile = (nowShare: number, youthShare: number): ContentionProfile => ({
+    nowScore: 0,
+    futureScore: 0,
+    nowRank: 1,
+    futureRank: 1,
+    retainedShare: 1,
+    teamCount: 10,
+    nowShare,
+    youthShare,
+    quadrant: 'danger',
+    label: '',
+    advice: '',
+  });
+
+  it('reproduces the quadrant table exactly at the corners', () => {
+    // The continuous form must not quietly re-tune the model. An unambiguous
+    // juggernaut and an unambiguous danger-zone team are scored precisely as
+    // they were; only the ground between them changes.
+    expect(windowWeights(profile(1, 1)).now).toBeCloseTo(WINDOW_WEIGHTS.juggernaut.now, 10);
+    expect(windowWeights(profile(1, 0)).now).toBeCloseTo(WINDOW_WEIGHTS.win_now.now, 10);
+    expect(windowWeights(profile(0, 1)).now).toBeCloseTo(WINDOW_WEIGHTS.rebuilding.now, 10);
+    expect(windowWeights(profile(0, 0)).now).toBeCloseTo(WINDOW_WEIGHTS.danger.now, 10);
+  });
+
+  it('gives a mid-table team a balanced window instead of a rebuild mandate', () => {
+    /**
+     * The regression. Reading the quadrant alone, the sixth-placed roster in a
+     * ten-team league was weighted 0.35 on the present and the fifth-placed one
+     * 0.9 — a two-and-a-half-fold difference between two teams a few percent
+     * apart. Nothing about them justifies it, and it decided which trades each
+     * was offered.
+     */
+    const middle = windowWeights(profile(0.5, 0.5));
+
+    expect(middle.now).toBeCloseTo(0.575, 10);
+    expect(middle.now + middle.future).toBeCloseTo(1, 10);
+
+    // And the step across the median is gone: two teams either side of it are
+    // now weighted almost identically.
+    const justAbove = windowWeights(profile(0.55, 0.5)).now;
+    const justBelow = windowWeights(profile(0.45, 0.5)).now;
+    expect(Math.abs(justAbove - justBelow)).toBeLessThan(0.08);
+  });
+
+  it('still weights the present more the stronger a roster is', () => {
+    // Monotone in strength at every age, or the quadrant labels would describe
+    // an ordering the weights do not follow.
+    for (const youth of [0, 0.5, 1]) {
+      expect(windowWeights(profile(0.8, youth)).now).toBeGreaterThan(
+        windowWeights(profile(0.2, youth)).now,
+      );
+    }
+  });
+
+  it('is not monotone in age at the bottom, exactly as the table is not', () => {
+    // A strong roster gets more of its score from the present the older it is:
+    // that is what a closing window means. A *weak* one does not, because the
+    // anti-tanking floor holds the danger zone at 0.35 while a rebuilder sits
+    // at 0.4 — an old bad team has less reason to chase this year than a young
+    // bad team has to stay watchable. Interpolation inherits that shape rather
+    // than smoothing it away, and this pins the inheritance.
+    expect(windowWeights(profile(1, 0)).now).toBeGreaterThan(windowWeights(profile(1, 1)).now);
+    expect(windowWeights(profile(0, 0)).now).toBeLessThan(windowWeights(profile(0, 1)).now);
+  });
+
+  it('never drops the present below the anti-tanking floor', () => {
+    for (let strong = 0; strong <= 1.0001; strong += 0.1) {
+      for (let young = 0; young <= 1.0001; young += 0.1) {
+        expect(windowWeights(profile(Math.min(strong, 1), Math.min(young, 1))).now)
+          .toBeGreaterThanOrEqual(0.35);
+      }
+    }
   });
 });

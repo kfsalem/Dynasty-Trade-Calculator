@@ -891,6 +891,46 @@ actually rolled over to the current season: a dynasty league still sitting on
 last year's entry reads `complete`, which describes a finished season rather
 than this year's unscheduled rookie draft.
 
+**Two numbers that were saying more than they knew.** *(2026-07-31)*
+
+**The rankings ranked eight-slot lineups and called them lineups.** This league
+starts a kicker and a defence, neither of which has a dynasty market, so both
+count as exactly zero in `starterValue` — the one figure the rankings sort on and
+draw their bar from. That is the right price for a kicker and the wrong thing to
+say silently: an unfilled slot and a filled one are indistinguishable in it, and
+the starter counts confirm the gap is real rather than theoretical (K 9, DEF 8
+across ten teams). `RosterSummary` now carries `pricedSlots` and `totalSlots`,
+and the card reads "8 of 10 starters" whenever the number does not cover the
+whole lineup.
+
+**A median split was deciding what kind of team you are.** Both contention axes
+split on the median, so exactly half the league is "weak now" by construction.
+On the real league that put four teams in the danger zone every season, including
+one sitting **sixth of ten and four percent below the median**, and told it to
+"sell the veterans whose value is peaking."
+
+As a label that is only unkind. As an input it was worse: `WINDOW_WEIGHTS` read
+the quadrant and nothing else, so fifth place was scored on every trade at 0.9 on
+the present and sixth at 0.35 — a two-and-a-half-fold difference between two
+teams a few percent apart, deciding which offers each was shown.
+
+`ContentionProfile` now carries `nowShare` and `youthShare`, each team's position
+on its axis from 0 to 1, and `suggest.windowWeights` interpolates bilinearly
+across the four corner values instead of switching on the label. The corners are
+exactly the old table, so an unambiguous juggernaut and an unambiguous
+danger-zone team are scored precisely as before; only the ground between them
+changes. On the real league the step across the median is gone — 0.54 and 0.57
+for the teams either side of it, against 0.65 and 0.35 before.
+
+The interpolation deliberately inherits one non-monotonicity from the table it
+reproduces: a *weak* old team gets less weight on the present than a weak young
+one, because the anti-tanking floor holds the danger zone at 0.35 while a
+rebuilder sits at 0.4. That is the table's own shape and smoothing it away would
+be a different model, so a test pins it.
+
+The quadrant label itself is unchanged and still a median split. It is a summary
+now rather than a decision, which is the right job for it.
+
 ### Phase 5 — Scale out
 - MFL + Fleaflicker providers
 - Real accounts (Supabase) *if and only if* cross-device sync is actually wanted

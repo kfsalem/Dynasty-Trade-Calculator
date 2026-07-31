@@ -4,6 +4,7 @@ import {
   HORIZON_YEARS,
   analyzeTeam,
   retention,
+  type ContentionProfile,
   type Quadrant,
   type TeamAnalysis,
 } from './analysis';
@@ -135,6 +136,39 @@ export const WINDOW_WEIGHTS: Record<Quadrant, { now: number; future: number }> =
   rebuilding: { now: 0.4, future: 0.6 },
   danger: { now: 0.35, future: 0.65 },
 };
+
+/**
+ * The same four weights, read continuously instead of as a switch.
+ *
+ * The quadrant is a median split on each axis, so the table above jumps from
+ * 0.9 to 0.35 between two teams that may be a percent apart in strength. On the
+ * real ten-team league the sixth-placed roster sits four percent under the
+ * median and was scored on every trade as though it had given up on the season,
+ * while fifth was scored as a contender. Nothing about those two teams justifies
+ * a two-and-a-half-fold difference in how much winning this year is worth to
+ * them.
+ *
+ * Bilinear interpolation across the four corners fixes it without inventing a
+ * new model: the corner values are exactly the table above, so an unambiguous
+ * juggernaut and an unambiguous danger-zone team are scored precisely as before,
+ * and a team in the middle of the league lands in the middle of the weights —
+ * 0.575 now, which is the balance a mid-table dynasty roster actually wants.
+ */
+export function windowWeights(contention: ContentionProfile): {
+  now: number;
+  future: number;
+} {
+  const strong = contention.nowShare;
+  const young = contention.youthShare;
+
+  const now =
+    (1 - strong) * (1 - young) * WINDOW_WEIGHTS.danger.now +
+    (1 - strong) * young * WINDOW_WEIGHTS.rebuilding.now +
+    strong * (1 - young) * WINDOW_WEIGHTS.win_now.now +
+    strong * young * WINDOW_WEIGHTS.juggernaut.now;
+
+  return { now, future: 1 - now };
+}
 
 const CONTENDING: Quadrant[] = ['juggernaut', 'win_now'];
 
@@ -338,7 +372,7 @@ function balancePackage(
  */
 function sideBenefit(
   side: TradeSideResult,
-  quadrant: Quadrant,
+  contention: ContentionProfile,
   ctx: SuggestContext,
 ): { benefit: SideBenefit; afterIds: string[]; afterStarters: Set<string> } {
   const roster = ctx.league.rosters.find((r) => r.rosterId === side.rosterId);
@@ -357,10 +391,15 @@ function sideBenefit(
   const future =
     futureLineupValue(afterIds, ctx) - futureLineupValue(roster.playerIds, ctx) + pickDelta;
 
-  const weights = WINDOW_WEIGHTS[quadrant];
+  const weights = windowWeights(contention);
 
   return {
-    benefit: { now, future, total: weights.now * now + weights.future * future, quadrant },
+    benefit: {
+      now,
+      future,
+      total: weights.now * now + weights.future * future,
+      quadrant: contention.quadrant,
+    },
     afterIds,
     afterStarters: lineupIds(afterIds, ctx),
   };
@@ -546,8 +585,8 @@ function buildSuggestion(
   );
 
   const [mySide, theirSide] = analysis.sides;
-  const my = sideBenefit(mySide, mine.analysis.contention.quadrant, ctx);
-  const their = sideBenefit(theirSide, partner.analysis.contention.quadrant, ctx);
+  const my = sideBenefit(mySide, mine.analysis.contention, ctx);
+  const their = sideBenefit(theirSide, partner.analysis.contention, ctx);
 
   // The guard against the obvious failure mode. An engine that optimizes only
   // your side generates offers nobody accepts, which is the same as generating

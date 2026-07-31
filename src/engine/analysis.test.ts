@@ -194,6 +194,53 @@ describe('contentionProfile', () => {
     expect(quadrant(3)).toBe('danger');
   });
 
+  it('carries how far a team is from each split, not just which side it fell', () => {
+    /**
+     * The quadrant is a median split, so half the league is "weak now" by
+     * construction — on the real ten-team league that hands the danger-zone
+     * verdict to a roster sitting sixth of ten, four percent under the median.
+     * As a label that is merely unkind. As the *only* input to `WINDOW_WEIGHTS`
+     * it scored that team on every trade as though it had given up on the
+     * season, while the team a hair above it was scored as a contender.
+     *
+     * These shares carry the distance the label throws away, so
+     * `suggest.windowWeights` can be continuous where the label cannot.
+     */
+    const { summaries } = world();
+    const profiles = summaries.map((s) => contentionProfile(s, summaries, settings));
+
+    const shares = profiles.map((p) => p.nowShare);
+    expect(Math.min(...shares)).toBe(0);
+    // The top of the range need not reach 1: teams tied on score share a place,
+    // and a share that ignored ties would order them on nothing.
+    expect(Math.max(...shares)).toBeGreaterThan(0.5);
+
+    for (const profile of profiles) {
+      expect(profile.nowShare).toBeGreaterThanOrEqual(0);
+      expect(profile.nowShare).toBeLessThanOrEqual(1);
+      expect(profile.youthShare).toBeGreaterThanOrEqual(0);
+      expect(profile.youthShare).toBeLessThanOrEqual(1);
+    }
+
+    // The share must order teams the way the score does, or it is measuring
+    // something other than the axis the label splits on.
+    const byScore = [...profiles].sort((a, b) => a.nowScore - b.nowScore);
+    for (let i = 1; i < byScore.length; i++) {
+      expect(byScore[i].nowShare).toBeGreaterThanOrEqual(byScore[i - 1].nowShare);
+    }
+  });
+
+  it('puts a one-team league in the middle rather than at an extreme', () => {
+    // A share of 0 or 1 would say the league's only roster is its weakest or
+    // its strongest — true, and useless. With nobody to contend against, no
+    // window is indicated either way.
+    const { summaries } = world();
+    const alone = contentionProfile(summaries[0], [summaries[0]], settings);
+
+    expect(alone.nowShare).toBe(0.5);
+    expect(alone.youthShare).toBe(0.5);
+  });
+
   it('reports rank within the league', () => {
     const { summaries } = world();
     const profile = contentionProfile(summaries[3], summaries, settings);

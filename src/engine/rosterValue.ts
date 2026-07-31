@@ -60,6 +60,19 @@ export interface RosterSummary {
   /** Ids of players occupying a starting slot, for membership tests. */
   starterIds: Set<string>;
   starterValue: number;
+  /**
+   * Starting slots whose occupant carries a value, and how many there are in all.
+   *
+   * `starterValue` sums the lineup, and any slot filled by a player no source
+   * prices contributes exactly zero to it. In a league that starts a kicker and
+   * a defence — as this one does — that is two of ten slots, so the headline
+   * number compares eight-slot lineups while calling itself a lineup value. It
+   * is not wrong to price a kicker at nothing, but it is wrong to say so
+   * silently: an unfilled slot and a filled one are otherwise indistinguishable
+   * in the only number the rankings show.
+   */
+  pricedSlots: number;
+  totalSlots: number;
   /** Starters plus bench. Bench is worth far less in practice; see benchValue. */
   totalValue: number;
   benchValue: number;
@@ -169,6 +182,8 @@ export function summarizeRoster(
     lineup,
     starterIds,
     starterValue,
+    pricedSlots: lineup.filter((slot) => slot.entry?.valued).length,
+    totalSlots: lineup.length,
     totalValue,
     benchValue: totalValue - starterValue,
     byPosition,
