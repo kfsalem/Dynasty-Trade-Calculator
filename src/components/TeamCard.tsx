@@ -2,9 +2,11 @@ import { useState } from 'react';
 import type { RosterSummary, ValuedPlayer } from '../engine/rosterValue';
 import type { SnapShare } from '../engine/snapShare';
 import type { Opportunity } from '../engine/opportunity';
+import type { PlayerRole } from '../engine/role';
 import type { League } from '../types';
 import { SnapShareCell } from './SnapShareCell';
 import { UsageCell } from './UsageCell';
+import { RoleMarker } from './RoleMarker';
 import {
   POSITION_ORDER,
   POSITION_STYLES,
@@ -26,17 +28,26 @@ interface Props {
   snaps?: Map<string, SnapShare>;
   /** Position-appropriate opportunity metrics by Sleeper id. */
   usage?: Map<string, Opportunity>;
+  /** Role from snap share, cross-checked against the published chart. */
+  roles?: Map<string, PlayerRole>;
+  /** Season the published chart covers, for the role description. */
+  chartSeason?: number | null;
 }
 
 function PlayerLine({
   entry,
   snaps,
   usage,
+  roles,
+  chartSeason,
 }: {
   entry: ValuedPlayer;
   snaps?: Map<string, SnapShare>;
   usage?: Map<string, Opportunity>;
+  roles?: Map<string, PlayerRole>;
+  chartSeason?: number | null;
 }) {
+  const role = roles?.get(entry.player.id);
   const style = POSITION_STYLES[entry.player.position];
   return (
     <>
@@ -63,7 +74,10 @@ function PlayerLine({
           </span>
         ) : null}
       </span>
-      <SnapShareCell share={snaps?.get(entry.player.id)} />
+      {/* Outside the name span on purpose: inside it, a long name truncated
+          the badge away entirely. */}
+      <RoleMarker role={role} chartSeason={chartSeason ?? null} />
+      <SnapShareCell share={snaps?.get(entry.player.id)} role={role} chartSeason={chartSeason} />
       <UsageCell usage={usage?.get(entry.player.id)} />
       <span className="shrink-0 tabular-nums text-gray-500">
         {entry.valued ? formatValue(entry.value) : '~0'}
@@ -80,6 +94,8 @@ export function TeamCard({
   isMine,
   snaps,
   usage,
+  roles,
+  chartSeason,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -193,7 +209,13 @@ export function TeamCard({
                       {formatSlot(assignment.slot)}
                     </span>
                     {assignment.entry ? (
-                      <PlayerLine entry={assignment.entry} snaps={snaps} usage={usage} />
+                      <PlayerLine
+                        entry={assignment.entry}
+                        snaps={snaps}
+                        usage={usage}
+                        roles={roles}
+                        chartSeason={chartSeason}
+                      />
                     ) : (
                       <span className="flex-1 italic text-gray-400">empty</span>
                     )}
@@ -210,7 +232,13 @@ export function TeamCard({
                 {bench.length === 0 && <li className="text-gray-400">No bench players.</li>}
                 {bench.slice(0, 15).map((entry) => (
                   <li key={entry.player.id} className="flex items-center gap-2">
-                    <PlayerLine entry={entry} snaps={snaps} usage={usage} />
+                    <PlayerLine
+                      entry={entry}
+                      snaps={snaps}
+                      usage={usage}
+                      roles={roles}
+                      chartSeason={chartSeason}
+                    />
                   </li>
                 ))}
                 {bench.length > 15 && (

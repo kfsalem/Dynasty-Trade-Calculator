@@ -1,4 +1,6 @@
 import { MATERIAL_DELTA, RECENT_WEEKS, type SnapShare } from '../engine/snapShare';
+import type { PlayerRole } from '../engine/role';
+import { describeRole } from '../lib/roleText';
 
 const pct = (share: number): string => `${Math.round(share * 100)}%`;
 
@@ -37,12 +39,22 @@ function describe(share: SnapShare): string {
  * already truncating, and a name squeezed to forty pixels helps nobody. The
  * numbers are context for a decision the value columns drive.
  */
-export function SnapShareCell({ share }: { share: SnapShare | undefined }) {
+export function SnapShareCell({
+  share,
+  role,
+  chartSeason,
+}: {
+  share: SnapShare | undefined;
+  role?: PlayerRole;
+  chartSeason?: number | null;
+}) {
+  const roleText = role ? ` ${describeRole(role, chartSeason ?? null)}` : '';
+
   if (!share) {
     return (
       <span
         className="hidden w-14 shrink-0 text-right tabular-nums text-gray-300 sm:inline-block"
-        title="No snap data for this player"
+        title={`No snap data for this player.${roleText}`}
       >
         —
       </span>
@@ -56,7 +68,7 @@ export function SnapShareCell({ share }: { share: SnapShare | undefined }) {
   return (
     <span
       className="hidden w-14 shrink-0 items-baseline justify-end gap-0.5 tabular-nums sm:flex"
-      title={describe(share)}
+      title={`${describe(share)}${roleText}`}
     >
       <span className="text-gray-500">{pct(share.season)}</span>
       {material && (

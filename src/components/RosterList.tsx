@@ -2,6 +2,7 @@ import type { League } from '../types';
 import type { RosterSummary } from '../engine/rosterValue';
 import type { SnapShare } from '../engine/snapShare';
 import type { Opportunity } from '../engine/opportunity';
+import type { PlayerRole } from '../engine/role';
 import { TeamCard } from './TeamCard';
 import { formatValue } from '../lib/format';
 
@@ -11,7 +12,8 @@ interface Props {
   myRosterId: number | null;
   snaps?: Map<string, SnapShare>;
   usage?: Map<string, Opportunity>;
-  snapsMeta?: { season: number; throughWeek: number | null };
+  roles?: Map<string, PlayerRole>;
+  snapsMeta?: { season: number; throughWeek: number | null; chartSeason: number | null };
 }
 
 export function RosterList({
@@ -20,6 +22,7 @@ export function RosterList({
   myRosterId,
   snaps,
   usage,
+  roles,
   snapsMeta,
 }: Props) {
   const topStarterValue = summaries[0]?.starterValue ?? 0;
@@ -55,6 +58,9 @@ export function RosterList({
           receiver, carries for a back. A ▲ or ▼ marks someone whose last four weeks
           differ from his season by more than ten points; a role change is the slowest
           thing the market reprices. Hover any number for the full breakdown.
+          {snapsMeta.chartSeason === snapsMeta.season
+            ? ' A PLAYS UP or PLAYS DOWN badge marks someone the depth chart and the field disagree about — the chart is the slower of the two.'
+            : ` Depth chart positions are ${snapsMeta.chartSeason ?? 'a later season'}, so they are not compared against ${snapsMeta.season} snaps.`}
         </p>
       )}
 
@@ -77,6 +83,8 @@ export function RosterList({
             isMine={summary.rosterId === myRosterId}
             snaps={snaps}
             usage={usage}
+            roles={roles}
+            chartSeason={snapsMeta?.chartSeason ?? null}
           />
         ))}
       </div>
