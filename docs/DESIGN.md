@@ -497,9 +497,10 @@ that in a 10-team single-QB league every manager already starts a top-10
 quarterback. Phases 1–4 inherited that blind spot wholesale.
 
 - **Replacement level per position**, derived from the lineups the league
-  actually fields — `leagueValue = max(market * RESIDUAL_SHARE, market -
-  replacement(position))`. The first version used a hard `max(0, …)`; see
-  *The clamp was destroying the model* below for why that had to go.
+  actually fields — `leagueValue = market² / (market + replacement(position))`.
+  This started as a hard `max(0, market - replacement)`, then a floored
+  subtraction; see *The clamp was destroying the model* and *Subtraction was the
+  wrong operation* below for why each had to go.
 - **Realistic rookie pick values**: projected draft slot from the standings,
   plus a hard cliff after roughly pick 15 and near-zero third-rounders
 - **Anti-tanking**: no contention window weights the present below 0.35, and the
@@ -644,6 +645,79 @@ in test and 8 on the real league, bench value non-zero for all 10 teams, and
 every team reachable by the suggestion engine (129–205 packages considered per
 team, up from as few as 33). Retained share moved to RB 81%, WR 79%, TE 73%,
 QB 49%.
+
+**Subtraction was the wrong operation.** *(2026-07-31)*
+
+The floor kept the tail ordered and hid what it was ordering. Underneath, 94 of
+158 rostered players — **59%** — sat on `market × 0.1`, so the 10th, 25th and
+50th percentiles of retained value were all exactly `0.100`. The median rostered
+player was priced by nothing except a tenth of his market value, and the floor
+that was supposed to be a rescue was doing all the work.
+
+Two symptoms a manager sees before any of that:
+
+- **Jahmyr Gibbs and D'Andre Swift are 4.4x apart on market and came out 34x
+  apart.** Swift is a starting NFL back who finished RB15 in PPR; he was worth
+  230 against Gibbs' 7,846. Patrick Mahomes was 264, Travis Kelce 130.
+- **The league's best and worst rosters went from 1.82x apart on market to
+  3.93x.** Every lineup lost roughly eight starters × two thousand — the same
+  ~15,000 came off all ten teams — and the rankings render that ratio as a bar
+  width. A shift is not a scale, and ratios of a shifted quantity mean nothing.
+
+The mistake is a category error, not a tuning problem. VORP subtraction is
+defined on **projected points**, where one replacement level is a real quantity
+you can take away. A dynasty market value is a **price** — already convex in
+quality, already carrying scarcity — and subtracting a constant from a price
+shears it rather than deflating it. No choice of floor fixes that; the floor is
+what makes it survivable enough to ship.
+
+Replaced with `market² / (market + replacement)`, which is the same idea written
+so it cannot shear:
+
+```
+market² / (market + replacement)  ===  market - replacement × (market / (market + replacement))
+```
+
+You are charged the replacement cost *scaled by how far clear of it you are*.
+Far above replacement the scale approaches 1 and this is the old subtraction
+exactly, so nothing about the top of the model changed. Near replacement the
+charge shrinks with the surplus it comes out of, and can never overtake it —
+which is why no floor is needed: the curve is strictly increasing and strictly
+positive for any positive market value, so the ordering `RESIDUAL_SHARE` existed
+to protect is now a property of the curve rather than a repair to it.
+`RESIDUAL_SHARE` is deleted.
+
+On the real league: Gibbs/Swift **7.2x**, roster spread **2.30x**, retained
+percentiles p10/p25/p50/p75/p90 of **0.319 / 0.398 / 0.491 / 0.622 / 0.711**
+against `0.100 / 0.100 / 0.100 / 0.392 / 0.621` before. Retained share at the top
+of each position moved to RB 82%, WR 82%, TE 79%, QB 66% — the quarterback
+double-discount flagged as "worth watching" in finding 4 above is now a discount
+rather than an erasure.
+
+**The tests could not have caught any of this, and that is the more important
+finding.** All 296 passed throughout. Nothing was *locally* wrong: the clamp
+returned what it promised, the floor kept the tail ordered, every function met
+its own contract. The failure was in the shape of the distribution, which no
+test looked at.
+
+So `replacement.test.ts` gains a `calibration` block asserting properties of the
+whole output, in the terms a manager would notice them going wrong in:
+
+- Two players at a position can never come out further apart than the **square**
+  of their market ratio. This is a provable ceiling for `m²/(m+r)` and no bound
+  at all for subtraction — Gibbs and Swift cleared it by 34 against 19.7.
+- No block of the pool larger than 10% may share a single retained share (the
+  plateau test — the clamp put 55% on one number, the floor 59% on one line).
+- Retention is strictly monotone: a better player is always worth a larger
+  *share* of his price, not merely a larger number.
+- The best-to-worst roster spread may not exceed 1.6x the market's own spread.
+
+The last one needs a second fixture. `league()` snakes its pool out so every
+roster is near-identical, and a spread of 1.0 stays 1.0 under any shift
+whatsoever — the assertion would have passed against the model it exists to
+reject. `stratified()` deals in blocks instead, with decay rates calibrated to
+produce a 1.68x market spread against the real league's 1.82x. All six
+assertions fail against the old model and pass against the new one.
 
 **The rookie-pick curve had the same disease.** *(2026-07-29)*
 

@@ -23,7 +23,7 @@ import { lookupPickValue, type PickTier, type PickValueTable } from '../values/d
  * 3%. Projected draft slots are not precise to one pick, so a discontinuity that
  * large was an artifact rather than a model. It also flattened every third-round
  * pick onto the same near-zero number, losing the ordering between them for the
- * same reason the old value clamp did — see `replacement.RESIDUAL_SHARE`.
+ * same reason the old value clamp did — see `replacement.leagueValue`.
  */
 const REALISM_ANCHORS: readonly (readonly [pick: number, factor: number])[] = [
   [10, 1], //  the class's genuine fantasy contributors

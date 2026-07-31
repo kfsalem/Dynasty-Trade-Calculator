@@ -16,7 +16,7 @@ import type { Opportunity } from './opportunity';
  *
  * So a player is worth what he adds *over the best player who starts nowhere*:
  *
- *     leagueValue = max(marketValue * RESIDUAL_SHARE, marketValue - replacement)
+ *     leagueValue = marketValue² / (marketValue + replacement)
  *
  * Nothing here is hand-tuned per position. The starter counts come from the
  * lineups the league actually fields, so the same code says quarterbacks matter
@@ -24,32 +24,6 @@ import type { Opportunity } from './opportunity';
  * a shallow single-QB league. Change the roster settings and the weighting
  * follows on its own.
  */
-
-/**
- * Share of market value a below-replacement player keeps.
- *
- * A hard `max(0, …)` floor was the first attempt and it was wrong in a way worth
- * recording. Clamping does not merely understate the bottom of the pool; it
- * *erases the ordering within it*, and on a real 10-team league that was 55% of
- * all rostered players collapsed onto a single number. Everything downstream
- * that sorts by value then had nothing to sort by: the FLEX slot went to
- * whichever tied player the platform happened to list first, those arbitrary
- * picks became the starter counts, the counts set replacement level, and
- * replacement level decided who got clamped. Reshuffling one roster's player
- * list — which says nothing about the league — moved RB replacement level from
- * 1,900 to 2,709 and flipped individual players between 0 and 807.
- *
- * A player below replacement is not worthless. He is not startable *today*, but
- * he is still a tradeable asset: an aging starter whose dynasty price is
- * age-suppressed, or a rookie whose value is entirely ahead of him. Keeping a
- * fixed share of market value says exactly that, and keeps the tail strictly
- * ordered so the tie-driven feedback loop above cannot form.
- *
- * The floor only binds where the surplus is smaller than the share, so no player
- * meaningfully above replacement is affected — an elite back is worth market
- * minus replacement, exactly as before.
- */
-export const RESIDUAL_SHARE = 0.1;
 
 export type StarterCounts = Partial<Record<Position, number>>;
 
@@ -127,18 +101,57 @@ export function replacementLevels(
 /**
  * One player's league value. The model, in one line.
  *
- * Continuous and strictly increasing in `market`: the two branches meet where
- * the surplus equals the residual, so there is no step at the crossover, and a
- * player with no market value still lands on zero.
+ * Read it as the surplus idea it is, because that is what it is:
  *
- * Deliberately not rounded. The residual branch compresses several thousand
- * points of market value into a few hundred, and rounding that to whole points
- * puts adjacent players back onto identical values — a smaller version of the
- * very collapse this replaced. `formatValue` rounds for display, which is where
- * rounding belongs.
+ *     market² / (market + replacement)  ===  market - replacement * (market / (market + replacement))
+ *
+ * You are charged the replacement cost *scaled by how far clear of it you are*.
+ * Far above replacement the scale approaches 1 and this is `market -
+ * replacement`, exactly the old model. Near replacement the scale falls away, so
+ * the charge shrinks with the surplus it is subtracted from and can never
+ * overtake it.
+ *
+ * That last property is the whole reason for the change. Straight subtraction is
+ * a VORP operation, and VORP is defined on *projected points* — a scale where
+ * "one replacement level" is a real quantity you can take away. A dynasty
+ * market value is a **price**, already convex in quality and already carrying
+ * scarcity, and subtracting a constant from a price does not deflate it, it
+ * shears it. Three symptoms, all measured on a real 10-team league:
+ *
+ * 1. **The bottom flattened onto the floor.** 94 of 158 rostered players — 59% —
+ *    landed on `market * 0.1`, which meant the 10th, 25th and 50th percentiles
+ *    of retained value were all exactly 0.100. The median rostered player was
+ *    priced by nothing but a tenth of his market value.
+ * 2. **Ratios stopped meaning anything.** Jahmyr Gibbs and D'Andre Swift are
+ *    4.4x apart on market and came out **34x** apart here. A starting NFL back
+ *    who finished RB15 in PPR was worth 230 against Gibbs' 7,846.
+ * 3. **Roster rankings inflated.** Every lineup lost roughly eight starters ×
+ *    two thousand, so the league's best and worst rosters went from 1.82x apart
+ *    on market to 3.93x apart — an artifact of shifting all ten teams by the
+ *    same constant, rendered as a proportional bar.
+ *
+ * The `max(market * 0.1, …)` floor that used to sit here was a patch for the
+ * first symptom and the direct cause of the second. It kept the tail ordered,
+ * but only by stapling it to a line with a tenth of the slope, so the derivative
+ * jumped from 1.0 to 0.1 at the crossover and everything below it was ranked by
+ * market value alone. This function needs no floor: it is strictly increasing
+ * and strictly positive for any positive market value, so the ordering the floor
+ * existed to protect is a property of the curve rather than a repair to it.
+ *
+ * Bounds, all of which the tests pin:
+ *   - `leagueValue(0, r) === 0`, and `leagueValue(m, 0) === m` — a position
+ *     nobody starts is left alone, which is what `replacementLevels` relies on.
+ *   - Strictly increasing in `market`, strictly decreasing in `replacement`.
+ *   - Amplification is bounded: two players at one position can never come out
+ *     further apart than the *square* of their market ratio. Straight
+ *     subtraction has no such bound, which is exactly how 4.4x became 34x.
+ *
+ * Deliberately not rounded. `formatValue` rounds for display, which is where
+ * rounding belongs; rounding here would put adjacent players back onto identical
+ * values and hand `bestLineup` a tie to break on input order.
  */
 export const leagueValue = (market: number, replacement: number): number =>
-  Math.max(market * RESIDUAL_SHARE, market - replacement);
+  market > 0 ? (market * market) / (market + replacement) : 0;
 
 /**
  * Rebuild a value map in league-adjusted terms.
