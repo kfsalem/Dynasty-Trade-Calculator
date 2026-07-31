@@ -87,6 +87,31 @@ export const sleeperTradedPickSchema = z.object({
   previous_owner_id: z.number().nullish(),
 });
 
+/**
+ * A draft, as `/league/<id>/drafts` and `/draft/<id>` return it.
+ *
+ * `slot_to_roster_id` is the field worth having: it maps a draft slot straight
+ * to a roster, so it survives an orphan team, which the user-keyed
+ * `draft_order` does not. The list endpoint omits it, so it is optional here
+ * and read from the per-draft endpoint.
+ */
+export const sleeperDraftSchema = z.object({
+  draft_id: z.string(),
+  season: z.string(),
+  status: z.string(),
+  /** "linear" or "snake" — snake reverses even rounds. */
+  type: z.string(),
+  slot_to_roster_id: z.record(z.string(), z.number().nullish()).nullish(),
+  settings: z
+    .object({
+      rounds: z.number().nullish(),
+      teams: z.number().nullish(),
+    })
+    .nullish(),
+});
+
+export const sleeperDraftsSchema = z.array(sleeperDraftSchema);
+
 export const sleeperStateSchema = z.object({
   season: z.string(),
   season_type: z.string(),
@@ -118,4 +143,5 @@ export type SleeperUser = z.infer<typeof sleeperUserSchema>;
 export type SleeperPlayer = z.infer<typeof sleeperPlayerSchema>;
 export type SleeperTradedPick = z.infer<typeof sleeperTradedPickSchema>;
 export type SleeperState = z.infer<typeof sleeperStateSchema>;
+export type SleeperDraft = z.infer<typeof sleeperDraftSchema>;
 export type SleeperAccount = NonNullable<z.infer<typeof sleeperAccountSchema>>;

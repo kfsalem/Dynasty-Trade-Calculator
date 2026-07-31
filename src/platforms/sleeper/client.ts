@@ -6,12 +6,15 @@ import {
   sleeperUsersSchema,
   sleeperPlayersSchema,
   sleeperTradedPicksSchema,
+  sleeperDraftSchema,
+  sleeperDraftsSchema,
   sleeperStateSchema,
   sleeperAccountSchema,
   type SleeperLeague,
   type SleeperRoster,
   type SleeperUser,
   type SleeperTradedPick,
+  type SleeperDraft,
   type SleeperState,
   type SleeperAccount,
 } from './schema';
@@ -61,6 +64,21 @@ export function getUsers(leagueId: string): Promise<SleeperUser[]> {
 
 export function getTradedPicks(leagueId: string): Promise<SleeperTradedPick[]> {
   return fetchJson(`${BASE}/league/${leagueId}/traded_picks`, sleeperTradedPicksSchema);
+}
+
+/**
+ * Every draft this league has, newest first in Sleeper's ordering.
+ *
+ * The rookie draft for the upcoming season hangs off the league the app
+ * already loads, so no `previous_league_id` walking is needed to reach it.
+ */
+export function getDrafts(leagueId: string): Promise<SleeperDraft[]> {
+  return fetchJson(`${BASE}/league/${leagueId}/drafts`, sleeperDraftsSchema);
+}
+
+/** One draft in full. The list endpoint leaves out `slot_to_roster_id`. */
+export function getDraft(draftId: string): Promise<SleeperDraft> {
+  return fetchJson(`${BASE}/draft/${draftId}`, sleeperDraftSchema);
 }
 
 /** Current NFL season and phase — decides which draft years are still tradeable. */

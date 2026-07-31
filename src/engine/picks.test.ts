@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildDraftPicks,
+  overallPickNumber,
   pickRealismFactor,
   picksForRoster,
   projectedSlots,
   slotTier,
   tradeableSeasons,
+  type KnownDraftOrder,
 } from './picks';
 import { makeLeague, makeRoster, makeSettings } from './testFixtures';
 import type { PickValueTable } from '../values/dynastyprocess';
@@ -263,5 +265,118 @@ describe('projected draft slots', () => {
     const picks = buildDraftPicks(league, [], ['2026'], table);
     expect(picks.every((p) => p.slot === null)).toBe(true);
     expect(picks.find((p) => p.id === '2026-1-1')!.marketValue).toBe(5000);
+  });
+});
+
+describe('published draft order', () => {
+  /** Roster 1 picks third, roster 3 picks first — nothing like a strength order. */
+  const order: KnownDraftOrder = {
+    season: '2026',
+    slots: new Map([
+      [3, 1],
+      [2, 2],
+      [1, 3],
+    ]),
+    snake: false,
+  };
+
+  const slotted: PickValueTable = {
+    seasons: ['2026'],
+    fetchedAt: 0,
+    rows: [
+      { season: '2026', round: 1, slot: 1, tier: null, value: 8000 },
+      { season: '2026', round: 1, slot: 2, tier: null, value: 6000 },
+      { season: '2026', round: 1, slot: 3, tier: null, value: 4500 },
+    ],
+  };
+
+  it('uses the published order rather than the projection', () => {
+    // The projection is handed the exact opposite order, so a pick priced off
+    // the published one cannot have come from anywhere else.
+    const picks = buildDraftPicks(league, [], ['2026'], slotted, [1, 2, 3], 1, [order]);
+
+    expect(picks.find((p) => p.id === '2026-1-3')!.slot).toBe(1);
+    expect(picks.find((p) => p.id === '2026-1-1')!.slot).toBe(3);
+    expect(picks.find((p) => p.id === '2026-1-3')!.marketValue).toBe(8000);
+  });
+
+  it('marks a published slot as known and a projected one as not', () => {
+    const picks = buildDraftPicks(league, [], ['2026', '2027'], slotted, [1, 2, 3], 1, [order]);
+
+    expect(picks.find((p) => p.id === '2026-1-1')!.slotKnown).toBe(true);
+    expect(picks.find((p) => p.id === '2027-1-1')!.slotKnown).toBe(false);
+  });
+
+  it('names the slot on the pick, and says when it is only projected', () => {
+    // Value swings ninefold inside a round, so which slot it is belongs in the
+    // pick's name rather than being inferred from the number beside it.
+    const picks = buildDraftPicks(league, [], ['2026', '2027'], slotted, [1, 2, 3], 1, [order]);
+
+    expect(picks.find((p) => p.id === '2026-1-1')!.label).toBe('2026 1st (1.03)');
+    expect(picks.find((p) => p.id === '2027-1-1')!.label).toBe('2027 1st (proj 1.01)');
+  });
+
+  it('keeps the via-team note alongside the slot', () => {
+    const traded = [{ season: '2026', round: 1, originalRosterId: 3, ownerRosterId: 1 }];
+    const picks = buildDraftPicks(league, traded, ['2026'], slotted, [1, 2, 3], 1, [order]);
+
+    expect(picks.find((p) => p.id === '2026-1-3')!.label).toBe('2026 1st (1.01, via Team 3)');
+  });
+
+  it('falls back to the projection for a season with no published draft', () => {
+    // Sleeper only has a draft for the coming year; 2027 is still a guess.
+    const picks = buildDraftPicks(league, [], ['2027'], slotted, [3, 2, 1], 1, [order]);
+
+    expect(picks.find((p) => p.id === '2027-1-3')!.slot).toBe(1);
+    expect(picks.find((p) => p.id === '2027-1-3')!.slotKnown).toBe(false);
+  });
+
+  it('prices a snake second round from the reversed slot', () => {
+    // Twelve teams, because in a three-team league every pick in the first two
+    // rounds sits on the flat top of the realism curve and the reversal cannot
+    // show up in the price at all.
+    const big = makeLeague(
+      Array.from({ length: 12 }, (_, i) => makeRoster(i + 1, [])),
+      makeSettings(['QB', 'WR'], { draftRounds: 2 }),
+    );
+    const straight: KnownDraftOrder = {
+      season: '2026',
+      slots: new Map(Array.from({ length: 12 }, (_, i) => [i + 1, i + 1])),
+      snake: false,
+    };
+
+    // Roster 1 holds 1.01: it picks last in round two under snake, first under
+    // linear. Pricing its second as though it picked first overstates it badly.
+    const snake = buildDraftPicks(big, [], ['2026'], flat, [], 1, [
+      { ...straight, snake: true },
+    ]);
+    const linear = buildDraftPicks(big, [], ['2026'], flat, [], 1, [straight]);
+
+    const snakeSecond = snake.find((p) => p.id === '2026-2-1')!;
+    const linearSecond = linear.find((p) => p.id === '2026-2-1')!;
+
+    expect(snakeSecond.label).toBe('2026 2nd (2.12)');
+    expect(linearSecond.label).toBe('2026 2nd (2.01)');
+    expect(snakeSecond.marketValue).toBeLessThan(linearSecond.marketValue / 2);
+
+    // Round one is identical either way — only the even rounds reverse.
+    expect(snake.find((p) => p.id === '2026-1-1')!.marketValue).toBe(
+      linear.find((p) => p.id === '2026-1-1')!.marketValue,
+    );
+  });
+});
+
+describe('overallPickNumber', () => {
+  it('repeats the order every round when linear', () => {
+    expect(overallPickNumber(1, 1, 10, false)).toBe(1);
+    expect(overallPickNumber(2, 1, 10, false)).toBe(11);
+    expect(overallPickNumber(3, 10, 10, false)).toBe(30);
+  });
+
+  it('reverses the even rounds when snake', () => {
+    expect(overallPickNumber(1, 1, 10, true)).toBe(1);
+    expect(overallPickNumber(2, 1, 10, true)).toBe(20);
+    expect(overallPickNumber(2, 10, 10, true)).toBe(11);
+    expect(overallPickNumber(3, 1, 10, true)).toBe(21);
   });
 });
