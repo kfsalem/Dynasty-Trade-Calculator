@@ -64,6 +64,7 @@ export const OPPORTUNITY_COLUMNS = [
   'airYardsShare',
   'wopr',
   'carries',
+  'carryShare',
   'receptions',
   'fantasyPointsPpr',
 ] as const;
@@ -72,6 +73,11 @@ export const OPPORTUNITY_COLUMNS = [
  * Shares are null when nflverse publishes `NA`, never 0 — a receiver who was
  * not on the field and one who ran routes and saw nothing are different
  * players, and collapsing both onto zero is how that distinction gets lost.
+ *
+ * `carryShare` is the one share nflverse does not publish. It is computed at
+ * ingest, where every player who touched the ball is still in the denominator;
+ * summing it here from the shipped file would divide by the subset that
+ * resolved to a Sleeper id and overstate every back.
  */
 export type OpportunityWeek = [
   week: number,
@@ -80,6 +86,7 @@ export type OpportunityWeek = [
   airYardsShare: number | null,
   wopr: number | null,
   carries: number,
+  carryShare: number | null,
   receptions: number,
   fantasyPointsPpr: number,
 ];

@@ -31,11 +31,17 @@ function describe(share: SnapShare): string {
   return `${season}. ${recent} — ${move}.`;
 }
 
+/**
+ * Hidden below the `sm` breakpoint. Activity columns are the first thing to
+ * give up on a phone: they sit next to two value columns and a name that is
+ * already truncating, and a name squeezed to forty pixels helps nobody. The
+ * numbers are context for a decision the value columns drive.
+ */
 export function SnapShareCell({ share }: { share: SnapShare | undefined }) {
   if (!share) {
     return (
       <span
-        className="w-14 shrink-0 text-right tabular-nums text-gray-300"
+        className="hidden w-14 shrink-0 text-right tabular-nums text-gray-300 sm:inline-block"
         title="No snap data for this player"
       >
         —
@@ -49,7 +55,7 @@ export function SnapShareCell({ share }: { share: SnapShare | undefined }) {
 
   return (
     <span
-      className="flex w-14 shrink-0 items-baseline justify-end gap-0.5 tabular-nums"
+      className="hidden w-14 shrink-0 items-baseline justify-end gap-0.5 tabular-nums sm:flex"
       title={describe(share)}
     >
       <span className="text-gray-500">{pct(share.season)}</span>

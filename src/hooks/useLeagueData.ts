@@ -7,7 +7,8 @@ import type { RosterSummary } from '../engine/rosterValue';
 import { buildDraftPicks, tradeableSeasons } from '../engine/picks';
 import { valueLeague } from '../engine/replacement';
 import { snapShares } from '../engine/snapShare';
-import { fetchSnapCounts } from '../data/snaps';
+import { opportunities } from '../engine/opportunity';
+import { fetchOpportunity, fetchSnapCounts } from '../data/activity';
 import type { DraftPick, LeagueSettings } from '../types';
 
 export function useLeague(leagueId: string | null) {
@@ -65,12 +66,23 @@ export function useSnapShares() {
   });
 }
 
+/** Target share, air yards, WOPR and carry share, from the same build artifact. */
+export function useOpportunity() {
+  return useQuery({
+    queryKey: ['opportunity'],
+    queryFn: fetchOpportunity,
+    staleTime: Infinity,
+    retry: 1,
+  });
+}
+
 export function useLeagueSummaries(leagueId: string | null) {
   const leagueQuery = useLeague(leagueId);
   const settings = leagueQuery.data?.league.settings;
   const valuesQuery = useValues(settings);
   const pickValuesQuery = usePickValues(settings);
   const snapsQuery = useSnapShares();
+  const opportunityQuery = useOpportunity();
 
   /**
    * Market values feed one pass of lineups, which reveals how many of each
@@ -127,6 +139,11 @@ export function useLeagueSummaries(leagueId: string | null) {
     [snapsQuery.data],
   );
 
+  const usage = useMemo(
+    () => (opportunityQuery.data ? opportunities(opportunityQuery.data) : undefined),
+    [opportunityQuery.data],
+  );
+
   return {
     league: leagueQuery.data?.league,
     players: leagueQuery.data?.players,
@@ -136,6 +153,7 @@ export function useLeagueSummaries(leagueId: string | null) {
     picks,
     picksUnavailable: pickValuesQuery.isError,
     snaps,
+    usage,
     /** Dates the snap data so the UI can say what "recent" means. */
     snapsMeta: snapsQuery.data
       ? { season: snapsQuery.data.season, throughWeek: snapsQuery.data.throughWeek }

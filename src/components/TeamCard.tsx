@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import type { RosterSummary, ValuedPlayer } from '../engine/rosterValue';
 import type { SnapShare } from '../engine/snapShare';
+import type { Opportunity } from '../engine/opportunity';
 import type { League } from '../types';
 import { SnapShareCell } from './SnapShareCell';
+import { UsageCell } from './UsageCell';
 import {
   POSITION_ORDER,
   POSITION_STYLES,
@@ -22,14 +24,18 @@ interface Props {
   isMine?: boolean;
   /** Snap shares by Sleeper id. Undefined until the static file loads. */
   snaps?: Map<string, SnapShare>;
+  /** Position-appropriate opportunity metrics by Sleeper id. */
+  usage?: Map<string, Opportunity>;
 }
 
 function PlayerLine({
   entry,
   snaps,
+  usage,
 }: {
   entry: ValuedPlayer;
   snaps?: Map<string, SnapShare>;
+  usage?: Map<string, Opportunity>;
 }) {
   const style = POSITION_STYLES[entry.player.position];
   return (
@@ -39,7 +45,9 @@ function PlayerLine({
       >
         {style.label}
       </span>
-      <span className="min-w-0 flex-1 truncate">
+      {/* Four columns of numbers leave a long name truncating, so the full one
+          stays available on hover rather than being lost. */}
+      <span className="min-w-0 flex-1 truncate" title={entry.player.name}>
         {entry.player.name}
         {entry.player.team ? (
           <span className="ml-1.5 text-xs text-gray-400">{entry.player.team}</span>
@@ -56,6 +64,7 @@ function PlayerLine({
         ) : null}
       </span>
       <SnapShareCell share={snaps?.get(entry.player.id)} />
+      <UsageCell usage={usage?.get(entry.player.id)} />
       <span className="shrink-0 tabular-nums text-gray-500">
         {entry.valued ? formatValue(entry.value) : '~0'}
       </span>
@@ -70,6 +79,7 @@ export function TeamCard({
   topStarterValue,
   isMine,
   snaps,
+  usage,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -183,7 +193,7 @@ export function TeamCard({
                       {formatSlot(assignment.slot)}
                     </span>
                     {assignment.entry ? (
-                      <PlayerLine entry={assignment.entry} snaps={snaps} />
+                      <PlayerLine entry={assignment.entry} snaps={snaps} usage={usage} />
                     ) : (
                       <span className="flex-1 italic text-gray-400">empty</span>
                     )}
@@ -200,7 +210,7 @@ export function TeamCard({
                 {bench.length === 0 && <li className="text-gray-400">No bench players.</li>}
                 {bench.slice(0, 15).map((entry) => (
                   <li key={entry.player.id} className="flex items-center gap-2">
-                    <PlayerLine entry={entry} snaps={snaps} />
+                    <PlayerLine entry={entry} snaps={snaps} usage={usage} />
                   </li>
                 ))}
                 {bench.length > 15 && (
