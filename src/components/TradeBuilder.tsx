@@ -4,6 +4,7 @@ import { evaluateTrade, FAIRNESS_LABEL, type TradeContext } from '../engine/trad
 import { AssetPicker } from './AssetPicker';
 import type { SnapShare } from '../engine/snapShare';
 import type { Opportunity } from '../engine/opportunity';
+import type { PlayerRole } from '../engine/role';
 import { formatValue } from '../lib/format';
 
 /**
@@ -25,6 +26,8 @@ interface Props {
   picksUnavailable: boolean;
   snaps?: Map<string, SnapShare>;
   usage?: Map<string, Opportunity>;
+  roles?: Map<string, PlayerRole>;
+  chartSeason?: number | null;
   /** Claimed team, if any — anchors the left side to you. */
   myRosterId: number | null;
   /**
@@ -124,6 +127,8 @@ export function TradeBuilder({
   initial,
   snaps,
   usage,
+  roles,
+  chartSeason,
 }: Props) {
   // Anchor the left side to the claimed team so the trade reads from your
   // perspective, and make sure the right side is never the same roster.
@@ -228,6 +233,8 @@ export function TradeBuilder({
           outgoingValue={sumValue(givesA.playerIds, givesA.pickIds)}
           snaps={snaps}
           usage={usage}
+          roles={roles}
+          chartSeason={chartSeason}
         />
         <AssetPicker
           league={league}
@@ -246,6 +253,8 @@ export function TradeBuilder({
           outgoingValue={sumValue(givesB.playerIds, givesB.pickIds)}
           snaps={snaps}
           usage={usage}
+          roles={roles}
+          chartSeason={chartSeason}
         />
       </div>
 

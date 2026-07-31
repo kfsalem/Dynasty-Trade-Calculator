@@ -11,9 +11,10 @@ import type { DatasetMeta } from './types';
  * dashes rather than the page. Every failure returns null and says why in the
  * console.
  */
-export async function fetchDataFile<T extends DatasetMeta & { columns: readonly string[] }>(
+export async function fetchDataFile<T extends DatasetMeta>(
   file: string,
-  expected: readonly string[],
+  /** Column order to verify, for files whose rows are positional tuples. */
+  expected?: readonly string[],
 ): Promise<T | null> {
   const url = `${import.meta.env.BASE_URL}data/${file}`;
 
@@ -42,18 +43,22 @@ export async function fetchDataFile<T extends DatasetMeta & { columns: readonly 
  * from a neighbouring column. That is far worse than no data, and it is
  * invisible without this.
  */
-function validate<T extends DatasetMeta & { columns: readonly string[] }>(
+function validate<T extends DatasetMeta>(
   body: unknown,
   file: string,
   url: string,
-  expected: readonly string[],
+  expected?: readonly string[],
 ): T | null {
-  const parsed = body as Partial<T> & { players?: unknown };
+  const parsed = body as Partial<T> & { players?: unknown; columns?: unknown };
 
   if (!parsed || typeof parsed !== 'object' || typeof parsed.players !== 'object') {
     console.warn(`${file} at ${url} is not in the expected shape; ignoring it.`);
     return null;
   }
+
+  // Depth chart rows are objects with named fields, so there is no column
+  // order to check and nothing positional to get wrong.
+  if (!expected) return parsed as T;
 
   const columns = parsed.columns;
   if (

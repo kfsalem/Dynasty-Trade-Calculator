@@ -3,8 +3,10 @@ import { POSITION_STYLES, formatInjury, formatValue } from '../lib/format';
 import { valuePlayers } from '../engine/rosterValue';
 import type { SnapShare } from '../engine/snapShare';
 import type { Opportunity } from '../engine/opportunity';
+import type { PlayerRole } from '../engine/role';
 import { SnapShareCell } from './SnapShareCell';
 import { UsageCell } from './UsageCell';
+import { RoleMarker } from './RoleMarker';
 
 interface Props {
   league: League;
@@ -24,6 +26,8 @@ interface Props {
   snaps?: Map<string, SnapShare>;
   /** Position-appropriate opportunity metrics by Sleeper id. */
   usage?: Map<string, Opportunity>;
+  roles?: Map<string, PlayerRole>;
+  chartSeason?: number | null;
 }
 
 /**
@@ -64,6 +68,8 @@ export function AssetPicker({
   outgoingValue,
   snaps,
   usage,
+  roles,
+  chartSeason,
 }: Props) {
   const roster = league.rosters.find((r) => r.rosterId === rosterId);
   const entries = roster ? valuePlayers(roster.playerIds, players, values) : [];
@@ -171,7 +177,14 @@ export function AssetPicker({
                   </span>
                 )}
               </span>
-              <SnapShareCell share={snaps?.get(entry.player.id)} />
+              {/* Outside the name span: inside it, a long name truncated the
+                  badge away entirely. */}
+              <RoleMarker role={roles?.get(entry.player.id)} chartSeason={chartSeason ?? null} />
+              <SnapShareCell
+                share={snaps?.get(entry.player.id)}
+                role={roles?.get(entry.player.id)}
+                chartSeason={chartSeason}
+              />
               <UsageCell usage={usage?.get(entry.player.id)} />
               {entry.valued ? (
                 <ValuePair

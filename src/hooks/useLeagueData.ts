@@ -8,7 +8,8 @@ import { buildDraftPicks, tradeableSeasons } from '../engine/picks';
 import { valueLeague } from '../engine/replacement';
 import { snapShares } from '../engine/snapShare';
 import { opportunities } from '../engine/opportunity';
-import { fetchOpportunity, fetchSnapCounts } from '../data/activity';
+import { playerRoles } from '../engine/role';
+import { fetchDepthCharts, fetchOpportunity, fetchSnapCounts } from '../data/activity';
 import type { DraftPick, LeagueSettings } from '../types';
 
 export function useLeague(leagueId: string | null) {
@@ -66,6 +67,16 @@ export function useSnapShares() {
   });
 }
 
+/** The current depth chart, reduced to one entry per player. */
+export function useDepthCharts() {
+  return useQuery({
+    queryKey: ['depthCharts'],
+    queryFn: fetchDepthCharts,
+    staleTime: Infinity,
+    retry: 1,
+  });
+}
+
 /** Target share, air yards, WOPR and carry share, from the same build artifact. */
 export function useOpportunity() {
   return useQuery({
@@ -83,6 +94,7 @@ export function useLeagueSummaries(leagueId: string | null) {
   const pickValuesQuery = usePickValues(settings);
   const snapsQuery = useSnapShares();
   const opportunityQuery = useOpportunity();
+  const depthQuery = useDepthCharts();
 
   /**
    * Market values feed one pass of lineups, which reveals how many of each
@@ -139,6 +151,21 @@ export function useLeagueSummaries(leagueId: string | null) {
     [snapsQuery.data],
   );
 
+  const roles = useMemo(() => {
+    const snapFile = snapsQuery.data;
+    const depthFile = depthQuery.data;
+    if (!snaps && !depthFile) return undefined;
+
+    return playerRoles({
+      shares: snaps ?? new Map(),
+      depth: new Map(Object.entries(depthFile?.players ?? {})),
+      // Only a same-season pair can be compared. Through the offseason the
+      // chart has already advanced and the snaps are last year's, so every
+      // free agent would otherwise read as a disagreement.
+      comparable: Boolean(snapFile && depthFile && snapFile.season === depthFile.season),
+    });
+  }, [snaps, snapsQuery.data, depthQuery.data]);
+
   const usage = useMemo(
     () => (opportunityQuery.data ? opportunities(opportunityQuery.data) : undefined),
     [opportunityQuery.data],
@@ -154,9 +181,14 @@ export function useLeagueSummaries(leagueId: string | null) {
     picksUnavailable: pickValuesQuery.isError,
     snaps,
     usage,
-    /** Dates the snap data so the UI can say what "recent" means. */
+    roles,
+    /** Dates the activity data so the UI can say what it is describing. */
     snapsMeta: snapsQuery.data
-      ? { season: snapsQuery.data.season, throughWeek: snapsQuery.data.throughWeek }
+      ? {
+          season: snapsQuery.data.season,
+          throughWeek: snapsQuery.data.throughWeek,
+          chartSeason: depthQuery.data?.season ?? null,
+        }
       : undefined,
     // Snap data deliberately absent: it enriches rows rather than gating them,
     // so the league loads and renders whether or not it arrives.

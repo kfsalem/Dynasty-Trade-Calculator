@@ -86,6 +86,14 @@ or pins depth charts a year stale in September.
 This is why `throughWeek` is per file, and why `depth.json` carries `asOf`
 instead: a chart is a snapshot, not a season.
 
+It also means the two halves of the role cross-check routinely describe
+*different seasons*. Through the offseason the chart has already advanced —
+2026 charts were live on 2026-07-30 while the newest snaps were 2025 — so
+comparing them would flag every free agent and every rookie as the chart
+"lying". The app only draws that comparison when `depth.json` and `snaps.json`
+carry the same season; otherwise it still reports a role from the snaps and
+labels the chart position with the season it came from.
+
 ## Failure policy
 
 Three failure modes, of which exactly one is survivable. Confusing them is how a
