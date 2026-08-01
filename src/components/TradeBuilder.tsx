@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { DraftPick, League, Player, PlayerValue, TradeSideResult } from '../types';
+import type { DraftPick, League, Player, PlayerValue, Position, TradeSideResult } from '../types';
 import { evaluateTrade, FAIRNESS_LABEL, type TradeContext } from '../engine/trade';
 import { AssetPicker } from './AssetPicker';
 import type { SnapShare } from '../engine/snapShare';
@@ -31,6 +31,8 @@ interface Props {
   chartSeason?: number | null;
   /** What a changing role did to each value, keyed by Sleeper id. */
   adjustments?: Map<string, ActivityAdjustment>;
+  /** Positions the value source prices, so an unvalued player can say which. */
+  priced?: Set<Position>;
   /** Claimed team, if any — anchors the left side to you. */
   myRosterId: number | null;
   /**
@@ -133,6 +135,7 @@ export function TradeBuilder({
   roles,
   chartSeason,
   adjustments,
+  priced,
 }: Props) {
   // Anchor the left side to the claimed team so the trade reads from your
   // perspective, and make sure the right side is never the same roster.
@@ -240,6 +243,7 @@ export function TradeBuilder({
           roles={roles}
           chartSeason={chartSeason}
           adjustments={adjustments}
+          priced={priced}
         />
         <AssetPicker
           league={league}
@@ -261,6 +265,7 @@ export function TradeBuilder({
           roles={roles}
           chartSeason={chartSeason}
           adjustments={adjustments}
+          priced={priced}
         />
       </div>
 

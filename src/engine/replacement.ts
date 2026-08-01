@@ -42,17 +42,66 @@ export interface ReplacementLevel {
  * only the real lineups reveal how the flex breaks down. A FLEX slot is
  * nominally RB/WR/TE; in practice it is filled by whoever is best, and that
  * split is what sets the true scarcity of each position.
+ *
+ * Only starters the value source actually prices are counted, and the reason is
+ * arithmetic rather than tidiness. A count is an *index into the sorted value
+ * list*: `startersNeeded` of 26 means "the 27th best running back is the
+ * replacement". A starter carrying no value is not in that list at all, so
+ * counting him shifts the index one place deeper and overstates the replacement
+ * level for everyone at his position.
+ *
+ * Kickers and defences are the standing case. FantasyCalc publishes no values
+ * for either, so a league starting both — as most do — was reporting `K: 9,
+ * DEF: 8` alongside its skill positions. Those counts could never produce a
+ * replacement level, because `replacementLevels` iterates the value pool and
+ * the pool has no kickers in it, so they were dead data that read as live. The
+ * same rule also catches a genuine skill starter too fringe for the source to
+ * rank, where the index shift is not harmless at all.
  */
 export function startersByPosition(summaries: RosterSummary[]): StarterCounts {
   const counts: StarterCounts = {};
   for (const summary of summaries) {
     for (const slot of summary.lineup) {
-      const position = slot.entry?.player.position;
+      if (!slot.entry?.valued) continue;
+      const position = slot.entry.player.position;
       if (!position) continue;
       counts[position] = (counts[position] ?? 0) + 1;
     }
   }
   return counts;
+}
+
+/**
+ * Positions the value source prices at all.
+ *
+ * The distinction the roster UI needs, and one it cannot draw from a player's
+ * own value: **"nobody publishes a price for this position"** is a different
+ * statement from **"this player is too marginal to rank"**, and both arrive as
+ * a missing entry in the same map.
+ *
+ * A fringe receiver really is worth about nothing, and `~0` says so honestly.
+ * A starting kicker is not worth about nothing — he is worth something every
+ * Sunday and nothing in a trade, because dynasty has no market for the
+ * position. Showing him the same `~0` asserts he is a bad player, which is both
+ * wrong and the specific thing that made the roster list look broken.
+ *
+ * Derived from the pool rather than hardcoded to `['K', 'DEF']` on purpose.
+ * There is already one list of dynasty-relevant positions in `analysis.ts`, and
+ * `docs/DESIGN.md` records what happened the last time this codebase kept the
+ * same fact in two places — `AGE_CLIFF` was defined twice with different
+ * numbers, so a 27-year-old back was past the cliff on one page and not on
+ * another. Reading it from the data also means a source that starts publishing
+ * kicker or IDP values is picked up with no code change.
+ *
+ * Requires a *positive* value, not merely an entry: a position present only as
+ * zeroes is not priced in any useful sense.
+ */
+export function pricedPositions(values: Map<string, PlayerValue>): Set<Position> {
+  const priced = new Set<Position>();
+  for (const value of values.values()) {
+    if (value.position && value.marketValue > 0) priced.add(value.position);
+  }
+  return priced;
 }
 
 /**

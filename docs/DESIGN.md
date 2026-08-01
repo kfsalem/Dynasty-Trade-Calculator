@@ -931,6 +931,65 @@ be a different model, so a test pins it.
 The quadrant label itself is unchanged and still a median split. It is a summary
 now rather than a decision, which is the right job for it.
 
+**Kickers and defences: excluded from the arithmetic, kept on the roster.**
+*(2026-08-01, closes #10)*
+
+FantasyCalc publishes no values for K or DEF, and this league starts both. That
+left 18 of 176 rostered players unpriced and two of every ten starting slots
+contributing exactly zero.
+
+The issue offered two options — exclude them from lineup maths entirely, or give
+them a nominal flat value — and noted that the silent zero was the one
+indefensible choice. **Excluded.** A nominal value would be a fiction with a
+number attached: it would make kickers tradeable assets the suggestion engine
+could use to balance a package, and giving every kicker the same figure
+reintroduces exactly the tie-collapse this codebase has already been bitten by
+twice (see *The clamp was destroying the model*). There is no dynasty market for
+these positions because dynasty managers stream them off waivers, and the model
+should say that rather than price it.
+
+What "excluded" means in three specific places:
+
+1. **`startersByPosition` counts only starters the source prices.** The reason is
+   arithmetic, not tidiness. A count is an *index into the sorted value list* —
+   `startersNeeded` of 25 means "the 26th best back is the replacement." A
+   starter carrying no value is not in that list, so counting him shifts the
+   index one place deeper and overstates replacement level for everyone at his
+   position. For kickers the count was merely dead — `replacementLevels`
+   iterates the value pool and the pool has no kickers, so `K: 9` could never
+   produce a level — but it read as live data to anything downstream. The same
+   rule also catches a genuine skill starter too fringe for the source to rank,
+   where the index shift is not harmless at all.
+
+   Measured on the real league, the skill counts are **byte-identical** under the
+   old rule and the new one (`QB 10, RB 25, WR 34, TE 11`), because no unvalued
+   player currently starts at a skill position. This is a correctness fix that
+   removes dead data and closes a live hazard, not a numeric improvement, and it
+   is worth saying so plainly.
+
+2. **The lineup still holds them.** They are real players who really do fill your
+   K slot; the app simply cannot price them. `pricedSlots` / `totalSlots` on
+   `RosterSummary` report the coverage, and the team card reads "8 of 10
+   starters" so the headline number stops claiming to describe a full lineup.
+
+3. **The UI distinguishes "no market" from "~0".** Both facts arrive as the same
+   missing map entry and they are different sentences. A fringe receiver past
+   the end of a 475-player universe really is worth about nothing, and `~0` says
+   so honestly — Phase 2 measured it, those players are worth 4–9 out of 10,000.
+   A starting kicker is worth something every Sunday and nothing in a trade.
+   Telling him `~0` asserts he is a bad player, which is both wrong and the
+   specific thing that made the roster list look broken. `UnvaluedCell` now reads
+   **"no market"** for a position nobody prices and keeps `~0` for a player
+   nobody ranks, each with the full explanation in a title.
+
+`pricedPositions` derives the distinction from the value pool rather than
+hardcoding `['K', 'DEF']`. `analysis.SKILL_POSITIONS` already names the
+dynasty-relevant positions, and this document records what happened the last time
+one fact lived in two places: `AGE_CLIFF` was defined twice with different
+numbers, so a 27-year-old back was past the cliff on the team page and not in the
+trade warnings. Reading it from the data also means a source that starts
+publishing kicker or IDP values is picked up with no code change.
+
 ### Phase 5 — Scale out
 - MFL + Fleaflicker providers
 - Real accounts (Supabase) *if and only if* cross-device sync is actually wanted

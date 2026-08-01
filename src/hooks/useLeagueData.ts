@@ -5,7 +5,7 @@ import { fetchFantasyCalcValues } from '../values/fantasycalc';
 import { fetchPickValues } from '../values/dynastyprocess';
 import type { RosterSummary } from '../engine/rosterValue';
 import { buildDraftPicks, tradeableSeasons } from '../engine/picks';
-import { valueLeague, type LeagueActivity } from '../engine/replacement';
+import { pricedPositions, valueLeague, type LeagueActivity } from '../engine/replacement';
 import { snapShares } from '../engine/snapShare';
 import { opportunities } from '../engine/opportunity';
 import { playerRoles } from '../engine/role';
@@ -225,11 +225,26 @@ export function useLeagueSummaries(leagueId: string | null) {
     });
   }, [adjusted, snaps, usage, activity]);
 
+  /**
+   * Positions the value source prices at all, computed once for the whole app.
+   *
+   * Derived from the *market* pool rather than the adjusted one so it answers
+   * only "does anybody publish a price for this position", with no dependency
+   * on this league's replacement levels. Kickers and defences are the standing
+   * answer; see `replacement.pricedPositions`.
+   */
+  const priced = useMemo(
+    () => (valuesQuery.data ? pricedPositions(valuesQuery.data.bySleeperId) : undefined),
+    [valuesQuery.data],
+  );
+
   return {
     league: leagueQuery.data?.league,
     players: leagueQuery.data?.players,
     values: adjusted?.values,
     scarcity: adjusted?.scarcity,
+    /** Positions with a published market, for telling "~0" from "no market". */
+    priced,
     summaries,
     picks,
     picksUnavailable: pickValuesQuery.isError,

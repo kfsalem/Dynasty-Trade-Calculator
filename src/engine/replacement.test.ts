@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyReplacement,
   leagueShrinkFactor,
+  pricedPositions,
   replacementLevels,
   startersByPosition,
   valueLeague,
@@ -180,6 +181,137 @@ function shuffles(rosters: Roster[], trials = 25): Roster[][] {
     }),
   );
 }
+
+describe('unvalued positions', () => {
+  /**
+   * A league that starts a kicker and a defence, which is most of them.
+   *
+   * FantasyCalc publishes values for neither, so both slots fill with a real
+   * player carrying no value — the shape that made `startersByPosition` report
+   * `K: 9, DEF: 8` on the live league beside its skill counts.
+   */
+  function withKickers() {
+    const settings = makeSettings(['QB', 'RB', 'WR', 'K', 'DEF'], { teamCount: 4 });
+    const players = new Map<string, Player>();
+    const values = new Map<string, PlayerValue>();
+    const rosters: Roster[] = [];
+
+    for (let t = 1; t <= 4; t++) {
+      const ids: string[] = [];
+      for (const position of ['QB', 'RB', 'WR'] as Position[]) {
+        const id = `${position}${t}`;
+        players.set(id, makePlayer(id, position, 25));
+        values.set(id, makeValue(id, 4000 - t * 300, position));
+        ids.push(id);
+      }
+      // Rostered and startable, but priced by nobody.
+      for (const position of ['K', 'DEF'] as Position[]) {
+        const id = `${position}${t}`;
+        players.set(id, makePlayer(id, position, 25));
+        ids.push(id);
+      }
+      rosters.push(makeRoster(t, ids));
+    }
+
+    const summaries = rosters.map((r) => summarizeRoster(r, players, values, settings));
+    return { settings, players, values, rosters, summaries };
+  }
+
+  it('does not count a starter the source cannot price', () => {
+    /**
+     * A count is an *index into the sorted value list* — `startersNeeded` of 26
+     * means "the 27th best back is the replacement". A starter carrying no
+     * value is not in that list, so counting him shifts the index one place
+     * deeper and overstates replacement level for everyone at his position.
+     *
+     * For kickers the count was merely dead: `replacementLevels` iterates the
+     * value pool, the pool has no kickers, so `K: 9` could never produce a
+     * level. It still read as live data to anything consuming the counts.
+     */
+    const { summaries } = withKickers();
+    const counts = startersByPosition(summaries);
+
+    expect(counts).toEqual({ QB: 4, RB: 4, WR: 4 });
+    expect(counts.K).toBeUndefined();
+    expect(counts.DEF).toBeUndefined();
+  });
+
+  it('leaves the unvalued starter in the lineup, holding his slot', () => {
+    // Excluded from the arithmetic, not from the roster. He is a real player
+    // who really does fill your kicker slot; the app just cannot price him.
+    const { summaries } = withKickers();
+    const lineup = summaries[0].lineup;
+
+    expect(lineup.map((s) => s.slot)).toEqual(['QB', 'RB', 'WR', 'K', 'DEF']);
+    expect(lineup.every((s) => s.entry !== null)).toBe(true);
+    // ...and the headline number says how much of the lineup it covers.
+    expect(summaries[0].pricedSlots).toBe(3);
+    expect(summaries[0].totalSlots).toBe(5);
+  });
+
+  it('reaches a fixed point with unvalued starters in the lineup', () => {
+    // The counts feed replacement level, which feeds the values, which decide
+    // the lineups the counts are read from. Whatever `valueLeague` returns must
+    // still describe its own output once two of five slots contribute nothing.
+    const { settings, players, values, rosters } = withKickers();
+    const result = valueLeague(rosters, players, values, settings);
+
+    expect(startersByPosition(result.summaries)).toEqual(result.starters);
+    expect(result.levels.K).toBeUndefined();
+    expect(result.levels.DEF).toBeUndefined();
+  });
+});
+
+describe('pricedPositions', () => {
+  it('separates a position nobody prices from a player nobody ranks', () => {
+    /**
+     * Both arrive as a missing entry in the same map, and they are different
+     * statements. A fringe receiver is worth about nothing and `~0` says so
+     * honestly. A starting kicker is worth something every Sunday and nothing
+     * in a trade, because dynasty has no market for the position — telling him
+     * he is `~0` asserts he is a bad player.
+     */
+    const values = new Map<string, PlayerValue>([
+      ['wr1', makeValue('wr1', 5000, 'WR')],
+      ['rb1', makeValue('rb1', 4000, 'RB')],
+    ]);
+
+    const priced = pricedPositions(values);
+
+    expect(priced.has('WR')).toBe(true);
+    expect(priced.has('RB')).toBe(true);
+    // Nobody at either, so neither is priced — and a rostered kicker reads as
+    // "no market" rather than as a valuation of him.
+    expect(priced.has('K')).toBe(false);
+    expect(priced.has('DEF')).toBe(false);
+    // Nor is a position the source simply happens not to cover in this format.
+    expect(priced.has('QB')).toBe(false);
+  });
+
+  it('requires a positive value, not merely an entry', () => {
+    // A position present only as zeroes is not priced in any useful sense, and
+    // treating it as priced would put its players back on the `~0` reading this
+    // exists to separate them from.
+    const values = new Map<string, PlayerValue>([
+      ['k1', makeValue('k1', 0, 'K')],
+      ['wr1', makeValue('wr1', 5000, 'WR')],
+    ]);
+
+    expect(pricedPositions(values).has('K')).toBe(false);
+    expect(pricedPositions(values).has('WR')).toBe(true);
+  });
+
+  it('follows the data rather than a hardcoded list', () => {
+    // Read from the pool on purpose. `analysis.SKILL_POSITIONS` already names
+    // the dynasty-relevant positions, and docs/DESIGN.md records what happened
+    // the last time this codebase held one fact in two places: AGE_CLIFF was
+    // defined twice with different numbers. A source that starts publishing
+    // kickers is picked up here with no code change.
+    const values = new Map<string, PlayerValue>([['k1', makeValue('k1', 120, 'K')]]);
+
+    expect(pricedPositions(values).has('K')).toBe(true);
+  });
+});
 
 describe('startersByPosition', () => {
   it('counts flex usage rather than trusting the slot names', () => {
