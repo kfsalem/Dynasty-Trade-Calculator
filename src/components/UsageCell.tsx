@@ -18,9 +18,19 @@ function line(metric: Metric): string {
   }`;
 
   if (w.recent === null) return `${season}; none in the last ${RECENT_WEEKS} weeks`;
-  if (w.delta === null) return season;
+  // No earlier weeks means no move to report — the recent figure is still worth
+  // showing, but there is nothing to have moved *from*.
+  if (w.delta === null || w.prior === null) {
+    return `${season}; last ${RECENT_WEEKS} ${format(w.recent, kind)}`;
+  }
 
-  return `${season}; last ${RECENT_WEEKS} ${format(w.recent, kind)} (${move(w.delta, kind)})`;
+  // The move is against `prior`, the weeks before the window, and the string
+  // says so. `season` spans both windows, so quoting it as the baseline would
+  // both understate the move and name a period the player never had.
+  return `${season}; last ${RECENT_WEEKS} ${format(w.recent, kind)} (${move(
+    w.delta,
+    kind,
+  )} against ${format(w.prior, kind)} before)`;
 }
 
 function move(delta: number, kind: Metric['kind']): string {

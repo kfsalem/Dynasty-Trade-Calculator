@@ -6,9 +6,11 @@ import { classify, isChartStarter, playerRole, playerRoles } from './role';
 const share = (season: number): SnapShare => ({
   season,
   recent: season,
+  prior: season,
   delta: 0,
   games: 17,
   recentGames: 4,
+  priorGames: 13,
 });
 
 const listing = (pos: string, rank: number): DepthPlayer => ({ team: 'CIN', pos, rank });

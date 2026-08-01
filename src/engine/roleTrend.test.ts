@@ -2,17 +2,54 @@ import { describe, expect, it } from 'vitest';
 import type { Player, PlayerValue } from '../types';
 import type { RosterSummary } from './rosterValue';
 import type { SnapShare } from './snapShare';
-import { activityFactor } from './activityFactor';
-import { MIN_GAMES, roleTrends, trendsForRoster } from './roleTrend';
+import { activityFactor, roleShift } from './activityFactor';
+import { MIN_GAMES, MIN_HEADROOM, MIN_SHARE, roleTrends, trendsForRoster } from './roleTrend';
 import { makePlayer, makeValue } from './testFixtures';
 
-const snaps = (season: number, recent: number, recentGames = 4): SnapShare => ({
-  season,
+/** First argument is the prior window; `season` spans both and is display-only. */
+const snaps = (prior: number, recent: number, recentGames = 4): SnapShare => ({
+  season: (8 * prior + 4 * recent) / 12,
   recent,
-  delta: recent - season,
+  prior,
+  delta: recent - prior,
   games: 12,
   recentGames,
+  priorGames: 8,
 });
+
+/**
+ * The rest of the position, so a percentile means something.
+ *
+ * `rolePricing` ranks a player's role against his price *within his position*,
+ * and a pool of one or two players has no ranks to speak of — everyone comes out
+ * at 0 or 1 and the headroom gate answers on noise. So every fixture gets a
+ * background ladder of backs nobody rosters, priced and used **in step**: the
+ * cheapest plays least, the dearest plays most.
+ *
+ * In step is the important part. It makes the background perfectly, boringly
+ * fairly priced, so a subject's headroom is entirely a statement about the
+ * subject. A test player at the 30th percentile of price who plays like the 75th
+ * has +0.45 of headroom because of where he sits, not because of how the
+ * scenery was arranged.
+ */
+const BACKGROUND = 21;
+
+function background(): { values: Map<string, PlayerValue>; snaps: Map<string, SnapShare> } {
+  const values = new Map<string, PlayerValue>();
+  const snapMap = new Map<string, SnapShare>();
+
+  for (let i = 0; i < BACKGROUND; i++) {
+    const at = i / (BACKGROUND - 1);
+    const id = `bg${i}`;
+    values.set(id, makeValue(id, 200 + at * 8800, 'RB'));
+    // Flat: background players are scenery, and a mover among them would show
+    // up in the lists beside the subject under test.
+    const share = 0.1 + at * 0.8;
+    snapMap.set(id, snaps(share, share));
+  }
+
+  return { values, snaps: snapMap };
+}
 
 /**
  * One roster of players, each with a value and an optional snap move.
@@ -25,8 +62,7 @@ function league(
   players: { id: string; value: number; move?: [from: number, to: number, games?: number]; age?: number }[],
   rosterId = 1,
 ) {
-  const values = new Map<string, PlayerValue>();
-  const snapMap = new Map<string, SnapShare>();
+  const { values, snaps: snapMap } = background();
   const entries: RosterSummary['players'] = [];
 
   for (const p of players) {
@@ -60,8 +96,12 @@ describe('roleTrends', () => {
     // The whole point of the list. A 20% move on a bench body is a bigger
     // percentage and a smaller opportunity than a modest move on a starter,
     // and a list that leads with the bench body is one nobody acts on.
+    //
+    // Both subjects clear the headroom gate on purpose — this test is about
+    // what orders the survivors, and it would prove nothing if the gate were
+    // quietly doing the ordering.
     const { summaries, values, snaps } = league([
-      { id: 'star', value: 6000, move: [0.55, 0.68] },
+      { id: 'star', value: 6000, move: [0.55, 0.85] },
       { id: 'scrub', value: 300, move: [0.1, 0.9] },
     ]);
 
@@ -70,6 +110,103 @@ describe('roleTrends', () => {
     expect(trends.buyLow.map((t) => t.player.id)).toEqual(['star', 'scrub']);
     // ...even though the scrub moved much further in share and in percent.
     expect(trends.buyLow[1].factor).toBeGreaterThan(trends.buyLow[0].factor);
+    for (const trend of trends.buyLow) {
+      expect(trend.pricing.headroom).toBeGreaterThanOrEqual(MIN_HEADROOM);
+    }
+  });
+
+  it('drops a rise that his price has already accounted for', () => {
+    /**
+     * The Gibbs case, and the reason this gate exists.
+     *
+     * Jahmyr Gibbs went from 64% of the snaps to 76% over the last month of
+     * 2025 — a real move, correctly detected. He is also the second-most
+     * expensive asset in dynasty football, and no reading of the market has it
+     * failing to notice that he is a workhorse. The old list ranked him its
+     * largest buy-low anyway, because it compared him only against himself.
+     *
+     * `priced` here is the shape: top of the position on price, top of the
+     * position on usage, rising. `underpriced` moved by exactly the same amount
+     * from exactly the same place, and costs a fraction as much.
+     */
+    const { summaries, values, snaps } = league([
+      { id: 'priced', value: 9500, move: [0.64, 0.76] },
+      { id: 'underpriced', value: 2000, move: [0.64, 0.76] },
+    ]);
+
+    const trends = roleTrends({ summaries, values, snaps, current: true });
+
+    expect(trends.buyLow.map((t) => t.player.id)).toEqual(['underpriced']);
+    // And not because the move went unnoticed — it is the same move, and on the
+    // more expensive player it is worth far more value points. Points alone is
+    // precisely the ranking that gets this wrong.
+    const priced = roleShift(makePlayer('priced', 'RB', 29), { snaps: snaps.get('priced') });
+    expect(priced.factor).toBeGreaterThan(1);
+  });
+
+  it('drops a fall on a player nobody was overpaying for', () => {
+    // The mirror. A cheap back losing snaps is not a sell-high, because there
+    // is no high to sell into — his price already says what he is.
+    const { summaries, values, snaps } = league([
+      { id: 'expensive', value: 7000, move: [0.8, 0.45] },
+      { id: 'already_cheap', value: 400, move: [0.8, 0.45] },
+    ]);
+
+    const trends = roleTrends({ summaries, values, snaps, current: true });
+
+    expect(trends.sellHigh.map((t) => t.player.id)).toEqual(['expensive']);
+  });
+
+  it('needs one metric to have moved as far as the roster column demands', () => {
+    /**
+     * The panel and the snap column have to agree about what a move is.
+     *
+     * `SnapShareCell` draws its arrow at `MATERIAL_DELTA` — ten share points,
+     * "roughly a rotational back going from a third of the work to half". Below
+     * that the list was still happy to make a finding: Ja'Marr Chase appeared as
+     * a sell-high on a five-point snap dip with flat targets, while the column
+     * beside him showed nothing at all.
+     *
+     * The bar reads the *largest* single metric rather than the average
+     * `roleShift` prices on. Averaging is right for a factor — snaps and usage
+     * are two views of one change — but it buries a real move in one column
+     * under a flat one beside it, which is Jonathan Taylor going 73% to 85% of
+     * the carries on unchanged snaps.
+     */
+    const { summaries, values, snaps } = league([
+      { id: 'noise', value: 2000, move: [0.5, 0.58] },
+      { id: 'real', value: 2000, move: [0.5, 0.65] },
+    ]);
+
+    const trends = roleTrends({ summaries, values, snaps, current: true });
+
+    expect(trends.buyLow.map((t) => t.player.id)).toEqual(['real']);
+    // Not because the small move failed the value threshold — it clears it
+    // comfortably, which is exactly why a second bar was needed.
+    const priced = roleShift(makePlayer('noise', 'RB', 29), { snaps: snaps.get('noise') });
+    expect(Math.abs(priced.factor - 1)).toBeGreaterThan(MIN_SHARE);
+  });
+
+  it('reports where role and price rank, so a row can justify itself', () => {
+    const { summaries, values, snaps } = league([
+      { id: 'up', value: 2000, move: [0.3, 0.8] },
+    ]);
+
+    const [trend] = roleTrends({ summaries, values, snaps, current: true }).buyLow;
+
+    expect(trend.pricing.role).toBeGreaterThan(trend.pricing.price);
+    expect(trend.pricing.headroom).toBeCloseTo(trend.pricing.role - trend.pricing.price, 10);
+  });
+
+  it('says nothing about a player it cannot rank', () => {
+    // No snap data means no role percentile, so there is no way to know whether
+    // the price already reflects him. Silence beats a guess.
+    const { summaries, values, snaps } = league([
+      { id: 'up', value: 2000, move: [0.3, 0.8] },
+    ]);
+    snaps.delete('up');
+
+    expect(roleTrends({ summaries, values, snaps, current: true }).buyLow).toEqual([]);
   });
 
   it('excludes a trend with too few games to mean anything', () => {

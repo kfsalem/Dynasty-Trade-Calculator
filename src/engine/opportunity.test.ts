@@ -104,7 +104,7 @@ describe('opportunity', () => {
     expect(derived?.metrics.find((m) => m.key === 'targetShare')?.kind).toBe('share');
   });
 
-  it('windows each metric season-to-date against the last four weeks', () => {
+  it('windows each metric against the weeks before the recent window', () => {
     const derived = opportunity(
       player(
         'WR',
@@ -117,11 +117,17 @@ describe('opportunity', () => {
     );
 
     const targets = derived?.metrics[0].window;
+    // Season spans both windows and is display-only.
     expect(targets?.season).toBeCloseTo(0.2);
+    expect(targets?.prior).toBeCloseTo(0.1);
     expect(targets?.recent).toBeCloseTo(0.3);
-    expect(targets?.delta).toBeCloseTo(0.1);
+    // The whole move — 10% of targets to 30%. Measured against the season mean
+    // this read 0.1, because the mean already contained the weeks being
+    // measured; see `activity.MetricWindow.prior`.
+    expect(targets?.delta).toBeCloseTo(0.2);
     expect(targets?.games).toBe(4);
     expect(targets?.recentGames).toBe(2);
+    expect(targets?.priorGames).toBe(2);
   });
 
   it('ends the recent window at Week 17, exactly as snap share does', () => {

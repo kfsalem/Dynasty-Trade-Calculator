@@ -15,6 +15,24 @@ function evidence(trend: RoleTrend): string {
   }`;
 }
 
+/**
+ * The half of the row a change-based list cannot say.
+ *
+ * "76% snaps, up from 64%" is true of Jahmyr Gibbs and tells you nothing,
+ * because he is priced as the workhorse he is. What makes a row actionable is
+ * the second sentence: he plays like the 8th-best back at his position and
+ * costs like the 25th. Stating both ranks is what separates this from a usage
+ * leaderboard.
+ */
+function mispricing(trend: RoleTrend, rising: boolean): string {
+  const rank = (share: number) => `top ${Math.max(1, Math.round((1 - share) * 100))}%`;
+  const { role, price } = trend.pricing;
+
+  return rising
+    ? `plays ${rank(role)} at ${trend.player.position}, priced ${rank(price)}`
+    : `priced ${rank(price)} at ${trend.player.position}, plays ${rank(role)}`;
+}
+
 function TrendRow({
   trend,
   teamName,
@@ -48,6 +66,11 @@ function TrendRow({
             <span className="ml-1 font-medium text-amber-700">· short window</span>
           )}
         </div>
+        {/* The reason the row cleared the gate, not decoration. Without it the
+            list reads as "these players' usage moved", which is the claim that
+            put the second-most-expensive asset in dynasty at the top of a
+            buy-low list. */}
+        <div className="text-xs text-gray-400">{mispricing(trend, rising)}</div>
       </div>
 
       <span
@@ -121,7 +144,9 @@ export function RoleTrendPanel({
       <h3 className="text-lg font-semibold tracking-tight">Role trends</h3>
       <p className="mt-1 text-sm text-gray-500">
         The market reprices a role change slowly, so the gap between what a player costs and
-        what his current role is worth is the edge. Ranked by that gap in value points.
+        what his current role is worth is the edge. Two things have to be true: his role
+        moved, and the role he moved to is not already in his price. Ranked by that gap in
+        value points.
       </p>
 
       {/* The single most important sentence on the panel. A previewed gap is a
@@ -139,7 +164,7 @@ export function RoleTrendPanel({
       <div className="mt-4 grid gap-6 sm:grid-cols-2">
         <TrendList
           title="Buy low"
-          blurb="Playing more than their price says."
+          blurb="Role is rising and the price has not followed."
           trends={trends.buyLow}
           teamName={teamName}
           rising
@@ -147,7 +172,7 @@ export function RoleTrendPanel({
         />
         <TrendList
           title="Sell high"
-          blurb="Name value outliving the usage behind it."
+          blurb="Role is falling and the price still says otherwise."
           trends={trends.sellHigh}
           teamName={teamName}
           rising={false}

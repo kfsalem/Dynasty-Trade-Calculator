@@ -163,7 +163,23 @@ export function TeamCard({
           <span className="block text-lg font-bold tabular-nums">
             {formatValue(summary.starterValue)}
           </span>
-          <span className="block text-xs text-gray-500">starters</span>
+          {/* Say how much of the lineup the number covers whenever it is not all
+              of it. Kickers and defences have no dynasty market, so in a league
+              that starts them two of ten slots contribute exactly zero — and an
+              empty slot and a filled one are otherwise indistinguishable in the
+              one figure the rankings rank on. */}
+          <span
+            className="block text-xs text-gray-500"
+            title={
+              summary.pricedSlots < summary.totalSlots
+                ? `${summary.pricedSlots} of ${summary.totalSlots} starting slots hold a player with a dynasty value. Kickers, defences and deep-bench players have no market, so they count as zero here.`
+                : undefined
+            }
+          >
+            {summary.pricedSlots < summary.totalSlots
+              ? `${summary.pricedSlots} of ${summary.totalSlots} starters`
+              : 'starters'}
+          </span>
         </span>
 
         <svg

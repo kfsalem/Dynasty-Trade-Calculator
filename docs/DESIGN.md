@@ -497,9 +497,10 @@ that in a 10-team single-QB league every manager already starts a top-10
 quarterback. Phases 1–4 inherited that blind spot wholesale.
 
 - **Replacement level per position**, derived from the lineups the league
-  actually fields — `leagueValue = max(market * RESIDUAL_SHARE, market -
-  replacement(position))`. The first version used a hard `max(0, …)`; see
-  *The clamp was destroying the model* below for why that had to go.
+  actually fields — `leagueValue = market² / (market + replacement(position))`.
+  This started as a hard `max(0, market - replacement)`, then a floored
+  subtraction; see *The clamp was destroying the model* and *Subtraction was the
+  wrong operation* below for why each had to go.
 - **Realistic rookie pick values**: projected draft slot from the standings,
   plus a hard cliff after roughly pick 15 and near-zero third-rounders
 - **Anti-tanking**: no contention window weights the present below 0.35, and the
@@ -645,6 +646,152 @@ every team reachable by the suggestion engine (129–205 packages considered per
 team, up from as few as 33). Retained share moved to RB 81%, WR 79%, TE 73%,
 QB 49%.
 
+**Subtraction was the wrong operation.** *(2026-07-31)*
+
+The floor kept the tail ordered and hid what it was ordering. Underneath, 94 of
+158 rostered players — **59%** — sat on `market × 0.1`, so the 10th, 25th and
+50th percentiles of retained value were all exactly `0.100`. The median rostered
+player was priced by nothing except a tenth of his market value, and the floor
+that was supposed to be a rescue was doing all the work.
+
+Two symptoms a manager sees before any of that:
+
+- **Jahmyr Gibbs and D'Andre Swift are 4.4x apart on market and came out 34x
+  apart.** Swift is a starting NFL back who finished RB15 in PPR; he was worth
+  230 against Gibbs' 7,846. Patrick Mahomes was 264, Travis Kelce 130.
+- **The league's best and worst rosters went from 1.82x apart on market to
+  3.93x.** Every lineup lost roughly eight starters × two thousand — the same
+  ~15,000 came off all ten teams — and the rankings render that ratio as a bar
+  width. A shift is not a scale, and ratios of a shifted quantity mean nothing.
+
+The mistake is a category error, not a tuning problem. VORP subtraction is
+defined on **projected points**, where one replacement level is a real quantity
+you can take away. A dynasty market value is a **price** — already convex in
+quality, already carrying scarcity — and subtracting a constant from a price
+shears it rather than deflating it. No choice of floor fixes that; the floor is
+what makes it survivable enough to ship.
+
+Replaced with `market² / (market + replacement)`, which is the same idea written
+so it cannot shear:
+
+```
+market² / (market + replacement)  ===  market - replacement × (market / (market + replacement))
+```
+
+You are charged the replacement cost *scaled by how far clear of it you are*.
+Far above replacement the scale approaches 1 and this is the old subtraction
+exactly, so nothing about the top of the model changed. Near replacement the
+charge shrinks with the surplus it comes out of, and can never overtake it —
+which is why no floor is needed: the curve is strictly increasing and strictly
+positive for any positive market value, so the ordering `RESIDUAL_SHARE` existed
+to protect is now a property of the curve rather than a repair to it.
+`RESIDUAL_SHARE` is deleted.
+
+On the real league: Gibbs/Swift **7.2x**, roster spread **2.30x**, retained
+percentiles p10/p25/p50/p75/p90 of **0.319 / 0.398 / 0.491 / 0.622 / 0.711**
+against `0.100 / 0.100 / 0.100 / 0.392 / 0.621` before. Retained share at the top
+of each position moved to RB 82%, WR 82%, TE 79%, QB 66% — the quarterback
+double-discount flagged as "worth watching" in finding 4 above is now a discount
+rather than an erasure.
+
+**The tests could not have caught any of this, and that is the more important
+finding.** All 296 passed throughout. Nothing was *locally* wrong: the clamp
+returned what it promised, the floor kept the tail ordered, every function met
+its own contract. The failure was in the shape of the distribution, which no
+test looked at.
+
+So `replacement.test.ts` gains a `calibration` block asserting properties of the
+whole output, in the terms a manager would notice them going wrong in:
+
+- Two players at a position can never come out further apart than the **square**
+  of their market ratio. This is a provable ceiling for `m²/(m+r)` and no bound
+  at all for subtraction — Gibbs and Swift cleared it by 34 against 19.7.
+- No block of the pool larger than 10% may share a single retained share (the
+  plateau test — the clamp put 55% on one number, the floor 59% on one line).
+- Retention is strictly monotone: a better player is always worth a larger
+  *share* of his price, not merely a larger number.
+- The best-to-worst roster spread may not exceed 1.6x the market's own spread.
+
+The last one needs a second fixture. `league()` snakes its pool out so every
+roster is near-identical, and a spread of 1.0 stays 1.0 under any shift
+whatsoever — the assertion would have passed against the model it exists to
+reject. `stratified()` deals in blocks instead, with decay rates calibrated to
+produce a 1.68x market spread against the real league's 1.82x. All six
+assertions fail against the old model and pass against the new one.
+
+**"Buy low" was measuring the wrong thing.** *(2026-07-31)*
+
+R7 ranked both lists on `roleShift`, which compares a player **only against
+himself**: did his usage move? On the real league that put **Jahmyr Gibbs at the
+top of the buy-low list** — 64% of the snaps to 76% over the last month of 2025,
+correctly detected, and completely useless. Gibbs is the second-most-expensive
+asset in dynasty football. There is no reading of the market under which it has
+failed to notice that he is a workhorse, and a rising workload on a player
+already priced as one is a *reason he is expensive*, not a discount.
+
+The error is systematic rather than incidental. The gap is measured in value
+points — correctly, since a 3% move on a 6,000-point starter beats a 20% move on
+a bench body — so the most expensive players clear any threshold on the smallest
+percentage move. Ranking on change alone therefore fills the list with precisely
+the players whose roles are most thoroughly priced. Josh Allen was second on it.
+
+A row now needs two things, not one:
+
+1. **His role moved** — `roleShift`, unchanged, and still what prices a value.
+2. **The role he moved to is not already in his price** — `rolePricing`, new.
+
+The second is a percentile comparison inside his own position: where his current
+usage ranks against where his price ranks. Gibbs is the 96th percentile on role
+and the 99th on price, so his headroom is **−0.03** and he is filtered as fairly
+priced. A back playing like the RB8 while priced like the RB25 is what survives,
+which is what "buy low" has always meant to a dynasty manager — a good player
+whose *price* is depressed, not merely one whose usage ticked up.
+
+The pool is drawn from every player with both a market value and snap data, not
+from the league's rosters, so the same player does not rank differently in a
+10-team and a 14-team league for reasons that have nothing to do with him.
+Percentiles are midranks, because at quarterback ties are the normal case —
+every healthy starter sits at or near 100% of the snaps.
+
+A third gate came out of the same review. The lists required only that the
+*factor* move half a percent, while the roster snap column draws its arrow at
+`MATERIAL_DELTA`, ten share points. So the panel listed Ja'Marr Chase as a
+sell-high on a five-point snap dip with flat targets, while the column three
+inches away showed nothing for him — and `MIN_SHARE`'s own comment already said
+that a list disagreeing with its neighbour reads as a bug in one of the two. A
+row now needs one metric to have moved ten points. It reads the *largest* metric
+rather than the average `roleShift` prices on, because averaging snaps and usage
+is right for a factor and wrong for a threshold: Jonathan Taylor went from 73% to
+85% of the carries on unchanged snaps and averaged out to under six.
+
+Before and after on the real league, buy-low side:
+
+```
+was: Gibbs +316, Josh Allen +229, Smith-Njigba +204, St. Brown +202, ...
+now: Jonathan Taylor +213, Travis Etienne +108, RJ Harvey +103, Chris Godwin +63,
+     Travis Kelce +59, Tyrone Tracy +49, Wan'Dale Robinson +34, Woody Marks +32
+```
+
+Every surviving row is a player who took on work his price has not caught up
+with. Sell-high keeps Achane, Hampton, Lamar Jackson, Javonte Williams and Josh
+Jacobs, and loses Chase.
+
+Also fixed here: `suggest.ts` asserted "that's worth about N the market hasn't
+charged for yet" in trade rationales **regardless of `applied`**. Through the
+offseason `applied` is false, no value on the page includes the gap, and the
+Role trends panel says so in as many words — so a suggestion card three feet
+below it was directly contradicting the panel. The offseason wording now says
+the move happened and is not counted.
+
+**Still open, and deliberately not changed:** `ageWeight` gives a 30-year-old
+1.0 and a 22-year-old 0.35. That is right for *pricing* — an old player's value
+is very nearly a statement about his current role — but it tilts both lists
+toward older players, which is backwards for dynasty. Travis Kelce at 36 is on
+the buy-low list because of it. Changing the weight for the lists alone would
+make them disagree with the values they are denominated in, which is a worse
+inconsistency than the one it fixes; the honest fix is a separate horizon-aware
+score, not a second weighting of the same one.
+
 **The rookie-pick curve had the same disease.** *(2026-07-29)*
 
 `pickRealismFactor` short-circuited on `round >= 3` *before* consulting the pick
@@ -672,6 +819,62 @@ single-pick drop is now 0.08, down from 0.30. Rounds 1 and 2 barely move
 the league prices to zero. A third-rounder is now worth appreciably more in a
 10-team league than a 14-team one, which is correct.
 
+**The cliff was in the data all along, and we were charging for it twice.**
+*(2026-07-31)*
+
+`pickRealismFactor` existed on the argument that "market pick values are smoother
+than reality, because they average across league formats and because hope is
+priced in." Checked against the source, they are not. DynastyProcess's own 2026
+curve, read by overall pick number, is:
+
+```
+pick   1: 5505    5: 2514   10: 1004   13: 598   20: 195   25: 95   30: 49   45: 11
+```
+
+A **28x** drop by pick 20 and 112x by pick 30, before anything of ours runs. The
+realism curve then took another 70% off at pick 20 and 92% at pick 30. Compounded
+on the real league, a 2026 second-rounder priced at **44 out of 10,000** — a
+sixth of a waiver-wire running back, and roughly a fiftieth of what anybody in
+the league would accept for one. Third-rounders ran 2 to 26.
+
+Worse, the curve was arguing against the lookup underneath it. Its anchors were
+absolute pick numbers "because the supply of NFL talent does not care how many
+teams are in your league" — while `lookupPickValue` was reading the league's
+*own slot label* off DynastyProcess's twelve-team board. A 10-team league's 2.09
+is the 19th pick; asking the source for its "2.09" prices it as the 21st. Round 1
+was immune, since slot and overall pick coincide there, which is what kept it
+invisible for so long.
+
+Both are fixed by the same change: `lookupPickValue` now takes an **overall pick
+number** and maps it onto the source's board internally, and nothing is applied
+on top of the result.
+
+The league-size property the curve was hand-drawn to produce now falls out of the
+source directly, and more precisely:
+
+| | 1.01 | 2.01 | 3.01 |
+|---|---|---|---|
+| 10-team | 5,505 (pick 1) | 842 (pick 11) | 168 (pick 21) |
+| 12-team | 5,505 (pick 1) | 598 (pick 13) | 95 (pick 25) |
+| 14-team | 5,505 (pick 1) | 429 (pick 15) | 56 (pick 29) |
+
+It also fixes larger leagues outright. A 14-team league has slots 13 and 14 that
+no DynastyProcess row names; those fell through the entire chain onto the round's
+median, so its 1.13 and 1.14 were priced identically *and* as mid-firsts. As
+picks 13 and 14 they now read off the front of the second round, where they
+belong. And a round deeper than the source publishes clamps to the deepest
+available rather than pricing at zero — a 6th-rounder in a six-round rookie draft
+was an asset the suggestion engine would hand over for free.
+
+On the real league the whole board is now smooth and monotone from 5,505 down to
+49 with no step at any round boundary: 2.10 went 44 → 195, 3.01 went 26 → 168,
+3.10 went 2 → 49. Firsts are unchanged, as they should be.
+
+`marketValue` for a pick is now the source's number untouched, which matters
+beyond accuracy. It is defined everywhere else as "what the other manager will
+quote", and trade fairness is *argued* in it — so a private correction applied
+there settled every fairness verdict in units nobody else in the league uses.
+
 **`tradeableSeasons` — a latent bug, not a live one.** The first review claimed
 the app was listing 2026 rookie picks after that draft had happened. That was
 wrong, and checking beat assuming: this league's status is `pre_draft` and its
@@ -687,6 +890,46 @@ offer. Now gated on the league's own status, and only when the league has
 actually rolled over to the current season: a dynasty league still sitting on
 last year's entry reads `complete`, which describes a finished season rather
 than this year's unscheduled rookie draft.
+
+**Two numbers that were saying more than they knew.** *(2026-07-31)*
+
+**The rankings ranked eight-slot lineups and called them lineups.** This league
+starts a kicker and a defence, neither of which has a dynasty market, so both
+count as exactly zero in `starterValue` — the one figure the rankings sort on and
+draw their bar from. That is the right price for a kicker and the wrong thing to
+say silently: an unfilled slot and a filled one are indistinguishable in it, and
+the starter counts confirm the gap is real rather than theoretical (K 9, DEF 8
+across ten teams). `RosterSummary` now carries `pricedSlots` and `totalSlots`,
+and the card reads "8 of 10 starters" whenever the number does not cover the
+whole lineup.
+
+**A median split was deciding what kind of team you are.** Both contention axes
+split on the median, so exactly half the league is "weak now" by construction.
+On the real league that put four teams in the danger zone every season, including
+one sitting **sixth of ten and four percent below the median**, and told it to
+"sell the veterans whose value is peaking."
+
+As a label that is only unkind. As an input it was worse: `WINDOW_WEIGHTS` read
+the quadrant and nothing else, so fifth place was scored on every trade at 0.9 on
+the present and sixth at 0.35 — a two-and-a-half-fold difference between two
+teams a few percent apart, deciding which offers each was shown.
+
+`ContentionProfile` now carries `nowShare` and `youthShare`, each team's position
+on its axis from 0 to 1, and `suggest.windowWeights` interpolates bilinearly
+across the four corner values instead of switching on the label. The corners are
+exactly the old table, so an unambiguous juggernaut and an unambiguous
+danger-zone team are scored precisely as before; only the ground between them
+changes. On the real league the step across the median is gone — 0.54 and 0.57
+for the teams either side of it, against 0.65 and 0.35 before.
+
+The interpolation deliberately inherits one non-monotonicity from the table it
+reproduces: a *weak* old team gets less weight on the present than a weak young
+one, because the anti-tanking floor holds the danger zone at 0.35 while a
+rebuilder sits at 0.4. That is the table's own shape and smoothing it away would
+be a different model, so a test pins it.
+
+The quadrant label itself is unchanged and still a median split. It is a summary
+now rather than a decision, which is the right job for it.
 
 ### Phase 5 — Scale out
 - MFL + Fleaflicker providers

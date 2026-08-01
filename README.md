@@ -30,27 +30,39 @@ quote, and what it is actually worth **in your league**.
 
 The difference is replacement level. In a 10-team single-QB league every manager
 already starts a top-10 quarterback, and the next one is sitting on waivers — so
-losing yours costs almost nothing, whatever the market says. Running backs are
-the opposite: the supply of true 15–20 touch backs runs out not far past the
-number who have to start, so an elite back keeps most of his value. On a real
-10-team league the best running back kept 81% of his market value and the best
-quarterback 49%.
+losing yours costs far less than the market says. Running backs are the
+opposite: the supply of true 15–20 touch backs runs out not far past the number
+who have to start, so an elite back keeps most of his value. On a real 10-team
+league the best running back keeps 82% of his market value and the best
+quarterback 66%.
 
 None of this is hardcoded per position. Starter counts are read from the lineups
 the league actually fields, so a superflex league raises quarterbacks back on
 its own — twenty of them have to start.
 
-A player below replacement level keeps a small share of his market value rather
-than dropping to nothing. He is not startable this week, but an aging starter or
-an unproven rookie is still a real asset, and flattening the whole tail onto zero
-made the app unable to tell any of them apart.
+The adjustment is `market² / (market + replacement)`, which is the same thing as
+subtracting replacement level *scaled by how far clear of it a player is*. Far
+above replacement it is plain subtraction. Near it the charge shrinks with the
+surplus it comes out of, so it can never overtake it.
 
-Rookie picks get the same treatment. An NFL class yields roughly 10–15 offensive
-players who matter in their first two years, so pick value falls off a cliff
-after about pick 15 and late picks are lottery tickets. The curve reads *absolute
-pick number*, never round, because the supply of NFL talent does not care how
-many teams are in your league — which is why a third-rounder is worth more in a
-10-team league than in a 14-team one. Draft slots come from the league's own
+That distinction is the whole model. Subtracting a flat replacement level is a
+points-space operation, and a dynasty value is a price — so straight subtraction
+put a starting NFL running back 34x behind an elite one who is 4.4x his market
+price, and made the league's best roster read 3.9x its worst against a market
+gap of 1.8x. A player below replacement is not startable this week, but an aging
+starter or an unproven rookie is still a real asset.
+
+Rookie picks are priced by *absolute pick number*, never by round, because the
+supply of NFL talent does not care how many teams are in your league. A class
+yields roughly 10–15 offensive players who matter in their first two years, so
+value falls off a cliff and late picks are lottery tickets — but that cliff comes
+out of the source, which already drops 28x between the first pick and the
+twentieth. An earlier version imposed a second cliff on top of it and priced a
+second-rounder at a sixth of a waiver-wire running back.
+
+Reading the pick number also gets league size right for free: a 10-team 3.01 is
+the 21st pick and a 14-team 3.01 is the 29th, so the same label is worth three
+times more in the smaller league. Draft slots come from the league's own
 published order once it is set, so a pick is priced as the 1.09 it actually is
 rather than as a generic first; for seasons nobody has drafted yet they are
 projected from roster strength and labelled as projections. Either way a bottom

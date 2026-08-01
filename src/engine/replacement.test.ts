@@ -101,6 +101,69 @@ function tiedPool(age = 25) {
   return { settings, players, values, ids, rosters };
 }
 
+/**
+ * The same ten teams, but stratified: team 1 holds the best players at every
+ * position and team 10 the worst.
+ *
+ * `league()` deals its pool out in a snake, which makes every roster equally
+ * good — useful for asking what the *pool* does, useless for asking what the
+ * model does to the gap between a contender and a bottom team. Real leagues are
+ * stratified, and the spread between their best and worst roster is the headline
+ * number on the rankings page.
+ */
+function stratified(teams = 10) {
+  const slots: LineupSlot[] = ['QB', 'RB', 'RB', 'WR', 'WR', 'WR', 'TE', 'FLEX'];
+  const settings = makeSettings(slots, { teamCount: teams });
+
+  const players = new Map<string, Player>();
+  const values = new Map<string, PlayerValue>();
+  const pool: Record<string, string[]> = { QB: [], RB: [], WR: [], TE: [] };
+
+  // A single decay per position rather than the shelved curves in `league()`:
+  // this fixture is about the gap between rosters, and a shelf would put the
+  // whole bottom half of the league on one side of it.
+  //
+  // The rates are calibrated so that dealing in blocks produces a **1.68x**
+  // market spread between the best and worst lineup, close to the 1.82x the real
+  // 10-team league shows. That matters more than it looks: block-dealing is the
+  // most stratified league that can exist, so a steep curve on top of it gives a
+  // 7.8x market spread and no model could be judged against it. The question
+  // this fixture is built to ask is what an adjustment does to a *realistic*
+  // gap, not to an impossible one.
+  const curve: Record<string, (rank: number) => number> = {
+    QB: (r) => 6000 * 0.985 ** r,
+    RB: (r) => 7000 * 0.983 ** r,
+    WR: (r) => 6800 * 0.987 ** r,
+    TE: (r) => 6000 * 0.98 ** r,
+  };
+
+  for (const position of ['QB', 'RB', 'WR', 'TE'] as Position[]) {
+    for (let rank = 1; rank <= 60; rank++) {
+      const id = `${position}${rank}`;
+      players.set(id, makePlayer(id, position, 25));
+      values.set(id, makeValue(id, curve[position](rank), position));
+      pool[position].push(id);
+    }
+  }
+
+  // Consecutive blocks, best first: team 1 takes QB1-2, RB1-4, WR1-5, TE1-2.
+  const rosters: Roster[] = [];
+  for (let t = 0; t < teams; t++) {
+    const ids: string[] = [];
+    for (const [position, count] of [
+      ['QB', 2],
+      ['RB', 4],
+      ['WR', 5],
+      ['TE', 2],
+    ] as [Position, number][]) {
+      for (let n = 0; n < count; n++) ids.push(pool[position][t * count + n]);
+    }
+    rosters.push(makeRoster(t + 1, ids));
+  }
+
+  return { settings, players, values, rosters };
+}
+
 /** Reorderings of the same rosters, from a seeded Fisher-Yates so they repeat. */
 function shuffles(rosters: Roster[], trials = 25): Roster[][] {
   let seed = 20260729;
@@ -136,16 +199,31 @@ describe('startersByPosition', () => {
 });
 
 describe('replacementLevels', () => {
-  it('makes quarterbacks nearly worthless in a shallow single-QB league', () => {
+  it('makes quarterbacks the cheapest position in a shallow single-QB league', () => {
     const { values, summaries } = league();
     const levels = replacementLevels(values, startersByPosition(summaries));
     const adjusted = applyReplacement(values, levels);
 
-    // QB1 is the best quarterback alive and still collapses, because QB11 is
-    // almost as good and is sitting there for nothing.
+    // QB1 is the best quarterback alive and still loses about half his price,
+    // because QB11 is almost as good and is sitting there for nothing.
     const qb1 = adjusted.get('QB1')!;
     expect(qb1.marketValue).toBeGreaterThan(5000);
-    expect(qb1.value).toBeLessThan(qb1.marketValue * 0.2);
+    expect(qb1.value).toBeLessThan(qb1.marketValue * 0.6);
+
+    // Half, not a twentieth. The old subtraction took him to under 20% of
+    // market, and a model that prices the best quarterback in football below a
+    // fringe running back is not one anybody will trade against. What has to
+    // hold is that he is discounted *hardest* — the ordering across positions,
+    // not an absolute number nobody can check.
+    expect(qb1.value).toBeGreaterThan(qb1.marketValue * 0.4);
+
+    const retained = (id: string) => {
+      const v = adjusted.get(id)!;
+      return v.value / v.marketValue;
+    };
+    for (const rival of ['RB1', 'WR1', 'TE1']) {
+      expect(retained('QB1')).toBeLessThan(retained(rival));
+    }
   });
 
   it('protects workhorse running backs, whose supply runs out at a shelf', () => {
@@ -166,11 +244,13 @@ describe('replacementLevels', () => {
     const adjusted = applyReplacement(values, levels);
 
     // A top-four tight end is a genuine weapon; TE12 is streamable filler.
+    const te1 = adjusted.get('TE1')!;
     const te12 = adjusted.get('TE12')!;
-    expect(adjusted.get('TE1')!.value).toBeGreaterThan(4000);
-    expect(te12.value).toBeLessThan(te12.marketValue * 0.15);
-    // Flattened, not erased. He is unstartable here but still an asset, and
-    // collapsing him onto a hard zero is what made the model order-dependent.
+    expect(te1.value).toBeGreaterThan(4000);
+    expect(te12.value / te12.marketValue).toBeLessThan(te1.value / te1.marketValue);
+    // Discounted, not erased. He is unstartable here but still a real asset —
+    // a bench tight end is something you can trade, and collapsing him onto a
+    // hard zero is what made the model order-dependent in the first place.
     expect(te12.value).toBeGreaterThan(0);
   });
 
@@ -222,15 +302,143 @@ describe('replacementLevels', () => {
     }
   });
 
-  it('leaves players well above replacement priced at their true surplus', () => {
-    // The floor must not become a subsidy. It binds only where the surplus is
-    // smaller than the residual share, so an elite back is untouched by it.
+  it('converges on plain subtraction for players far above replacement', () => {
+    // The curve is `market - replacement × (market / (market + replacement))`,
+    // so the charge approaches a full replacement level as the surplus grows.
+    // An elite back is priced at very nearly his true surplus, which is what
+    // keeps the change from being a blanket softening of the whole model.
     const { values, summaries } = league();
     const levels = replacementLevels(values, startersByPosition(summaries));
     const adjusted = applyReplacement(values, levels);
 
     const rb1 = adjusted.get('RB1')!;
-    expect(rb1.value).toBe(rb1.marketValue - levels.RB!.value);
+    const surplus = rb1.marketValue - levels.RB!.value;
+    expect(rb1.value).toBeGreaterThan(surplus);
+    expect(rb1.value).toBeLessThan(surplus + levels.RB!.value * 0.15);
+  });
+});
+
+/**
+ * League-wide invariants on the shape of the output.
+ *
+ * Every other test in this file checks one function against one input. None of
+ * them could fail when the model broke, because nothing was locally wrong — the
+ * clamp returned exactly what it promised, the floor kept the tail ordered, and
+ * 296 tests passed while the median rostered player was priced at a flat tenth
+ * of his market value and the league's best roster read 3.93x its worst against
+ * a market spread of 1.82x.
+ *
+ * These are the assertions that would have caught it: properties of the whole
+ * distribution, stated in the terms a dynasty manager would notice them going
+ * wrong in.
+ */
+describe('calibration', () => {
+  const adjust = () => {
+    const { values, summaries, teams } = league();
+    const levels = replacementLevels(values, startersByPosition(summaries));
+    return { adjusted: applyReplacement(values, levels), values, summaries, teams };
+  };
+
+  it('never spreads two players further apart than the square of their market gap', () => {
+    /**
+     * The bound that fails loudly on shearing.
+     *
+     * For `m²/(m+r)` the ratio between two players at a position is
+     * `(m₁/m₂)² × (m₂+r)/(m₁+r)`, and the second term is below 1 whenever
+     * m₁ > m₂ — so the squared market ratio is a ceiling the curve cannot reach.
+     * Subtraction has no ceiling at all: on the real league Gibbs and Swift sat
+     * 4.4x apart on market and 34x apart after adjustment, against a bound of
+     * 19.7x. That is the number a manager sees and refuses to believe, and this
+     * is the assertion that catches it before he does.
+     */
+    const { adjusted } = adjust();
+
+    for (const position of ['QB', 'RB', 'WR', 'TE'] as const) {
+      const ranked = [...adjusted.values()]
+        .filter((v) => v.position === position && v.marketValue > 0)
+        .sort((a, b) => b.marketValue - a.marketValue);
+
+      for (let i = 0; i < ranked.length; i++) {
+        for (let j = i + 1; j < ranked.length; j++) {
+          const marketRatio = ranked[i].marketValue / ranked[j].marketValue;
+          const valueRatio = ranked[i].value / ranked[j].value;
+          expect(valueRatio).toBeLessThanOrEqual(marketRatio ** 2);
+        }
+      }
+    }
+  });
+
+  it('leaves no plateau at the bottom of the pool', () => {
+    /**
+     * The clamp put 55% of rostered players on one number; the residual floor
+     * that replaced it put 59% on one *line*, retaining exactly 0.100 of market
+     * apiece. Both are the same failure — a region where league value carries no
+     * information that market value did not already carry — and only the first
+     * is visible as a tie.
+     *
+     * So the test is on retained share, not on value: no large block of the pool
+     * may share a single retention figure.
+     */
+    const { adjusted } = adjust();
+
+    const pool = [...adjusted.values()].filter((v) => v.marketValue > 0);
+    const retained = pool.map((v) => v.value / v.marketValue);
+    const floor = Math.min(...retained);
+    const onFloor = retained.filter((share) => share <= floor * 1.01).length;
+
+    expect(onFloor / pool.length).toBeLessThan(0.1);
+  });
+
+  it('retains more of the market for better players, everywhere in the pool', () => {
+    // Monotone retention is what "no plateau" means pointwise, and it is the
+    // property that makes the model explicable: a better player is always worth
+    // a larger *share* of his price, not merely a larger number.
+    const { adjusted } = adjust();
+
+    for (const position of ['QB', 'RB', 'WR', 'TE'] as const) {
+      const ranked = [...adjusted.values()]
+        .filter((v) => v.position === position && v.marketValue > 0)
+        .sort((a, b) => b.marketValue - a.marketValue);
+
+      for (let i = 1; i < ranked.length; i++) {
+        expect(ranked[i - 1].value / ranked[i - 1].marketValue).toBeGreaterThan(
+          ranked[i].value / ranked[i].marketValue,
+        );
+      }
+    }
+  });
+
+  it('does not inflate the gap between the best and worst roster', () => {
+    /**
+     * Subtracting a per-position constant from every starter shifts all ten
+     * lineups by roughly the same amount, and a shift is not a scale: the real
+     * league's 37,110-to-20,490 (1.82x) became 21,992-to-5,599 (3.93x) purely
+     * because ~15,000 came off both. The rankings render that ratio as a bar
+     * width, so the arithmetic artifact is the thing the user actually sees.
+     *
+     * This needs the *unequal* fixture. `league()` snakes its pool out so every
+     * roster is near-identical by construction, and a spread of 1.0 stays 1.0
+     * under any shift whatsoever — the test would pass against the very model
+     * it exists to reject. A stratified league is the case that separates them,
+     * and it is also the shape of every real one.
+     */
+    const { settings, players, values, rosters } = stratified();
+
+    const spread = (vals: Map<string, PlayerValue>) => {
+      const totals = rosters.map(
+        (r) => summarizeRoster(r, players, vals, settings).starterValue,
+      );
+      return Math.max(...totals) / Math.min(...totals);
+    };
+
+    const summaries = rosters.map((r) => summarizeRoster(r, players, values, settings));
+    const adjusted = applyReplacement(
+      values,
+      replacementLevels(values, startersByPosition(summaries)),
+    );
+
+    expect(spread(values)).toBeGreaterThan(1.5);
+    expect(spread(adjusted)).toBeLessThan(spread(values) * 1.6);
   });
 });
 
@@ -412,8 +620,16 @@ describe('valueLeague', () => {
       if (i % 3 === 0) return;
       const bias = id.startsWith('RB') ? 0.3 : id.startsWith('TE') ? -0.3 : 0;
       const delta = bias + ((i % 5) - 2) * 0.02;
-      const season = 0.45;
-      snaps.set(id, { season, recent: season + delta, delta, games: 12, recentGames: 9 });
+      const prior = 0.45;
+      snaps.set(id, {
+        season: prior + delta / 3,
+        recent: prior + delta,
+        prior,
+        delta,
+        games: 12,
+        recentGames: 9,
+        priorGames: 3,
+      });
     });
 
     const activity = { snaps, usage: new Map(), current: true };

@@ -251,7 +251,7 @@ buy-low signal.
 
 ### The payoff
 
-Today `PlayerValue.value` is `max(market × RESIDUAL_SHARE, market − replacement)`
+Today `PlayerValue.value` is `market² / (market + replacement)`
 — entirely a market view, adjusted only for league context. It has no idea
 whether a player is currently playing.
 
@@ -290,7 +290,7 @@ one number destroys ordering, and ordering feeds back into the model through
 
 ### References
 
-`src/engine/replacement.ts` (`RESIDUAL_SHARE`, `leagueValue`, `valueLeague`) ·
+`src/engine/replacement.ts` (`leagueValue`, `valueLeague`) ·
 `docs/DESIGN.md` "The clamp was destroying the model" · `src/engine/replacement.test.ts`
 
 ---
