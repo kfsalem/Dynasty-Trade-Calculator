@@ -1,4 +1,4 @@
-import type { League } from '../types';
+import type { League, Position } from '../types';
 import type { RosterSummary } from '../engine/rosterValue';
 import type { SnapShare } from '../engine/snapShare';
 import type { Opportunity } from '../engine/opportunity';
@@ -17,6 +17,8 @@ interface Props {
   snapsMeta?: { season: number; throughWeek: number | null; chartSeason: number | null };
   /** What a changing role did to each value, keyed by Sleeper id. */
   adjustments?: Map<string, ActivityAdjustment>;
+  /** Positions the value source prices, so an unvalued player can say which. */
+  priced?: Set<Position>;
 }
 
 export function RosterList({
@@ -28,6 +30,7 @@ export function RosterList({
   roles,
   snapsMeta,
   adjustments,
+  priced,
 }: Props) {
   const topStarterValue = summaries[0]?.starterValue ?? 0;
 
@@ -95,6 +98,7 @@ export function RosterList({
             roles={roles}
             chartSeason={snapsMeta?.chartSeason ?? null}
             adjustments={adjustments}
+            priced={priced}
           />
         ))}
       </div>

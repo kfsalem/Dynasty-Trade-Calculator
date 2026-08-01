@@ -53,6 +53,7 @@ function App() {
     roles,
     snapsMeta,
     adjustments,
+    priced,
     trends,
     isLoading,
     error,
@@ -185,6 +186,7 @@ function App() {
                   roles={roles}
                   snapsMeta={snapsMeta}
                   adjustments={adjustments}
+                  priced={priced}
                 />
               )}
 
@@ -203,6 +205,7 @@ function App() {
                   roles={roles}
                   chartSeason={snapsMeta?.chartSeason ?? null}
                   adjustments={adjustments}
+                  priced={priced}
                 />
               )}
             </div>

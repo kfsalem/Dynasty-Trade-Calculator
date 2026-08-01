@@ -4,7 +4,7 @@ import type { SnapShare } from '../engine/snapShare';
 import type { Opportunity } from '../engine/opportunity';
 import type { PlayerRole } from '../engine/role';
 import type { ActivityAdjustment } from '../engine/activityFactor';
-import type { League } from '../types';
+import type { League, Position } from '../types';
 import { SnapShareCell } from './SnapShareCell';
 import { UsageCell } from './UsageCell';
 import { RoleMarker } from './RoleMarker';
@@ -17,6 +17,7 @@ import {
   formatSlot,
   formatValue,
 } from '../lib/format';
+import { UnvaluedCell } from './UnvaluedCell';
 
 interface Props {
   summary: RosterSummary;
@@ -36,6 +37,8 @@ interface Props {
   chartSeason?: number | null;
   /** What a changing role did to each value, keyed by Sleeper id. */
   adjustments?: Map<string, ActivityAdjustment>;
+  /** Positions the value source prices, so an unvalued player can say which. */
+  priced?: Set<Position>;
 }
 
 function PlayerLine({
@@ -45,6 +48,7 @@ function PlayerLine({
   roles,
   chartSeason,
   adjustments,
+  priced,
 }: {
   entry: ValuedPlayer;
   snaps?: Map<string, SnapShare>;
@@ -52,6 +56,7 @@ function PlayerLine({
   roles?: Map<string, PlayerRole>;
   chartSeason?: number | null;
   adjustments?: Map<string, ActivityAdjustment>;
+  priced?: Set<Position>;
 }) {
   const role = roles?.get(entry.player.id);
   const style = POSITION_STYLES[entry.player.position];
@@ -86,9 +91,15 @@ function PlayerLine({
       <SnapShareCell share={snaps?.get(entry.player.id)} role={role} chartSeason={chartSeason} />
       <UsageCell usage={usage?.get(entry.player.id)} />
       <ActivityMarker adjustment={adjustments?.get(entry.player.id)} />
-      <span className="shrink-0 tabular-nums text-gray-500">
-        {entry.valued ? formatValue(entry.value) : '~0'}
-      </span>
+      {entry.valued ? (
+        <span className="shrink-0 tabular-nums text-gray-500">{formatValue(entry.value)}</span>
+      ) : (
+        <UnvaluedCell
+          position={entry.player.position}
+          priced={priced}
+          className="shrink-0 text-right tabular-nums text-gray-400"
+        />
+      )}
     </>
   );
 }
@@ -104,6 +115,7 @@ export function TeamCard({
   roles,
   chartSeason,
   adjustments,
+  priced,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -240,6 +252,7 @@ export function TeamCard({
                         roles={roles}
                         chartSeason={chartSeason}
                         adjustments={adjustments}
+                        priced={priced}
                       />
                     ) : (
                       <span className="flex-1 italic text-gray-400">empty</span>
@@ -264,6 +277,7 @@ export function TeamCard({
                       roles={roles}
                       chartSeason={chartSeason}
                       adjustments={adjustments}
+                      priced={priced}
                     />
                   </li>
                 ))}

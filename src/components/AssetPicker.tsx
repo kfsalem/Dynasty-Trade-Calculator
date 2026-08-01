@@ -1,4 +1,4 @@
-import type { DraftPick, League, Player, PlayerValue } from '../types';
+import type { DraftPick, League, Player, PlayerValue, Position } from '../types';
 import { POSITION_STYLES, formatInjury, formatValue } from '../lib/format';
 import { valuePlayers } from '../engine/rosterValue';
 import type { SnapShare } from '../engine/snapShare';
@@ -9,6 +9,7 @@ import { SnapShareCell } from './SnapShareCell';
 import { UsageCell } from './UsageCell';
 import { RoleMarker } from './RoleMarker';
 import { ActivityMarker } from './ActivityMarker';
+import { UnvaluedCell } from './UnvaluedCell';
 
 interface Props {
   league: League;
@@ -32,6 +33,8 @@ interface Props {
   chartSeason?: number | null;
   /** What a changing role did to each value, keyed by Sleeper id. */
   adjustments?: Map<string, ActivityAdjustment>;
+  /** Positions the value source prices, so an unvalued player can say which. */
+  priced?: Set<Position>;
 }
 
 /**
@@ -75,6 +78,7 @@ export function AssetPicker({
   roles,
   chartSeason,
   adjustments,
+  priced,
 }: Props) {
   const roster = league.rosters.find((r) => r.rosterId === rosterId);
   const entries = roster ? valuePlayers(roster.playerIds, players, values) : [];
@@ -198,7 +202,7 @@ export function AssetPicker({
                   league={entry.value}
                 />
               ) : (
-                <span className="w-24 shrink-0 text-right tabular-nums text-gray-400">~0</span>
+                <UnvaluedCell position={entry.player.position} priced={priced} />
               )}
             </label>
           );
