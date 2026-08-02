@@ -99,15 +99,23 @@ function PlayerLine({
       <UsageCell usage={usage?.get(entry.player.id)} />
       <ActivityMarker adjustment={adjustments?.get(entry.player.id)} />
       {entry.valued ? (
+        /* Both scales, always, with the one this list totals in the darker
+           weight. Showing only the list's own scale meant the same player read
+           417 on the bench and 5 in the lineup two inches away, with nothing on
+           the row to say those were different questions. The gap between them
+           is the most interesting thing about a player, not a detail to hide
+           behind a hover. */
         <span
-          className="shrink-0 tabular-nums text-gray-500"
-          title={
-            scale === 'winNow'
-              ? `Win-now ${formatValue(entry.winNowValue)} · dynasty ${formatValue(entry.value)}`
-              : `Dynasty ${formatValue(entry.value)} · win-now ${formatValue(entry.winNowValue)}`
-          }
+          className="shrink-0 tabular-nums"
+          title={`Dynasty ${formatValue(entry.value)} — what he is worth to hold. Win-now ${formatValue(entry.winNowValue)} — what he does for this lineup this season.`}
         >
-          {formatValue(scale === 'winNow' ? entry.winNowValue : entry.value)}
+          <span className={scale === 'dynasty' ? 'text-gray-700' : 'text-gray-400'}>
+            {formatValue(entry.value)}
+          </span>
+          <span className="text-gray-300"> · </span>
+          <span className={scale === 'winNow' ? 'text-gray-700' : 'text-gray-400'}>
+            {formatValue(entry.winNowValue)}
+          </span>
         </span>
       ) : (
         <UnvaluedCell
@@ -252,10 +260,13 @@ export function TeamCard({
           <div className="grid gap-6 sm:grid-cols-2">
             <div>
               <h4
-                className="text-xs font-semibold uppercase tracking-wide text-gray-500"
+                className="flex items-baseline justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500"
                 title="What this lineup does for you this season. Aging starters are worth more here than their dynasty price says; prospects are worth less."
               >
-                Best lineup · win-now {formatValue(summary.starterValue)}
+                <span>Best lineup · win-now {formatValue(summary.starterValue)}</span>
+                <span className="shrink-0 font-normal normal-case tracking-normal text-gray-400">
+                  dyn · <span className="text-gray-700">now</span>
+                </span>
               </h4>
               <ul className="mt-3 space-y-1.5 text-sm">
                 {summary.lineup.map((assignment, i) => (
@@ -284,10 +295,15 @@ export function TeamCard({
 
             <div>
               <h4
-                className="text-xs font-semibold uppercase tracking-wide text-gray-500"
+                className="flex items-baseline justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500"
                 title="What the bench is worth as assets, on the dynasty scale — a prospect who cannot start yet is still something you can trade."
               >
-                Bench · dynasty {formatValue(summary.benchValue)} ({bench.length})
+                <span>
+                  Bench · dynasty {formatValue(summary.benchValue)} ({bench.length})
+                </span>
+                <span className="shrink-0 font-normal normal-case tracking-normal text-gray-400">
+                  <span className="text-gray-700">dyn</span> · now
+                </span>
               </h4>
               <ul className="mt-3 space-y-1.5 text-sm">
                 {bench.length === 0 && <li className="text-gray-400">No bench players.</li>}

@@ -380,6 +380,20 @@ export interface PositionScarcity extends ReplacementLevel {
    * quarterbacks in a shallow single-QB league keep about half.
    */
   retained: number;
+  /** Redraft value of the best player at the position. */
+  topRedraft: number;
+  /**
+   * The same share on the win-now scale.
+   *
+   * Carried because the panel explains why the app weights positions the way it
+   * does, and after R8 there are two weightings. Reporting only the dynasty one
+   * left the panel describing a scale the lineup beside it no longer used —
+   * "replace for 1,548" against a win-now replacement of 253 for the same
+   * position in the same league. That is the same failure the panel was already
+   * fixed for once, when it plotted replacement level directly and taught the
+   * inverse of the model.
+   */
+  retainedWinNow: number;
 }
 
 export function positionScarcity(
@@ -387,21 +401,29 @@ export function positionScarcity(
   levels: Partial<Record<Position, ReplacementLevel>>,
 ): Partial<Record<Position, PositionScarcity>> {
   const top: Partial<Record<Position, number>> = {};
+  const topRedraft: Partial<Record<Position, number>> = {};
   for (const value of market.values()) {
     if (!value.position) continue;
     top[value.position] = Math.max(top[value.position] ?? 0, value.marketValue);
+    topRedraft[value.position] = Math.max(
+      topRedraft[value.position] ?? 0,
+      value.redraftValue,
+    );
   }
 
   const out: Partial<Record<Position, PositionScarcity>> = {};
   for (const level of Object.values(levels)) {
-    const topMarket = top[level.position] ?? 0;
+    const market = top[level.position] ?? 0;
+    const redraft = topRedraft[level.position] ?? 0;
     out[level.position] = {
       ...level,
-      topMarket,
+      topMarket: market,
+      topRedraft: redraft,
       // Through `leagueValue`, not a second copy of the arithmetic — this number
       // is the explanatory panel's whole content, and a panel that teaches a
       // different model than the engine runs is worse than no panel.
-      retained: topMarket > 0 ? leagueValue(topMarket, level.value) / topMarket : 0,
+      retained: market > 0 ? leagueValue(market, level.value) / market : 0,
+      retainedWinNow: redraft > 0 ? leagueValue(redraft, level.winNow) / redraft : 0,
     };
   }
   return out;
