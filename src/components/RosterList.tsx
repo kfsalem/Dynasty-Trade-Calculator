@@ -50,9 +50,16 @@ export function RosterList({
       <p className="text-sm text-gray-500">
         Ranked by the best lineup each roster can field — computed from the league's{' '}
         {league.settings.startingSlots.length} starting slots, not from whatever lineup was
-        last set. Values are dynasty, from FantasyCalc, matched to this league's format,
-        then measured against what it costs to replace each position{' '}
-        <em>in this league</em>.
+        last set. Values come from FantasyCalc, matched to this league's format, then
+        measured against what it costs to replace each position <em>in this league</em>.
+      </p>
+      <p className="mt-2 text-sm text-gray-500">
+        Two questions, two numbers. <strong>Win-now</strong> ranks the rosters and fills
+        the lineups: what these players do for you this season. <strong>Dynasty</strong>{' '}
+        prices the bench and every trade: what they are worth to hold. A 32-year-old
+        receiver is better than his dynasty price says and a rookie who has not played a
+        snap is worse, so a single number was answering both questions with the wrong one.
+        Expand a team to see each list in its own units.
       </p>
 
       {snapsMeta && (

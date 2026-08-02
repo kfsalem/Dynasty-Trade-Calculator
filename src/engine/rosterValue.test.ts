@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { bestLineup, valuePlayers, type ValuedPlayer } from './rosterValue';
+import {
+  bestLineup,
+  byValue,
+  summarizeRoster,
+  valuePlayers,
+  type ValuedPlayer,
+} from './rosterValue';
 import type { LineupSlot, Player, PlayerValue, Position } from '../types';
-import { makeValue } from './testFixtures';
+import { makeRoster, makeSettings, makeValue } from './testFixtures';
 
 function player(id: string, position: Position, name = id): Player {
   return {
@@ -20,8 +26,9 @@ function entry(
   position: Position,
   value: number,
   marketValue = value,
+  winNowValue = value,
 ): ValuedPlayer {
-  return { player: player(id, position), value, marketValue, valued: true };
+  return { player: player(id, position), value, marketValue, winNowValue, valued: true };
 }
 
 const names = (lineup: ReturnType<typeof bestLineup>) =>
@@ -129,6 +136,72 @@ describe('bestLineup', () => {
 
     // REC_FLEX must take wr1 (its only option); FLEX then takes the best RB.
     expect(names(bestLineup(entries, slots))).toEqual(['rb1', 'wr1']);
+  });
+});
+
+describe('win-now lineups', () => {
+  it('starts the man who scores this year, not the one who costs the most', () => {
+    // Identical dynasty value, opposite redraft value: an aging starter and a
+    // prospect. Only one FLEX slot, so the model has to commit.
+    const veteran = entry('veteran', 'WR', 2000, 2000, 2600);
+    const prospect = entry('prospect', 'WR', 2000, 2000, 40);
+    const slots: LineupSlot[] = ['FLEX'];
+
+    expect(names(bestLineup([prospect, veteran], slots))).toEqual(['veteran']);
+    expect(names(bestLineup([veteran, prospect], slots))).toEqual(['veteran']);
+  });
+
+  it('falls back to dynasty order when nobody has a win-now value', () => {
+    // FantasyCalc ranks roughly the top 200 on redraft, so the deep bench
+    // carries no win-now figure at all and ties at zero. Those ties must break
+    // on the asset order rather than on the order Sleeper listed the roster:
+    // if he cannot help you this year, prefer the one who can help you later.
+    const rich = entry('rich', 'WR', 900, 900, 0);
+    const poor = entry('poor', 'WR', 100, 100, 0);
+    const slots: LineupSlot[] = ['FLEX'];
+
+    expect(names(bestLineup([poor, rich], slots))).toEqual(['rich']);
+    expect(names(bestLineup([rich, poor], slots))).toEqual(['rich']);
+  });
+
+  it('builds the asset lineup when asked for one', () => {
+    // `futureScore` projects a roster three years out, which is an asset
+    // question and must be picked on the scale it is summed on.
+    const veteran = entry('veteran', 'WR', 2000, 2000, 2600);
+    const prospect = entry('prospect', 'WR', 3000, 3000, 40);
+    const slots: LineupSlot[] = ['FLEX'];
+
+    expect(names(bestLineup([veteran, prospect], slots))).toEqual(['veteran']);
+    expect(names(bestLineup([veteran, prospect], slots, byValue))).toEqual(['prospect']);
+  });
+
+  it('reports lineup strength and lineup asset value as separate figures', () => {
+    const players = new Map<string, Player>([
+      ['vet', player('vet', 'WR')],
+      ['kid', player('kid', 'RB')],
+      ['bench', player('bench', 'WR')],
+    ]);
+    const values = new Map<string, PlayerValue>([
+      ['vet', makeValue('vet', 2000, 'WR', 2000, 2600)],
+      ['kid', makeValue('kid', 3000, 'RB', 3000, 100)],
+      ['bench', makeValue('bench', 500, 'WR', 500, 300)],
+    ]);
+
+    const summary = summarizeRoster(
+      makeRoster(1, ['vet', 'kid', 'bench']),
+      players,
+      values,
+      makeSettings(['WR', 'RB']),
+    );
+
+    expect(summary.starterValue).toBe(2700); // 2600 + 100
+    expect(summary.starterAssetValue).toBe(5000); // 2000 + 3000
+
+    // Bench value is the dynasty complement of the dynasty total. Subtracting a
+    // win-now lineup from it would produce a figure meaning nothing at all —
+    // here, 5,500 − 2,700 = 2,800 for a single 500-point bench receiver.
+    expect(summary.totalValue).toBe(5500);
+    expect(summary.benchValue).toBe(500);
   });
 });
 

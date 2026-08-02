@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyReplacement,
+  hasWinNowScale,
   leagueShrinkFactor,
   pricedPositions,
   replacementLevels,
   startersByPosition,
   valueLeague,
+  type ReplacementLevel,
 } from './replacement';
 import { summarizeRoster, type RosterSummary } from './rosterValue';
 import type { SnapShare } from './snapShare';
@@ -447,6 +449,205 @@ describe('replacementLevels', () => {
     const surplus = rb1.marketValue - levels.RB!.value;
     expect(rb1.value).toBeGreaterThan(surplus);
     expect(rb1.value).toBeLessThan(surplus + levels.RB!.value * 0.15);
+  });
+});
+
+/**
+ * The win-now scale (R8).
+ *
+ * Every other fixture in this file leaves `redraftValue` equal to the dynasty
+ * figure, which is the right neutral for tests about something else — and it
+ * means none of them can see this change at all. These are the ones that can.
+ */
+describe('win-now scale', () => {
+  /**
+   * Replacement levels measured on the live 10-team league, both scales.
+   *
+   * Used as literal input rather than derived from a synthetic pool so the
+   * assertions below are checked against the numbers the app actually runs on.
+   */
+  const REAL_LEVELS: Partial<Record<Position, ReplacementLevel>> = {
+    WR: { position: 'WR', startersNeeded: 31, value: 2044, winNow: 1549 },
+    QB: { position: 'QB', startersNeeded: 10, value: 2415, winNow: 1153 },
+  };
+
+  /**
+   * The four players issue #8 was opened about, at their live values.
+   *
+   * Two aging starters whose dynasty price is age-suppressed, and two
+   * speculative youngsters with no role yet. All four sit within 10% of each
+   * other on dynasty market value; their redraft values differ by roughly 8x.
+   */
+  const conflated = () =>
+    new Map<string, PlayerValue>([
+      ['evans', makeValue('evans', 1762, 'WR', 1762, 2074)],
+      ['adams', makeValue('adams', 1875, 'WR', 1875, 2535)],
+      ['hunter', makeValue('hunter', 1691, 'WR', 1691, 239)],
+      ['ward', makeValue('ward', 1896, 'QB', 1896, 386)],
+    ]);
+
+  it('tells apart the four players the dynasty scale could not', () => {
+    const adjusted = applyReplacement(conflated(), REAL_LEVELS);
+    const ids = ['evans', 'adams', 'hunter', 'ward'];
+
+    const spread = (of: (v: PlayerValue) => number) => {
+      const figures = ids.map((id) => of(adjusted.get(id)!));
+      return Math.max(...figures) / Math.min(...figures);
+    };
+
+    // Dynasty still cannot separate them, and is not supposed to. Their asset
+    // values genuinely are alike — that was never the defect.
+    expect(spread((v) => v.value)).toBeLessThan(1.5);
+
+    // Win-now separates them by more than an order of magnitude, which is what
+    // an 8x gap in redraft price becomes once replacement is charged against
+    // it. Two of these men are startable today and two are not, and before R8
+    // nothing downstream could tell.
+    expect(spread((v) => v.winNowValue)).toBeGreaterThan(8);
+
+    const winNow = (id: string) => adjusted.get(id)!.winNowValue;
+    expect(winNow('adams')).toBeGreaterThan(winNow('evans'));
+    expect(winNow('evans')).toBeGreaterThan(winNow('ward'));
+    expect(winNow('ward')).toBeGreaterThan(winNow('hunter'));
+
+    // The exact figures the live app produces, to the point. Pinned rather than
+    // merely ordered because ordering alone cannot tell which replacement level
+    // was charged: swapping in the dynasty level (WR 2,044 instead of 1,549)
+    // leaves every comparison above true and quietly reprices Evans at 1,045.
+    expect(winNow('evans')).toBeCloseTo(1187, 0);
+    expect(winNow('adams')).toBeCloseTo(1574, 0);
+    expect(winNow('ward')).toBeCloseTo(97, 0);
+    expect(winNow('hunter')).toBeCloseTo(32, 0);
+  });
+
+  it('ranks each position twice, because the two scales disagree about who is Nth', () => {
+    // Three receivers, and the redraft order is the reverse of the dynasty one.
+    // The replacement level at each scale must come from that scale's own
+    // ranking; reading the dynasty replacement's redraft value would return a
+    // number belonging to neither question.
+    const values = new Map<string, PlayerValue>([
+      ['young', makeValue('young', 5000, 'WR', 5000, 1000)],
+      ['prime', makeValue('prime', 4000, 'WR', 4000, 4000)],
+      ['old', makeValue('old', 3000, 'WR', 3000, 6000)],
+    ]);
+
+    const levels = replacementLevels(values, { WR: 1 });
+
+    // Second best on each scale: `prime` on dynasty, and `prime` on redraft too
+    // — but for a different reason, and the third-place values differ.
+    expect(levels.WR!.value).toBe(4000);
+    expect(levels.WR!.winNow).toBe(4000);
+
+    // With two starters the answers diverge outright: dynasty's third man is
+    // `old` at 3,000, redraft's is `young` at 1,000.
+    const deeper = replacementLevels(values, { WR: 2 });
+    expect(deeper.WR!.value).toBe(3000);
+    expect(deeper.WR!.winNow).toBe(1000);
+  });
+
+  it('leaves the dynasty scale bit-for-bit unchanged', () => {
+    // R8 adds a scale; it must not perturb the existing one. `value` is
+    // computed from `marketValue` alone and cannot depend on the redraft column
+    // however wildly that column moves.
+    const { values, summaries } = league();
+    const levels = replacementLevels(values, startersByPosition(summaries));
+    const before = applyReplacement(values, levels);
+
+    const scrambled = new Map<string, PlayerValue>();
+    for (const [id, value] of values) {
+      scrambled.set(id, { ...value, redraftValue: (value.marketValue * 7919) % 6000 });
+    }
+    const after = applyReplacement(
+      scrambled,
+      replacementLevels(scrambled, startersByPosition(summaries)),
+    );
+
+    for (const [id, value] of before) {
+      expect(after.get(id)!.value).toBe(value.value);
+    }
+  });
+
+  it('degrades to the dynasty scale, not to zero, when the redraft column vanishes', () => {
+    /**
+     * The failure this guard exists for. `redraftValue` is `nullish` in the
+     * schema, so a renamed field parses cleanly and arrives as zeroes. Every
+     * lineup in the app is built and scored on the win-now scale, so without
+     * the guard all ten rosters would rank at nothing, the suggestion engine
+     * would empty, and every test here would still pass.
+     */
+    const { values, summaries } = league();
+    const counts = startersByPosition(summaries);
+    const intact = applyReplacement(values, replacementLevels(values, counts));
+
+    const stripped = new Map<string, PlayerValue>();
+    for (const [id, value] of values) {
+      stripped.set(id, { ...value, redraftValue: 0, winNowValue: 0 });
+    }
+    const degraded = applyReplacement(stripped, replacementLevels(stripped, counts));
+
+    expect(hasWinNowScale(values)).toBe(true);
+    expect(hasWinNowScale(stripped)).toBe(false);
+
+    let nonZero = 0;
+    for (const [id, value] of degraded) {
+      // The pre-R8 model exactly: win-now mirrors dynasty rather than zeroing.
+      expect(value.winNowValue).toBe(value.value);
+      expect(value.value).toBe(intact.get(id)!.value);
+      if (value.winNowValue > 0) nonZero++;
+    }
+    expect(nonZero).toBeGreaterThan(0);
+  });
+
+  it('does not mistake a half-covered redraft column for a missing one', () => {
+    // FantasyCalc ranks about the top 200 players on redraft against roughly
+    // 400 priced on dynasty — measured at QB 42%, RB 59%, WR 49%, TE 45%. Half
+    // the pool carrying no redraft value is the healthy state, not a fault: a
+    // 10-team league fields 80 skill starters, so a player outside the top 200
+    // really is worth nothing this season.
+    const { values } = league();
+    const sparse = new Map<string, PlayerValue>();
+    let n = 0;
+    for (const [id, value] of values) {
+      sparse.set(id, n++ % 2 === 0 ? value : { ...value, redraftValue: 0 });
+    }
+
+    expect(hasWinNowScale(sparse)).toBe(true);
+  });
+
+  it('charges the same curve on both scales, so win-now cannot shear either', () => {
+    // The property `calibration` pins for dynasty, asserted for the new scale:
+    // two players at one position can never come out further apart than the
+    // *square* of their redraft ratio. Straight subtraction has no such bound,
+    // and this is the scale it would have been most tempting to use it on,
+    // since a redraft value looks more like projected points than a dynasty
+    // price does. It is still a price.
+    const { values, summaries } = league();
+    const spread = new Map<string, PlayerValue>();
+    for (const [id, value] of values) {
+      // Give the redraft column a shape of its own, so this is not merely the
+      // dynasty assertion wearing a different name.
+      spread.set(id, { ...value, redraftValue: Math.round(value.marketValue * 0.7 + 400) });
+    }
+
+    const adjusted = applyReplacement(
+      spread,
+      replacementLevels(spread, startersByPosition(summaries)),
+    );
+
+    for (const position of ['QB', 'RB', 'WR', 'TE'] as const) {
+      const ranked = [...adjusted.values()]
+        .filter((v) => v.position === position && v.redraftValue > 0 && v.winNowValue > 0)
+        .sort((a, b) => b.redraftValue - a.redraftValue);
+
+      for (let i = 1; i < ranked.length; i++) {
+        const better = ranked[i - 1];
+        const worse = ranked[i];
+        expect(better.winNowValue).toBeGreaterThanOrEqual(worse.winNowValue);
+        expect(better.winNowValue / worse.winNowValue).toBeLessThanOrEqual(
+          (better.redraftValue / worse.redraftValue) ** 2 + 1e-9,
+        );
+      }
+    }
   });
 });
 

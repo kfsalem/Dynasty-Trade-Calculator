@@ -25,6 +25,7 @@ export interface TradeContext {
   picks: DraftPick[];
 }
 
+/** Best-lineup strength for a hypothetical roster, in win-now units. */
 function starterValue(
   playerIds: string[],
   ctx: TradeContext,
@@ -32,7 +33,7 @@ function starterValue(
   const entries = valuePlayers(playerIds, ctx.players, ctx.values);
   const lineup = bestLineup(entries, ctx.league.settings.startingSlots);
   return {
-    total: lineup.reduce((sum, slot) => sum + (slot.entry?.value ?? 0), 0),
+    total: lineup.reduce((sum, slot) => sum + (slot.entry?.winNowValue ?? 0), 0),
     emptySlots: lineup.filter((slot) => slot.entry === null).length,
   };
 }
@@ -72,9 +73,10 @@ function buildSide(
   const outgoingPicks = resolvePicks(input.pickIds);
   const incomingPicks = resolvePicks(received.pickIds);
 
-  // Fairness is argued in market terms, because that is the number the other
-  // manager will look up before accepting. Whether the trade actually helps is
-  // decided by the lineup maths below, which runs on league-adjusted values.
+  // Fairness is argued in dynasty market terms, because that is the number the
+  // other manager will look up before accepting. Whether the trade actually
+  // helps is decided by the lineup maths below, which runs on win-now values.
+  // Three scales in one function, and they never touch.
   const playerValue = (p: Player) => ctx.values.get(p.id)?.marketValue ?? 0;
   const sum = (n: number[]) => n.reduce((a, b) => a + b, 0);
 

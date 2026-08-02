@@ -93,7 +93,10 @@ function SideSummary({ side }: { side: TradeSideResult }) {
           </dd>
         </div>
         <div className="flex justify-between gap-4 border-t border-gray-200 pt-1">
-          <dt className="text-gray-500" title="Change in best-lineup strength">
+          <dt
+            className="text-gray-500"
+            title="Change in best-lineup strength, measured on win-now value — what these players do for you this season, not what they are worth as assets."
+          >
             Starting lineup
           </dt>
           <dd>

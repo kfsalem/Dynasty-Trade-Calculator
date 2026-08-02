@@ -61,12 +61,29 @@ export interface Player {
 /**
  * A player's value under a specific league configuration.
  *
- * Two numbers, deliberately. `marketValue` is what KeepTradeCut and FantasyCalc
- * quote — the figure the manager across the table will check before accepting.
- * `value` is whatever the map in hand represents: the same market figure in a
- * market map, or value over this league's replacement level in a league-adjusted
- * one. Trade *fairness* is argued in market terms; whether a trade actually
- * helps is decided in league-adjusted ones.
+ * **Two questions, two scales, four numbers.** The scales answer different
+ * questions and must never be summed together:
+ *
+ * - *What is he worth?* — the **dynasty** pair. `marketValue` is what
+ *   KeepTradeCut and FantasyCalc quote, the figure the manager across the table
+ *   will check before accepting; `value` is that figure measured against what
+ *   this league pays to replace his position. Trade fairness is argued in the
+ *   first, and whether an asset is worth holding is decided by the second.
+ * - *Does he help me win this year?* — the **win-now** pair. `redraftValue` is
+ *   the same source's one-season price, and `winNowValue` is that measured
+ *   against a replacement level computed on the same scale. Lineups are built
+ *   and scored here, and nowhere else.
+ *
+ * Keeping them apart is the whole of R8. Ranking a lineup on dynasty value asks
+ * a 33-year-old receiver and a rookie who has never played a snap the same
+ * question and gets the same answer — on the real league Mike Evans, Davante
+ * Adams, Travis Hunter and Cam Ward all price within 10% of each other on
+ * dynasty while their redraft values differ by roughly 8x.
+ *
+ * Both pairs come from FantasyCalc divided by the *same* normalizing constant,
+ * so a dynasty figure and a redraft figure are quoted in the same currency even
+ * though they price different horizons. That is what makes a ratio between them
+ * meaningful; it is not licence to add them.
  */
 export interface PlayerValue {
   playerId: string;
@@ -74,9 +91,15 @@ export interface PlayerValue {
   position: Position | null;
   /** Dynasty value on a 0-10000 scale — market, or above replacement. */
   value: number;
-  /** Always the raw market figure, whatever `value` holds. */
+  /** Always the raw dynasty market figure, whatever `value` holds. */
   marketValue: number;
+  /** Always the raw one-season figure, whatever `winNowValue` holds. */
   redraftValue: number;
+  /**
+   * `redraftValue` measured against the win-now replacement level, the same way
+   * `value` is derived from `marketValue`. This is what `bestLineup` sorts on.
+   */
+  winNowValue: number;
   overallRank: number;
   positionRank: number;
   /** 30-day movement in raw source units. Positive = rising. */
@@ -185,6 +208,7 @@ export interface TradeSideResult {
   incomingValue: number;
   /** incoming - outgoing. The number every other calculator stops at. */
   netValue: number;
+  /** Best-lineup strength on the win-now scale, before and after the trade. */
   starterValueBefore: number;
   starterValueAfter: number;
   /**
@@ -193,6 +217,11 @@ export interface TradeSideResult {
    * This, not netValue, decides whether a trade actually helps. Winning a trade
    * on raw value while downgrading your starting lineup is a real and common
    * outcome, and it is the whole reason this app exists.
+   *
+   * Measured in win-now units (R8). A lineup is a bet on this season, so a
+   * rookie who will not play answers this question with a zero however
+   * expensive he is — which is exactly what a dynasty-scaled version of this
+   * number could not say.
    */
   vorsDelta: number;
   warnings: string[];

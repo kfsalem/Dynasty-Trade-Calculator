@@ -69,7 +69,8 @@ export async function fetchFantasyCalcValues(
   // transformed bundle, so a returning user with a warm entry would otherwise
   // deserialize objects missing fields the current code requires.
   // v2: added `position` and `marketValue`.
-  const key = `fantasycalc:${params.toString()}:v2`;
+  // v3: added `winNowValue`.
+  const key = `fantasycalc:${params.toString()}:v3`;
 
   return cached(key, TTL.VALUES, async () => {
     const rows = await fetchJson(url, responseSchema);
@@ -84,6 +85,12 @@ export async function fetchFantasyCalcValues(
       // Normalized to a source-independent 0-10000 scale so a second value
       // source can be blended in later without mixing incompatible units.
       const normalized = Math.round((row.value / rawMax) * 10000);
+      // Divided by the *dynasty* maximum on purpose, not by a redraft one of
+      // its own. FantasyCalc quotes both columns in the same raw units, and a
+      // second divisor would throw that away — the two would each run 0-10000
+      // and a player's dynasty and redraft figures would no longer be
+      // comparable, which is the one property R8 needs from them.
+      const redraft = Math.round(((row.redraftValue ?? 0) / rawMax) * 10000);
       const position = row.player.position?.toUpperCase();
 
       bySleeperId.set(sleeperId, {
@@ -93,7 +100,10 @@ export async function fetchFantasyCalcValues(
           : null,
         value: normalized,
         marketValue: normalized,
-        redraftValue: Math.round(((row.redraftValue ?? 0) / rawMax) * 10000),
+        redraftValue: redraft,
+        // A market map holds the raw figure on both scales; `applyReplacement`
+        // is what turns each into its league-adjusted counterpart.
+        winNowValue: redraft,
         overallRank: row.overallRank,
         positionRank: row.positionRank ?? 0,
         trend30Day: row.trend30Day ?? 0,

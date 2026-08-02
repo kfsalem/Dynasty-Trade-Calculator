@@ -43,6 +43,7 @@ interface Props {
 
 function PlayerLine({
   entry,
+  scale,
   snaps,
   usage,
   roles,
@@ -51,6 +52,12 @@ function PlayerLine({
   priced,
 }: {
   entry: ValuedPlayer;
+  /**
+   * Which number to show. The lineup is a win-now question and the bench is an
+   * asset one, so each list shows the figure its own heading totals — a row
+   * that did not add up to the number above it would read as a bug.
+   */
+  scale: 'winNow' | 'dynasty';
   snaps?: Map<string, SnapShare>;
   usage?: Map<string, Opportunity>;
   roles?: Map<string, PlayerRole>;
@@ -92,7 +99,16 @@ function PlayerLine({
       <UsageCell usage={usage?.get(entry.player.id)} />
       <ActivityMarker adjustment={adjustments?.get(entry.player.id)} />
       {entry.valued ? (
-        <span className="shrink-0 tabular-nums text-gray-500">{formatValue(entry.value)}</span>
+        <span
+          className="shrink-0 tabular-nums text-gray-500"
+          title={
+            scale === 'winNow'
+              ? `Win-now ${formatValue(entry.winNowValue)} · dynasty ${formatValue(entry.value)}`
+              : `Dynasty ${formatValue(entry.value)} · win-now ${formatValue(entry.winNowValue)}`
+          }
+        >
+          {formatValue(scale === 'winNow' ? entry.winNowValue : entry.value)}
+        </span>
       ) : (
         <UnvaluedCell
           position={entry.player.position}
@@ -184,13 +200,13 @@ export function TeamCard({
             className="block text-xs text-gray-500"
             title={
               summary.pricedSlots < summary.totalSlots
-                ? `${summary.pricedSlots} of ${summary.totalSlots} starting slots hold a player with a dynasty value. Kickers, defences and deep-bench players have no market, so they count as zero here.`
-                : undefined
+                ? `Win-now strength of the best lineup this roster can field. ${summary.pricedSlots} of ${summary.totalSlots} starting slots hold a player the value source prices. Kickers, defences and deep-bench players have no market, so they count as zero here.`
+                : 'Win-now strength of the best lineup this roster can field.'
             }
           >
             {summary.pricedSlots < summary.totalSlots
-              ? `${summary.pricedSlots} of ${summary.totalSlots} starters`
-              : 'starters'}
+              ? `${summary.pricedSlots} of ${summary.totalSlots} starters · win-now`
+              : 'starters · win-now'}
           </span>
         </span>
 
@@ -235,8 +251,11 @@ export function TeamCard({
         <div className="border-t border-gray-200 bg-gray-50 p-4 sm:p-5">
           <div className="grid gap-6 sm:grid-cols-2">
             <div>
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Best lineup · {formatValue(summary.starterValue)}
+              <h4
+                className="text-xs font-semibold uppercase tracking-wide text-gray-500"
+                title="What this lineup does for you this season. Aging starters are worth more here than their dynasty price says; prospects are worth less."
+              >
+                Best lineup · win-now {formatValue(summary.starterValue)}
               </h4>
               <ul className="mt-3 space-y-1.5 text-sm">
                 {summary.lineup.map((assignment, i) => (
@@ -247,6 +266,7 @@ export function TeamCard({
                     {assignment.entry ? (
                       <PlayerLine
                         entry={assignment.entry}
+                        scale="winNow"
                         snaps={snaps}
                         usage={usage}
                         roles={roles}
@@ -263,8 +283,11 @@ export function TeamCard({
             </div>
 
             <div>
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Bench · {formatValue(summary.benchValue)} ({bench.length})
+              <h4
+                className="text-xs font-semibold uppercase tracking-wide text-gray-500"
+                title="What the bench is worth as assets, on the dynasty scale — a prospect who cannot start yet is still something you can trade."
+              >
+                Bench · dynasty {formatValue(summary.benchValue)} ({bench.length})
               </h4>
               <ul className="mt-3 space-y-1.5 text-sm">
                 {bench.length === 0 && <li className="text-gray-400">No bench players.</li>}
@@ -272,6 +295,7 @@ export function TeamCard({
                   <li key={entry.player.id} className="flex items-center gap-2">
                     <PlayerLine
                       entry={entry}
+                      scale="dynasty"
                       snaps={snaps}
                       usage={usage}
                       roles={roles}

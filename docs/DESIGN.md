@@ -234,6 +234,14 @@ All of this runs on **replacement-adjusted** values, not raw market ones — see
 Phase 4.5. A player is worth what he adds over the best player at his position
 who starts for nobody in this league.
 
+Two scales, and they never mix (R8). **Dynasty** answers *what is he worth* and
+prices every trade, every bench, every asset. **Win-now** answers *does he help
+me win this season*, and builds and scores every lineup. Both are FantasyCalc
+columns run through the same replacement curve against their own replacement
+level. Asking one number to do both jobs prices a 33-year-old WR2 and a rookie
+who has never played a snap identically; see *Two scales, because there were
+always two questions*.
+
 On top of that sits an **activity multiplier** (R6): a bounded, continuous
 factor from the player's *change* in snap and usage share, weighted by age and
 by how many recent games back it. The level of a player's role is already in his
@@ -262,10 +270,18 @@ Report against the league, not against the universe. Being "weak at TE" only mat
 
 ### 4.3 Contention window
 
-Two scores per team:
+Two scores per team, one on each scale (R8):
 
-- **Now score** — projected 2026 starting lineup strength
-- **Future score** — age-adjusted value at a 2–3 year horizon
+- **Now score** — starting lineup strength in **win-now** value
+- **Future score** — age-decayed **dynasty** value at a 3-year horizon
+
+The young/old axis is their ratio: future asset base per point of present
+lineup strength. Dynasty value is already the market's claim about a player's
+future, so decaying it asks what is left of a roster later; redraft value prices
+only this season, so a lineup sum on it asks what the roster is *now*. Running
+both halves on dynasty — as the model did before R8 — measured little beyond the
+average age of a lineup, and counted a roster of unplayable rookies as strong
+today.
 
 Plot as a quadrant:
 
@@ -989,6 +1005,131 @@ one fact lived in two places: `AGE_CLIFF` was defined twice with different
 numbers, so a 27-year-old back was past the cliff on the team page and not in the
 trade warnings. Reading it from the data also means a source that starts
 publishing kicker or IDP values is picked up with no code change.
+
+**Two scales, because there were always two questions.** *(2026-08-02, closes #8)*
+
+Replacement level was computed by ranking players on **dynasty** market value and
+taking the Nth. Dynasty value prices multi-year future production, so subtracting
+a dynasty-derived replacement level from a dynasty value answered the asset
+question twice and the lineup question never. Four players on the real league,
+before:
+
+|               | pos | age | market | league | redraft |
+|---------------|-----|-----|--------|--------|---------|
+| Mike Evans    | WR  | 32  | 1,762  | 837    | 2,074   |
+| Davante Adams | WR  | 33  | 1,875  | 920    | 2,535   |
+| Travis Hunter | WR  | 23  | 1,691  | 786    | 239     |
+| Cam Ward      | QB  | 24  | 1,896  | 834    | 386     |
+
+All four within 10% of each other, because the model had one scale and their
+dynasty prices genuinely are alike. Their redraft prices differ by **roughly
+8x**. Two of these men start every week and two of them do not play, and nothing
+downstream could tell — not the lineup, not the rankings, not the quadrants, not
+a single trade suggestion.
+
+`PlayerValue` now carries four numbers as two pairs: `marketValue` → `value` on
+dynasty, `redraftValue` → `winNowValue` on win-now. Each pair runs through the
+same `market² / (market + replacement)` curve against a replacement level drawn
+from its **own** ranking, because the two scales do not order a position the same
+way — Christian McCaffrey is 4,136 on dynasty and 7,175 on redraft at 30, Jaxson
+Dart 2,469 against 877 at 23. The starter *counts* are shared, since how many
+quarterbacks must start on a Sunday is a fact about the lineup and does not
+change with the horizon.
+
+Same curve on both, deliberately. A redraft value looks more like projected
+points than a dynasty price does, which makes it exactly the scale where plain
+subtraction would be tempting again — and it is still a price. One category error
+was enough; see *Subtraction was the wrong operation*.
+
+After, the same four: **1,187 / 1,574 / 32 / 97**.
+
+**What moved to win-now, and what deliberately did not.** Everything that builds
+or scores a lineup: `bestLineup`, `starterValue`, `vorsDelta`, positional
+strength and weakness, the surplus test, and the roster rankings. The exception
+is `futureScore`, which stays on dynasty and must. Redraft value prices this
+season, so a prospect enters at nothing and decays to nothing — a team built
+entirely of them would project to have no future whatsoever, in the one
+calculation whose whole subject is the future. Dynasty value is already the
+market's bet on what he becomes.
+
+`RosterSummary` therefore grows `starterAssetValue` alongside `starterValue`.
+Not decoration: `benchValue` has to be the dynasty complement of a dynasty
+total, and subtracting a win-now lineup from a dynasty roster total produces a
+bench figure meaning nothing at all.
+
+**Measured on the real 10-team league.** Replacement levels diverge hardest at
+tight end, where the win-now replacement is barely a third of the dynasty one —
+TE12 is a real dynasty asset and a redraft zero:
+
+```
+        starters   replacement(dynasty)   replacement(win-now)
+RB          28              1,785                  1,402
+WR          31              2,044                  1,549
+TE          11              1,697                    518
+QB          10              2,415                  1,153
+```
+
+The quadrants finally populate: **3 juggernaut / 2 win_now / 3 danger / 2
+rebuilding**, against 4 / 1 / 4 / 1 before. `retainedShare` spreads from
+0.712–0.948 to **0.549–1.053** — and crosses 1.0 for the first time, which is a
+rebuild holding more future than present rather than an artifact.
+
+One roster moved four places. A team whose lineup ranked 5th of 10 on dynasty
+ranks **8th** on win-now while staying the youngest roster in the league, and its
+verdict went from *juggernaut* to *rebuilding on schedule*. That is the entire
+defect in a single row: it was being told to press an advantage it did not have.
+
+Lineups changed less than expected and in the right direction — one team benches
+a tight end priced at 1,740 dynasty and 589 win-now in favour of players who
+actually play. Surpluses improved sharply, which matters because they are the raw
+material of every suggestion: the top team's best trade chip went from a backup
+quarterback who would start for **one** other team to a receiver who would start
+for **four**, and Mike Evans — invisible to the old model — now surfaces as a
+chip five teams would start.
+
+**The roster spread widened, and it is the data rather than the curve.** Best-to-
+worst went from 2.40x to 3.08x, which is the shape this document has been burned
+by twice. So it was checked against the source numbers directly, with no
+replacement level and no curve involved: raw market lineups spread **1.81x** and
+raw redraft lineups **2.48x**. Redraft value is simply more concentrated —
+contenders hold proven starters and rebuilders hold prospects — and the model
+amplifies its input by **1.24x** against the dynasty side's 1.33x. The win-now
+scale is better behaved on the calibration test's own metric than the scale it
+sits beside, not worse.
+
+**Half the redraft column is missing, and that is the correct answer.**
+FantasyCalc prices about 400 players per position group on dynasty and ranks
+almost exactly half of them on redraft — 199 of 398, by position QB 42%, RB 59%,
+WR 49%, TE 45%. A 10-team league fields 80 skill starters, so a player outside
+the top 200 on redraft really is worth nothing this season; the absence is
+informative. On the real league only 12 of 158 rostered players lack a redraft
+value, none worth more than 899.
+
+That makes a coverage gate useless for completeness and necessary for something
+else. `redraftValue` is `nullish` in the schema, so a renamed field would parse
+cleanly, arrive as zeroes, and price **every lineup in the app at zero** — all
+ten rosters ranked at nothing, the suggestion engine empty, every number still
+rendering and every test still passing. `hasWinNowScale` therefore checks for the
+column having vanished rather than for it being full, and on failure the win-now
+scale mirrors dynasty: a worse model and a working app, which is the right way
+round.
+
+**The tests still could not see it, so 14 were added that can.** Every fixture in
+the repo left `redraftValue` equal to the dynasty figure — the right neutral for
+tests about something else, and it meant all 321 existing tests passed against
+this change without exercising one line of it. The new block pins the four
+players above to the point, because ordering alone cannot tell *which*
+replacement level was charged: swapping in the dynasty level leaves every
+comparison true and quietly reprices Evans at 1,045. Both mutations were checked
+by hand — subtraction instead of the curve fails 3 tests, the wrong replacement
+level fails 1.
+
+**Still open.** `SideBenefit.total` blends a win-now `now` against a dynasty
+`future` under the contention weights. The weights are a statement about how much
+a manager cares about each question rather than a claim the units match, and the
+figure is only ever compared against other packages for the same team — but it is
+the one place in the model where two scales are added, and it is worth revisiting
+if suggestion quality ever looks scale-sensitive.
 
 ### Phase 5 — Scale out
 - MFL + Fleaflicker providers

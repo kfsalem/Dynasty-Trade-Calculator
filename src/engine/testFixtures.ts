@@ -27,18 +27,29 @@ export function makePlayer(
   };
 }
 
+/**
+ * A test value.
+ *
+ * `redraftValue` and `winNowValue` default to the dynasty figures, so a fixture
+ * that says nothing about the win-now scale gets a league where the two scales
+ * agree exactly — which is the right neutral for every test whose subject is
+ * something else. Tests about the split pass them explicitly.
+ */
 export function makeValue(
   id: string,
   value: number,
   position: Position | null = null,
   marketValue = value,
+  redraftValue = value,
+  winNowValue = redraftValue,
 ): PlayerValue {
   return {
     playerId: id,
     position,
     value,
     marketValue,
-    redraftValue: value,
+    redraftValue,
+    winNowValue,
     overallRank: 1,
     positionRank: 1,
     trend30Day: 0,
