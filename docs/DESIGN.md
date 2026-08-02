@@ -1131,6 +1131,75 @@ figure is only ever compared against other packages for the same team — but it
 the one place in the model where two scales are added, and it is worth revisiting
 if suggestion quality ever looks scale-sensitive.
 
+**The model was right and the screen was lying.** *(2026-08-02, closes #34)*
+
+Reported within the hour of R8 merging, by looking at a roster: *"why is David
+Njoku now worth 5?"* He was not. His asset value was 417 and his lineup
+contribution was 5, and the card showed one of those on the bench and the other
+in the lineup with nothing to say they were different questions.
+
+Njoku is worth reproducing in full, because nothing in the chain is a defect:
+
+| | raw FantasyCalc | normalized | league-adjusted |
+|---|---|---|---|
+| dynasty | 1,062 | 1,039 | 417 |
+| redraft | 77 | 75 | single digits |
+
+FantasyCalc prices him at **0.7% of the top player** on redraft — he is TE31 of
+66 on dynasty against TE25 of only **30 redraft-ranked TEs** — and the surplus
+curve then keeps about a quarter of an already-tiny number. Every step is
+correct. Rendering the result as a bare `5` beside a starting NFL tight end is
+not.
+
+Three fixes, and one lesson worth more than any of them.
+
+**A player worth something must never render as nothing.** `formatValue` was
+`Math.round(n).toLocaleString()`. Harmless on the dynasty scale, where the
+numbers are large; on win-now, **25 players carried a positive value under 10
+and four receivers rounded to a flat `0`**. `leagueValue` goes to real trouble
+never to return zero for a ranked player — that is the whole reason it is a
+curve rather than a subtraction — and three characters of formatting threw it
+away at the last moment. Sub-1 positive values now read `~0`, which is already
+this app's phrase for "ranked, and worth almost nothing". Negative zero, which
+`Math.round(-0.2)` produces and which reads as a bug in a trade delta, is gone
+with it.
+
+**Both scales, on every row.** Showing only the list's own scale was defended on
+the grounds that each list should sum to its own heading. That was worth less
+than it sounded — the bench heading already does not sum to its visible rows,
+since it truncates at fifteen — and it cost the thing that matters, which is
+that the gap between a player's two numbers is the most interesting fact about
+him. `Dylan Sampson 529 · 4` says *real asset, nothing this season* at a glance.
+`Derrick Henry 1,755 · 4,592` says the opposite. The heading labels which column
+is which and the list's own scale carries the darker weight.
+
+**The scarcity panel was explaining a scale the lineup no longer used.** It
+quoted a tight-end replacement of 1,697 while the lineup above it was scored
+against 518. `PositionScarcity` now carries `topRedraft` and `retainedWinNow`,
+and the panel draws a second outlined bar. The pair is worth reading on its own:
+on the real league TE retains **79% on dynasty and 92% on win-now** — elite tight
+ends are harder to replace this Sunday than they are to replace as assets, which
+is the sort of thing the panel exists to say and could not previously.
+
+This is the second time this panel has taught something the engine did not do.
+The first was plotting replacement level directly, which drew the longest bar
+for the most replaceable position. Both failures have the same shape: the panel
+was updated a step behind the model.
+
+**The lesson: every calibration check was a *relative* property.** Spread ratios,
+plateau share, the squared-ratio amplification ceiling — R8 added all of them,
+all of them passed, and all of them would still pass with every value on the
+page rendered as `0`. None asked whether a number a human reads still says what
+the model means. `replacement.test.ts` gains an assertion that runs values
+through `formatValue` itself, since the engine's guarantee and the manager's
+guarantee are only the same guarantee if the formatter is inside it. It fails
+against the old formatter, and the fixture is checked for actually reaching the
+region it asserts about — the trap `stratified()` was added for.
+
+**Not fixed here, and not a display problem:** whether a redraft value of 77 for
+David Njoku is defensible on the football merits. That is a question about the
+value source, and it would be answered by blending a second one.
+
 ### Phase 5 — Scale out
 - MFL + Fleaflicker providers
 - Real accounts (Supabase) *if and only if* cross-device sync is actually wanted

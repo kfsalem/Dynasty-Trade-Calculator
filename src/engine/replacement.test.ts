@@ -13,6 +13,7 @@ import { summarizeRoster, type RosterSummary } from './rosterValue';
 import type { SnapShare } from './snapShare';
 import type { LineupSlot, Player, PlayerValue, Position, Roster } from '../types';
 import { makePlayer, makeRoster, makeSettings, makeValue } from './testFixtures';
+import { formatValue } from '../lib/format';
 
 /**
  * Ten teams, one QB / two RB / three WR / one TE / one FLEX — the shape of a
@@ -543,6 +544,51 @@ describe('win-now scale', () => {
     const deeper = replacementLevels(values, { WR: 2 });
     expect(deeper.WR!.value).toBe(3000);
     expect(deeper.WR!.winNow).toBe(1000);
+  });
+
+  it('stays legible all the way down, on both scales', () => {
+    /**
+     * The assertion R8 shipped without, and the reason it shipped without one.
+     *
+     * The calibration block above checks spread, plateau and amplification —
+     * every one of them a *relative* property, and every one of them passed
+     * while a starting tight end rendered as a bare `5` and four receivers
+     * rendered as `0`. Nothing looked at whether a number a human reads is
+     * still a number that says what the model means.
+     *
+     * Stated in `formatValue` terms deliberately. The engine's guarantee is
+     * that a ranked player is never worth exactly zero; the guarantee that
+     * matters to a manager is that the screen never tells him otherwise, and
+     * those are only the same guarantee if the formatter is included in it.
+     */
+    const { values, summaries } = league();
+    const spread = new Map<string, PlayerValue>();
+    for (const [id, value] of values) {
+      // A redraft column shaped like the live one: top-heavy, collapsing to a
+      // handful of points well before the pool runs out.
+      spread.set(id, {
+        ...value,
+        redraftValue: Math.round(value.marketValue ** 1.6 / 6000),
+      });
+    }
+
+    const adjusted = applyReplacement(
+      spread,
+      replacementLevels(spread, startersByPosition(summaries)),
+    );
+
+    let tiny = 0;
+    for (const value of adjusted.values()) {
+      for (const figure of [value.value, value.winNowValue]) {
+        if (figure <= 0) continue;
+        expect(formatValue(figure)).not.toBe('0');
+        if (figure < 0.5) tiny++;
+      }
+    }
+
+    // And the fixture has to actually reach that region, or the assertion above
+    // is checking nothing. This is the same trap `stratified()` was added for.
+    expect(tiny).toBeGreaterThan(0);
   });
 
   it('leaves the dynasty scale bit-for-bit unchanged', () => {

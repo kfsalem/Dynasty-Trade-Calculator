@@ -68,6 +68,13 @@ function StrengthBar({ item }: { item: PositionalStrength }) {
  * not as replacement level itself. A high replacement level means the position
  * is cheap to replace — so charting it directly would draw the longest bar for
  * quarterbacks in a shallow league and teach the exact opposite of the point.
+ *
+ * Both scales, since R8 gave the app two of them. Showing only the dynasty
+ * column had this panel quoting a tight-end replacement of 1,548 while the
+ * lineup a few inches up the page was scored against 253 — a panel disagreeing
+ * with the engine, which is the exact failure it was fixed for once already.
+ * The gap between the two bars is worth reading on its own: a position can be
+ * expensive to replace as an asset and cheap to replace this Sunday.
  */
 function ScarcityPanel({
   scarcity,
@@ -87,10 +94,13 @@ function ScarcityPanel({
       <p className="mt-1 text-sm text-gray-500">
         With {teamCount} teams and this lineup, a player is only worth what he adds over
         the best man at his position who starts for nobody. The bars show how much of an
-        elite player's market value survives that test — high means the position is
-        scarce and worth paying for, low means you can replace him off waivers.
+        elite player's value survives that test — high means the position is scarce and
+        worth paying for, low means you can replace him off waivers. The solid bar is{' '}
+        <strong>dynasty</strong>, what he is worth to hold; the outlined one is{' '}
+        <strong>win-now</strong>, what he is worth this season. A position can be dear to
+        replace as an asset and cheap to replace on Sunday.
       </p>
-      <div className="mt-4 space-y-2">
+      <div className="mt-4 space-y-3">
         {rows.map((row) => (
           <div key={row.position} className="flex items-center gap-3">
             <span
@@ -100,17 +110,40 @@ function ScarcityPanel({
             >
               {row.position}
             </span>
-            <div className="h-2 flex-1 rounded bg-gray-100">
-              <div
-                className={`h-2 rounded ${POSITION_STYLES[row.position].bar}`}
-                style={{ width: `${Math.round(row.retained * 100)}%` }}
-              />
+            {/* `min-w-0` so the bars yield space rather than pushing the row
+                wider than the card — this panel sits in a narrow column and the
+                fixed labels beside it already claim most of the width. */}
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="h-2 rounded bg-gray-100">
+                <div
+                  className={`h-2 rounded ${POSITION_STYLES[row.position].bar}`}
+                  style={{ width: `${Math.round(row.retained * 100)}%` }}
+                  title={`Dynasty: an elite ${row.position} keeps ${Math.round(row.retained * 100)}% of his market value here.`}
+                />
+              </div>
+              <div className="h-2 rounded bg-gray-100">
+                <div
+                  className={`h-2 rounded border ${POSITION_STYLES[row.position].border} bg-transparent`}
+                  style={{ width: `${Math.round(row.retainedWinNow * 100)}%` }}
+                  title={`Win-now: an elite ${row.position} keeps ${Math.round(row.retainedWinNow * 100)}% of his redraft value here.`}
+                />
+              </div>
             </div>
-            <span className="w-16 shrink-0 text-right text-sm font-semibold tabular-nums">
-              {Math.round(row.retained * 100)}%
-            </span>
-            <span className="hidden w-44 shrink-0 text-right text-xs tabular-nums text-gray-400 sm:block">
-              {row.startersNeeded} start · replace for {formatValue(row.value)}
+            <span
+              className="w-28 shrink-0 text-right tabular-nums"
+              title={`${row.startersNeeded} ${row.position}s hold a starting job somewhere in this league. Replacing one costs ${formatValue(row.value)} as an asset and ${formatValue(row.winNow)} for this season.`}
+            >
+              <span className="block text-sm">
+                <span className="font-semibold">{Math.round(row.retained * 100)}%</span>
+                <span className="text-gray-400">
+                  {' '}
+                  · {Math.round(row.retainedWinNow * 100)}%
+                </span>
+              </span>
+              <span className="hidden text-[10px] leading-tight text-gray-400 sm:block">
+                {row.startersNeeded} start · {formatValue(row.value)}/
+                {formatValue(row.winNow)}
+              </span>
             </span>
           </div>
         ))}
