@@ -31,8 +31,21 @@ export interface ReplacementLevel {
   position: Position;
   /** How many players at this position hold a starting slot league-wide. */
   startersNeeded: number;
-  /** Market value of the best player at the position who starts nowhere. */
+  /** Dynasty market value of the best player at the position who starts nowhere. */
   value: number;
+  /**
+   * The same rank read off the redraft column — and usually a different player.
+   *
+   * "The best quarterback nobody has to start" has two answers, because the two
+   * scales do not order the position the same way. The dynasty answer is
+   * whoever the market thinks will be worth the most over the coming years; the
+   * win-now answer is whoever will score the most points this season. On the
+   * real league those diverge hard at the top of every position — Christian
+   * McCaffrey is worth 4,136 on dynasty and 7,175 on redraft at 30, and Jaxson
+   * Dart 2,469 against 877 at 23 — so taking the dynasty replacement's *own*
+   * redraft value would be a third number belonging to neither question.
+   */
+  winNow: number;
 }
 
 /**
@@ -111,22 +124,27 @@ export function pricedPositions(values: Map<string, PlayerValue>): Set<Position>
  * streamable quarterback is streamable precisely because he might be sitting on
  * waivers, and pretending the pool ends at the last rostered player would
  * overstate every position in a shallow league.
+ *
+ * Computed twice, once per scale, from the *same* starter counts. The counts
+ * are a fact about the league's lineup — how many quarterbacks have to start
+ * somewhere on a Sunday — and that number does not change because you are
+ * asking about a different horizon. What changes is who the Nth best man is.
  */
 export function replacementLevels(
   values: Map<string, PlayerValue>,
   starters: StarterCounts,
 ): Partial<Record<Position, ReplacementLevel>> {
-  const byPosition = new Map<Position, number[]>();
+  const byPosition = new Map<Position, { market: number[]; redraft: number[] }>();
   for (const value of values.values()) {
     if (!value.position) continue;
-    const list = byPosition.get(value.position) ?? [];
-    list.push(value.marketValue);
-    byPosition.set(value.position, list);
+    const lists = byPosition.get(value.position) ?? { market: [], redraft: [] };
+    lists.market.push(value.marketValue);
+    lists.redraft.push(value.redraftValue);
+    byPosition.set(value.position, lists);
   }
 
   const levels: Partial<Record<Position, ReplacementLevel>> = {};
-  for (const [position, list] of byPosition) {
-    list.sort((a, b) => b - a);
+  for (const [position, lists] of byPosition) {
     const startersNeeded = starters[position] ?? 0;
 
     // Nobody starting the position means we have no evidence about it — an
@@ -134,14 +152,25 @@ export function replacementLevels(
     // would make the best player at the position the replacement level and zero
     // out every player in the league, so fail open and leave values untouched.
     if (startersNeeded <= 0) {
-      levels[position] = { position, startersNeeded: 0, value: 0 };
+      levels[position] = { position, startersNeeded: 0, value: 0, winNow: 0 };
       continue;
     }
 
     // Zero-indexed, so element [startersNeeded] is the first player past the
-    // last starting job — exactly the man you would pick up instead.
-    const replacement = list[startersNeeded] ?? list.at(-1) ?? 0;
-    levels[position] = { position, startersNeeded, value: replacement };
+    // last starting job — exactly the man you would pick up instead. Each list
+    // is sorted on its own terms, because the two scales rank the position
+    // differently and the whole point is to let them.
+    const nth = (list: number[]): number => {
+      list.sort((a, b) => b - a);
+      return list[startersNeeded] ?? list.at(-1) ?? 0;
+    };
+
+    levels[position] = {
+      position,
+      startersNeeded,
+      value: nth(lists.market),
+      winNow: nth(lists.redraft),
+    };
   }
 
   return levels;
@@ -203,11 +232,55 @@ export const leagueValue = (market: number, replacement: number): number =>
   market > 0 ? (market * market) / (market + replacement) : 0;
 
 /**
- * Rebuild a value map in league-adjusted terms.
+ * Share of the priced pool that must carry a redraft value for the win-now
+ * scale to be considered published at all.
  *
- * `marketValue` is preserved untouched so the UI can still show the number the
- * other manager will quote, and so trade fairness stays arguable in the terms
- * everyone else uses.
+ * Measured on the live feed: FantasyCalc prices about 400 players at each
+ * position group on dynasty and ranks almost exactly half of them on redraft —
+ * 199 of 398, and by position QB 42%, RB 59%, WR 49%, TE 45%. That is not a
+ * gap. A 10-team league fields 80 skill starters, so a player outside the top
+ * 200 on redraft genuinely is worth nothing this season, and a zero is the
+ * correct answer rather than a missing one.
+ *
+ * The gate therefore sits far below the healthy figure, because it is not
+ * checking for completeness. It is checking for the column having *vanished* —
+ * a renamed field or a schema change reads as 0%, and since `redraftValue` is
+ * `nullish` in the schema it would parse cleanly and silently price every
+ * lineup in the app at zero. See `applyReplacement`.
+ */
+export const MIN_REDRAFT_COVERAGE = 0.2;
+
+/**
+ * Whether the value source published a usable win-now column.
+ *
+ * Counts only players it could publish one for: entries carrying a position and
+ * a dynasty price. FantasyCalc's draft-pick pseudo-players have neither and
+ * would otherwise drag the share down by a third for no reason.
+ */
+export function hasWinNowScale(values: Map<string, PlayerValue>): boolean {
+  let priced = 0;
+  let withRedraft = 0;
+  for (const value of values.values()) {
+    if (!value.position || value.marketValue <= 0) continue;
+    priced++;
+    if (value.redraftValue > 0) withRedraft++;
+  }
+  return priced > 0 && withRedraft / priced >= MIN_REDRAFT_COVERAGE;
+}
+
+/**
+ * Rebuild a value map in league-adjusted terms, on both scales.
+ *
+ * `marketValue` and `redraftValue` are preserved untouched so the UI can still
+ * show the number the other manager will quote, and so trade fairness stays
+ * arguable in the terms everyone else uses.
+ *
+ * The two scales run through the *same* curve with different inputs. That is
+ * deliberate and not merely tidy: a redraft value is a price for exactly the
+ * same reason a dynasty value is one — it is what the market charges for a
+ * season of a player, not a projection of his points — so subtracting a flat
+ * replacement level from it would shear it in precisely the way documented at
+ * `leagueValue`. One category error is enough.
  */
 export function applyReplacement(
   values: Map<string, PlayerValue>,
@@ -227,16 +300,40 @@ export function applyReplacement(
   // feed failed to classify keep his full market value while every classified
   // player is docked, floating him to the top of lineups and into the surplus
   // list. FantasyCalc's position is nullable and any unrecognised string maps
-  // to null, so this is a feed change away from happening.
-  const strictest = Math.max(0, ...Object.values(levels).map((level) => level.value));
+  // to null, so this is a feed change away from happening. Both scales need
+  // their own strictest level; the harshest dynasty position is not
+  // necessarily the harshest win-now one.
+  const all = Object.values(levels);
+  const strictest = Math.max(0, ...all.map((level) => level.value));
+  const strictestWinNow = Math.max(0, ...all.map((level) => level.winNow));
+
+  // Degrade to the pre-R8 model rather than to zero. Every lineup in the app is
+  // built and scored on the win-now scale, so a feed that stops publishing one
+  // would not produce a slightly worse answer — it would rank all ten rosters
+  // at nothing and empty the suggestion engine, while every number still
+  // rendered and every test still passed. Mirroring the dynasty scale is a
+  // worse model and a working app, which is the right way round.
+  const winNowPublished = hasWinNowScale(values);
 
   const out = new Map<string, PlayerValue>();
   for (const [id, value] of values) {
-    const replacement = value.position
-      ? (levels[value.position]?.value ?? strictest)
-      : strictest;
+    const level = value.position ? levels[value.position] : undefined;
+    const replacement = level?.value ?? strictest;
+    const winNowReplacement = level?.winNow ?? strictestWinNow;
+    // One factor, both scales. Activity measures whether a player is currently
+    // doing the job, which is a statement about this season *and* evidence
+    // about the next few — so applying it to one scale and not the other would
+    // make a rising role show up in his asset price and vanish from his lineup
+    // contribution, or the reverse.
     const factor = adjustments.get(id)?.factor ?? 1;
-    out.set(id, { ...value, value: leagueValue(value.marketValue, replacement) * factor });
+    const dynasty = leagueValue(value.marketValue, replacement) * factor;
+    out.set(id, {
+      ...value,
+      value: dynasty,
+      winNowValue: winNowPublished
+        ? leagueValue(value.redraftValue, winNowReplacement) * factor
+        : dynasty,
+    });
   }
   return out;
 }

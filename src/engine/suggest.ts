@@ -9,7 +9,7 @@ import {
   type TeamAnalysis,
 } from './analysis';
 import { picksForRoster } from './picks';
-import { bestLineup, valuePlayers, type RosterSummary } from './rosterValue';
+import { bestLineup, byValue, valuePlayers, type RosterSummary } from './rosterValue';
 import { evaluateTrade, type TradeContext } from './trade';
 import type { RoleTrend, RoleTrends } from './roleTrend';
 
@@ -48,11 +48,21 @@ export type TradeAsset =
     };
 
 export interface SideBenefit {
-  /** Change in the best lineup this team could field today. */
+  /** Change in the best lineup this team could field today, in win-now units. */
   now: number;
-  /** Change in the age-decayed lineup three years out, plus pick value moved. */
+  /**
+   * Change in the age-decayed lineup three years out, plus pick value moved.
+   * Dynasty units — picks and prospects have no win-now value to move.
+   */
   future: number;
-  /** `now` and `future` weighted by this team's contention window. */
+  /**
+   * `now` and `future` weighted by this team's contention window.
+   *
+   * A weighted blend of two scales, and honestly so: the weights are a
+   * statement about how much a manager cares about each question, not a claim
+   * that the units are the same. It exists to be compared against other
+   * packages for the same team, which is the only comparison it is used for.
+   */
   total: number;
   quadrant: Quadrant;
 }
@@ -210,16 +220,19 @@ const pickAsset = (pick: DraftPick): TradeAsset => ({
  * run against a hypothetical post-trade roster.
  */
 function futureLineupValue(playerIds: string[], ctx: SuggestContext): number {
-  // Both figures decay together; see the matching note in `analysis.futureScore`.
+  // All three figures decay together; see the matching note in
+  // `analysis.futureScore`, including why this stays on the dynasty scale when
+  // the rest of the lineup maths moved to win-now.
   const entries = valuePlayers(playerIds, ctx.players, ctx.values).map((entry) => {
     const factor = retention(entry.player.position, entry.player.age, HORIZON_YEARS);
     return {
       ...entry,
       value: entry.value * factor,
       marketValue: entry.marketValue * factor,
+      winNowValue: entry.winNowValue * factor,
     };
   });
-  return bestLineup(entries, ctx.league.settings.startingSlots).reduce(
+  return bestLineup(entries, ctx.league.settings.startingSlots, byValue).reduce(
     (total, slot) => total + (slot.entry?.value ?? 0),
     0,
   );

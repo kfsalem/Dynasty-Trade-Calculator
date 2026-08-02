@@ -1,5 +1,5 @@
 import type { LeagueSettings, Player, Position } from '../types';
-import { bestLineup, type RosterSummary, type ValuedPlayer } from './rosterValue';
+import { bestLineup, byValue, type RosterSummary, type ValuedPlayer } from './rosterValue';
 
 /**
  * Team analysis: strengths, weaknesses, surplus, and contention window.
@@ -41,7 +41,14 @@ export const HORIZON_YEARS = 3;
 
 export interface PositionalStrength {
   position: Position;
-  /** This roster's starting value at the position, including flex usage. */
+  /**
+   * This roster's win-now starting value at the position, including flex usage.
+   *
+   * A weakness is a hole in the lineup you field on Sunday, so it is measured
+   * on the scale that decides who fills that lineup. A roster three deep in
+   * expensive rookie receivers is weak at receiver this year, and saying so is
+   * the point.
+   */
   starterValue: number;
   leagueMedian: number;
   z: number;
@@ -50,6 +57,11 @@ export interface PositionalStrength {
 
 export interface SurplusAsset {
   player: Player;
+  /**
+   * Dynasty value — what he fetches. `wouldStartOn` is decided on the win-now
+   * scale, because that is the question "would they start him" asks, but what
+   * the trade is worth is an asset question and stays in asset units.
+   */
   value: number;
   /** How many other rosters this player would immediately start for. */
   wouldStartOn: number;
@@ -58,13 +70,32 @@ export interface SurplusAsset {
 export type Quadrant = 'juggernaut' | 'win_now' | 'rebuilding' | 'danger';
 
 export interface ContentionProfile {
+  /** Win-now lineup strength: how good this team is *this season*. */
   nowScore: number;
+  /** Dynasty asset base three years out, after age decay. */
   futureScore: number;
   nowRank: number;
   futureRank: number;
   /**
-   * Share of today's starting value that survives the horizon. This, not the
+   * Future asset base per point of present lineup strength. This, not the
    * absolute future score, is what places a team on the young/old axis.
+   *
+   * A ratio across the two scales, deliberately. Before R8 both halves were
+   * dynasty and this really was a retained *share* — bounded by 1, and
+   * measuring little more than the average age of a lineup. It could not
+   * distinguish a rebuild from a bad team, because dynasty value counts a
+   * roster of unplayable rookies as strong now.
+   *
+   * Numerator and denominator now answer the two questions the axis is
+   * actually about: what will this roster be worth later, against what it can
+   * field today. Trading a veteran for picks moves it up; trading picks for a
+   * veteran moves it down; and a team of prospects finally reads as young
+   * rather than as merely a lineup of players who happen not to be old. The two
+   * scales share a normalizing constant (see `PlayerValue`), so the ratio is
+   * between comparable quantities — and it is only ever read against the other
+   * teams' ratios, never as an absolute.
+   *
+   * No longer bounded by 1: a full rebuild can hold more future than present.
    */
   retainedShare: number;
   teamCount: number;
@@ -113,7 +144,7 @@ export function retention(position: Position, age: number | null, years: number)
   return (1 - (ANNUAL_DECAY[position] ?? 0.2)) ** yearsPastCliff;
 }
 
-/** Starting value contributed by each position, counting flex usage. */
+/** Win-now starting value contributed by each position, counting flex usage. */
 export function positionalStarterValue(
   summary: RosterSummary,
 ): Partial<Record<Position, number>> {
@@ -121,7 +152,7 @@ export function positionalStarterValue(
   for (const slot of summary.lineup) {
     if (!slot.entry) continue;
     const position = slot.entry.player.position;
-    out[position] = (out[position] ?? 0) + slot.entry.value;
+    out[position] = (out[position] ?? 0) + slot.entry.winNowValue;
   }
   return out;
 }
@@ -133,6 +164,16 @@ export function positionalStarterValue(
  * would be speculation dressed as arithmetic. That understates ascending
  * players in absolute terms, but the quadrant reads *rank within the league*,
  * where a uniform understatement cancels out.
+ *
+ * Runs on the **dynasty** scale, and stays there after R8 moved everything else
+ * to win-now. The reason is that a dynasty price is already a claim about the
+ * future — the market has looked at a 22-year-old with no role and priced what
+ * it thinks he becomes — so decaying it by age asks "what is left of this
+ * roster's asset base in three years". Running the same decay on win-now value
+ * would ask a strictly worse question: redraft value prices *this* season, so a
+ * prospect enters at nothing, decays to nothing, and a team built entirely of
+ * them would project to have no future at all. The one model that must never
+ * say a rookie has no future is the one whose whole subject is the future.
  */
 export function futureScore(summary: RosterSummary, settings: LeagueSettings): number {
   const projected: ValuedPlayer[] = summary.players.map((entry) => {
@@ -145,9 +186,12 @@ export function futureScore(summary: RosterSummary, settings: LeagueSettings): n
       ...entry,
       value: Math.round(entry.value * factor),
       marketValue: Math.round(entry.marketValue * factor),
+      winNowValue: Math.round(entry.winNowValue * factor),
     };
   });
-  return bestLineup(projected, settings.startingSlots).reduce(
+  // `byValue` explicitly: this lineup is the asset projection, so it must be
+  // picked on the scale it is summed on.
+  return bestLineup(projected, settings.startingSlots, byValue).reduce(
     (sum, slot) => sum + (slot.entry?.value ?? 0),
     0,
   );
@@ -187,15 +231,16 @@ export function contentionProfile(
   const now = summary.starterValue;
   const future = futureScore(summary, settings);
 
-  // The future axis has to measure *age*, not quality a second time. Decay is
-  // roughly proportional to value, so absolute future score ranks teams in
-  // nearly the same order as now: verified on a real 10-team league, where the
-  // two orderings matched at the median split and every team came out either
-  // juggernaut or danger — win_now and rebuilding never occurred at all.
+  // The future axis has to measure the *shape* of a roster, not its quality a
+  // second time. Decay is roughly proportional to value, so absolute future
+  // score ranks teams in nearly the same order as now: verified on a real
+  // 10-team league, where the two orderings matched at the median split and
+  // every team came out either juggernaut or danger — win_now and rebuilding
+  // never occurred at all.
   //
-  // The share of today's value that survives the horizon has no such problem.
-  // It is scale-free, so a weak young roster and a strong young roster both
-  // read as young, which is the distinction the quadrant exists to draw.
+  // The ratio has no such problem. It is scale-free, so a weak young roster and
+  // a strong young roster both read as young, which is the distinction the
+  // quadrant exists to draw.
   const retained = (n: number, f: number) => f / (n || 1);
   const retainedShare = retained(now, future);
 
@@ -266,12 +311,18 @@ export function analyzeTeam(
   // For each position, the weakest player each roster currently starts there.
   // Beating it means a bench player would displace that starter — which is the
   // only definition of "surplus" that translates into a tradeable asset.
+  //
+  // Measured in win-now units on both sides of the comparison, because
+  // displacing a starter is a lineup decision. On the dynasty scale the test
+  // reported every expensive rookie as a surplus his owner should trade: he
+  // out-priced somebody's worst starter, so the model said he would start
+  // there, when in fact no manager in the league would have played him.
   const weakestStarter: Partial<Record<Position, number[]>> = {};
   for (const position of SKILL_POSITIONS) {
     weakestStarter[position] = byRoster.map(({ summary: s }) => {
       const atPosition = s.lineup
         .filter((slot) => slot.entry?.player.position === position)
-        .map((slot) => slot.entry?.value ?? 0);
+        .map((slot) => slot.entry?.winNowValue ?? 0);
       // A roster with nobody starting at the position has a hole worth 0, so
       // anyone would be an upgrade there.
       return atPosition.length > 0 ? Math.min(...atPosition) : 0;
@@ -281,12 +332,16 @@ export function analyzeTeam(
   const surpluses: SurplusAsset[] = summary.players
     .filter((entry) => !summary.starterIds.has(entry.player.id))
     .filter((entry) => SKILL_POSITIONS.includes(entry.player.position))
+    // Dynasty value, not win-now: a player worth nothing this season is still a
+    // tradeable asset, and this filter is only rejecting players worth nothing
+    // at all.
     .filter((entry) => entry.value > 0)
     .map((entry) => ({
       player: entry.player,
       value: entry.value,
       wouldStartOn: (weakestStarter[entry.player.position] ?? []).filter(
-        (weakest, i) => byRoster[i].summary.rosterId !== rosterId && entry.value > weakest,
+        (weakest, i) =>
+          byRoster[i].summary.rosterId !== rosterId && entry.winNowValue > weakest,
       ).length,
     }))
     // Surplus means someone else would actually start him. Measuring against

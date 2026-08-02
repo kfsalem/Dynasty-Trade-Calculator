@@ -68,7 +68,13 @@ function league(
   for (const p of players) {
     const player: Player = makePlayer(p.id, 'RB', p.age ?? 29);
     values.set(p.id, makeValue(p.id, p.value, 'RB'));
-    entries.push({ player, value: p.value, marketValue: p.value, valued: true });
+    entries.push({
+      player,
+      value: p.value,
+      marketValue: p.value,
+      winNowValue: p.value,
+      valued: true,
+    });
     if (p.move) snapMap.set(p.id, snaps(p.move[0], p.move[1], p.move[2]));
   }
 

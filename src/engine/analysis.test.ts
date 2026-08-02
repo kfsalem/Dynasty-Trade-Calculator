@@ -116,6 +116,75 @@ describe('contention quadrant', () => {
     expect(young.retainedShare).toBeCloseTo(1, 3);
     expect(old.retainedShare).toBeCloseTo(0.82 ** 3, 3);
   });
+
+  /**
+   * Two rosters the dynasty scale cannot tell apart, and the win-now scale
+   * calls opposites.
+   *
+   * Identical dynasty value at every slot — 3,000 a man, so their asset totals
+   * match to the point. One roster is aging starters whose redraft price is
+   * *above* their dynasty price; the other is prospects whose redraft price is
+   * near zero. This is the real league's Mike Evans and Travis Hunter, reduced
+   * until nothing else can explain a difference in the answer.
+   */
+  function horizons() {
+    const players = new Map<string, Player>();
+    const values = new Map<string, PlayerValue>();
+    const rosters: Roster[] = [];
+    const twoTeams = makeSettings(SLOTS, { teamCount: 2 });
+
+    const build = (id: number, age: number, redraft: number) => {
+      const ids: string[] = [];
+      (['QB', 'RB', 'WR'] as Position[]).forEach((position) => {
+        const pid = `h${id}_${position}`;
+        players.set(pid, makePlayer(pid, position, age));
+        values.set(pid, makeValue(pid, 3000, position, 3000, redraft));
+        ids.push(pid);
+      });
+      rosters.push(makeRoster(id, ids));
+    };
+
+    build(1, 31, 5000); // aging starters — better this year than their price says
+    build(2, 23, 200); // prospects — all of it still ahead of them
+
+    const summaries = rosters.map((r) => summarizeRoster(r, players, values, twoTeams));
+    return { summaries, settings: twoTeams };
+  }
+
+  it('calls a roster of prospects rebuilding, where dynasty called it a juggernaut', () => {
+    const { summaries, settings: twoTeams } = horizons();
+    const profile = (rosterId: number) =>
+      contentionProfile(
+        summaries.find((s) => s.rosterId === rosterId) as RosterSummary,
+        summaries,
+        twoTeams,
+      );
+
+    // Identical as assets, which is precisely why the old model had nothing to
+    // say: both lineups summed to 9,000 dynasty points, so the median split put
+    // both on the strong side and the prospects came out a *juggernaut*.
+    expect(summaries[0].starterAssetValue).toBe(summaries[1].starterAssetValue);
+
+    expect(profile(1).quadrant).toBe('win_now');
+    expect(profile(2).quadrant).toBe('rebuilding');
+
+    // And the axis that moved is the present one, not the future one.
+    expect(profile(1).nowScore).toBeGreaterThan(profile(2).nowScore * 10);
+  });
+
+  it('keeps the future axis on dynasty, so prospects have a future at all', () => {
+    // The trap in moving everything to win-now at once. Redraft value prices
+    // this season, so a prospect enters at nothing and decays to nothing — a
+    // team built of them would project to no future whatsoever, in the one
+    // calculation whose entire subject is the future.
+    const { summaries, settings: twoTeams } = horizons();
+    const prospects = contentionProfile(summaries[1], summaries, twoTeams);
+
+    expect(prospects.futureScore).toBe(9000);
+    expect(prospects.futureScore).toBeGreaterThan(prospects.nowScore);
+    // No longer bounded by 1: a rebuild can hold more future than present.
+    expect(prospects.retainedShare).toBeGreaterThan(1);
+  });
 });
 
 describe('retention', () => {
@@ -324,6 +393,61 @@ describe('analyzeTeam', () => {
     expect(star).toBeDefined();
     // Better than the lone starter on each of the other three teams.
     expect(star?.wouldStartOn).toBe(3);
+  });
+
+  it('does not call an expensive prospect a surplus somebody would start', () => {
+    /**
+     * The surplus test is a lineup question — *would they play him* — so it is
+     * asked on the win-now scale. Before R8 it out-priced a weak starter on
+     * dynasty and the model reported a rookie with no role as a trade chip
+     * three other managers were waiting to start, which no manager in the
+     * league would have done.
+     */
+    const { players, values, summaries } = world();
+
+    // Same dynasty price, opposite redraft prices. Only the scale can tell them
+    // apart, so the assertion is about nothing else.
+    players.set('t1_rookie', makePlayer('t1_rookie', 'WR', 22));
+    values.set('t1_rookie', makeValue('t1_rookie', 2000, 'WR', 2000, 40));
+    players.set('t1_vet', makePlayer('t1_vet', 'WR', 32));
+    values.set('t1_vet', makeValue('t1_vet', 2000, 'WR', 2000, 2600));
+
+    const boosted = summarizeRoster(
+      makeRoster(1, ['t1_QB', 't1_RB', 't1_WR', 't1_rookie', 't1_vet']),
+      players,
+      values,
+      settings,
+    );
+    const analysis = analyzeTeam(1, [boosted, ...summaries.slice(1)], settings);
+    const ids = analysis?.surpluses.map((s) => s.player.id) ?? [];
+
+    expect(ids).toContain('t1_vet');
+    expect(ids).not.toContain('t1_rookie');
+
+    // Still priced as the asset he is, though — the surplus *test* is win-now,
+    // the figure the trade is worth is not.
+    expect(analysis?.surpluses.find((s) => s.player.id === 't1_vet')?.value).toBe(2000);
+  });
+
+  it('measures positional weakness on the lineup, not on the asset pile', () => {
+    // Three expensive rookie receivers are not a strength at receiver this
+    // year, and saying otherwise sends the trade engine hunting for the wrong
+    // position entirely.
+    const { players, values } = world();
+    const rookies = ['r1', 'r2', 'r3'];
+    for (const id of rookies) {
+      players.set(id, makePlayer(id, 'WR', 22));
+      values.set(id, makeValue(id, 4000, 'WR', 4000, 50));
+    }
+
+    const stocked = summarizeRoster(
+      makeRoster(1, ['t1_QB', 't1_RB', ...rookies]),
+      players,
+      values,
+      settings,
+    );
+
+    expect(positionalStarterValue(stocked).WR).toBe(50);
   });
 
   it('returns null for a roster that is not in the league', () => {
