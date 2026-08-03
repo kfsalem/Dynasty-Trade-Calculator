@@ -7,7 +7,7 @@ import type {
   Roster,
   InjuryStatus,
 } from '../../types';
-import type { PlayerIndex, SlimPlayer } from './client';
+import type { SlimPlayer } from './client';
 import type { SleeperLeague, SleeperRoster, SleeperUser } from './schema';
 
 const POSITIONS = new Set<Position>(['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
@@ -130,16 +130,4 @@ export function mapLeague(
     settings: mapSettings(league),
     rosters: mapped.sort((a, b) => a.rosterId - b.rosterId),
   };
-}
-
-/** Resolve a roster's player ids into full players, dropping anything unknown. */
-export function resolvePlayers(ids: string[], index: PlayerIndex): Player[] {
-  const out: Player[] = [];
-  for (const id of ids) {
-    const slim = index[id];
-    if (!slim) continue;
-    const player = mapPlayer(slim);
-    if (player) out.push(player);
-  }
-  return out;
 }

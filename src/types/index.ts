@@ -26,8 +26,6 @@ export const FLEX_ELIGIBILITY: Record<string, Position[]> = {
   REC_FLEX: ['WR', 'TE'],
 };
 
-export const BENCH_SLOTS: LineupSlot[] = ['BN', 'IR', 'TAXI'];
-
 /**
  * A player's availability designation, as the platform reports it.
  *

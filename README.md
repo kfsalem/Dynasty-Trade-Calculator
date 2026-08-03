@@ -86,7 +86,9 @@ leaves them in three. Requiring both to gain *starting-lineup strength* would
 rule out the most common dynasty trade there is — a rebuilder sending a veteran
 to a contender for picks — because picks never start.
 
-See [`docs/DESIGN.md`](docs/DESIGN.md) for the full architecture and roadmap.
+See [`docs/DESIGN.md`](docs/DESIGN.md) for the architecture and the reasoning
+behind every model decision, and [`docs/ROADMAP.md`](docs/ROADMAP.md) for what is
+planned next.
 
 ## How it works
 
@@ -103,8 +105,8 @@ FantasyCalc also supplies cross-platform player IDs (`sleeperId`, `mflId`, `espn
 
 nflverse is the one source a browser cannot reach. It publishes as GitHub release
 assets, which send no CORS header, and its depth chart file is 53 MB. `npm run
-ingest` fetches and reduces it in CI instead, shipping 346 KB of Sleeper-keyed
-JSON as static assets — so the app stays backend-free. See
+ingest` fetches and reduces it in CI instead, shipping a few hundred KB of
+Sleeper-keyed JSON as static assets — so the app stays backend-free. See
 [`docs/DATA.md`](docs/DATA.md).
 
 ## Development
@@ -116,8 +118,13 @@ npm install
 npm run dev      # dev server
 npm run build    # typecheck + production build
 npm run lint
+npm run test
 npm run ingest   # refresh public/data from nflverse
+npm run og       # regenerate public/og.png, the link-preview card
 ```
+
+`npm test` runs two suites in one command: logic in Node, and anything that
+mounts a component in jsdom.
 
 ## Stack
 

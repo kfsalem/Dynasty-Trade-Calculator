@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Dynasty Utility">
+  <!--
+    Two assets moving in opposite directions: the whole product in one glyph.
+
+    Deliberately simple. A favicon is read at 16px, where anything with more
+    than a couple of shapes turns to mush, so this is two arrows and nothing
+    else — no text, no gradient, no third colour.
+  -->
+  <rect width="64" height="64" rx="14" fill="#2563eb"/>
+  <path d="M12 20 H38 V14 L52 24 L38 34 V28 H12 Z" fill="#ffffff"/>
+  <path d="M52 36 H26 V30 L12 40 L26 50 V44 H52 Z" fill="#ffffff"/>
+</svg>

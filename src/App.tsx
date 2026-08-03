@@ -244,16 +244,46 @@ function App() {
           <>
             <LeagueHeader league={league} onReset={() => changeLeague(null)} />
 
+            {/*
+              A real tablist, not just the roles.
+
+              Declaring `role="tab"` tells a screen reader user this is a tab
+              stop with arrow-key navigation, and they will try it. Announcing
+              the pattern without implementing it is worse than plain buttons,
+              which at least behave the way they are described. So: roving
+              tabIndex, arrow/Home/End keys, and a `tabpanel` that names the tab
+              controlling it.
+            */}
             <div
               role="tablist"
               aria-label="League views"
               className="mt-6 flex gap-1 border-b border-gray-200"
+              onKeyDown={(e) => {
+                const step =
+                  e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+                if (!step && e.key !== 'Home' && e.key !== 'End') return;
+                e.preventDefault();
+                const i = TABS.findIndex(([value]) => value === tab);
+                const next =
+                  e.key === 'Home'
+                    ? 0
+                    : e.key === 'End'
+                      ? TABS.length - 1
+                      : (i + step + TABS.length) % TABS.length;
+                setTab(TABS[next][0]);
+                document.getElementById(`tab-${TABS[next][0]}`)?.focus();
+              }}
             >
               {TABS.map(([value, label]) => (
                 <button
                   key={value}
+                  id={`tab-${value}`}
                   role="tab"
                   aria-selected={tab === value}
+                  aria-controls="tabpanel"
+                  // Roving: only the selected tab is in the page's tab order,
+                  // so Tab moves past the bar rather than through every view.
+                  tabIndex={tab === value ? 0 : -1}
                   onClick={() => setTab(value)}
                   className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
                     tab === value
@@ -266,7 +296,13 @@ function App() {
               ))}
             </div>
 
-            <div className="mt-6">
+            <div
+              id="tabpanel"
+              role="tabpanel"
+              aria-labelledby={`tab-${tab}`}
+              tabIndex={-1}
+              className="mt-6"
+            >
               {tab === 'analysis' &&
                 (myRosterId === null ? (
                   <ClaimTeam league={league} onClaim={setMyRoster} />

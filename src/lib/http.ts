@@ -44,7 +44,22 @@ export async function fetchJson<T>(
     );
   }
 
-  const body: unknown = await res.json();
+  /**
+   * A 200 is not a promise of JSON.
+   *
+   * Captive portals, proxies and error pages all answer 200 with HTML, and an
+   * unguarded `res.json()` throws a raw `SyntaxError` that goes straight to the
+   * user as `Unexpected token '<'`. This module exists so that boundary
+   * failures arrive as one legible `ApiError` naming the endpoint; letting a
+   * parse error through undoes that for the single most confusing case.
+   */
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    throw new ApiError(`Response from ${url} was not JSON.`, res.status, url);
+  }
+
   const parsed = schema.safeParse(body);
 
   if (!parsed.success) {

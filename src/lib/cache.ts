@@ -1,4 +1,4 @@
-import { get, set, del } from 'idb-keyval';
+import { get, set } from 'idb-keyval';
 
 interface CacheEntry<T> {
   data: T;
@@ -20,16 +20,45 @@ export async function cached<T>(
   ttlMs: number,
   fetcher: () => Promise<T>,
 ): Promise<T> {
+  let stale: CacheEntry<T> | undefined;
+
   try {
     const hit = await get<CacheEntry<T>>(key);
-    if (hit && hit.expiresAt > Date.now()) {
-      return hit.data;
+    if (hit) {
+      if (hit.expiresAt > Date.now()) return hit.data;
+      // Expired, but held onto: see the fallback below.
+      stale = hit;
     }
   } catch {
     // IndexedDB unavailable — fetch live.
   }
 
-  const data = await fetcher();
+  let data: T;
+  try {
+    data = await fetcher();
+  } catch (err) {
+    /**
+     * An expired entry beats no entry when the source is down.
+     *
+     * These TTLs are freshness preferences, not correctness boundaries —
+     * dynasty values move over weeks, and yesterday's are a rounding error
+     * against not loading at all. Without this, a FantasyCalc outage takes the
+     * whole app down with it: player values gate the league render, so the user
+     * lands on "Couldn't load that league" while a perfectly serviceable copy
+     * sits in IndexedDB unread.
+     *
+     * Only a *failed refresh* falls back. A first visit during an outage has
+     * nothing to serve and still throws, which is the honest answer.
+     */
+    if (stale) {
+      console.warn(
+        `${key}: refresh failed (${err instanceof Error ? err.message : String(err)}); ` +
+          `serving the cached copy from ${new Date(stale.expiresAt - ttlMs).toISOString()}.`,
+      );
+      return stale.data;
+    }
+    throw err;
+  }
 
   try {
     await set(key, { data, expiresAt: Date.now() + ttlMs } satisfies CacheEntry<T>);
@@ -38,14 +67,6 @@ export async function cached<T>(
   }
 
   return data;
-}
-
-export async function invalidate(key: string): Promise<void> {
-  try {
-    await del(key);
-  } catch {
-    // Nothing to do if IDB is unavailable.
-  }
 }
 
 export const TTL = {
