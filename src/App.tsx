@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LeagueImport } from './components/LeagueImport';
 import { LeagueHeader } from './components/LeagueHeader';
 import { RosterList } from './components/RosterList';
@@ -8,6 +8,7 @@ import { TeamAnalysis } from './components/TeamAnalysis';
 import { ClaimTeam } from './components/ClaimTeam';
 import { useLeagueSummaries } from './hooks/useLeagueData';
 import { useMyRoster } from './hooks/useMyRoster';
+import { decodeTrade, encodeTrade, resolveShare } from './lib/share';
 
 const STORAGE_KEY = 'dynasty:leagueId';
 
@@ -33,12 +34,39 @@ function readStoredLeagueId(): string | null {
   }
 }
 
+/**
+ * A shared trade, read once from the address the page was opened at.
+ *
+ * Read outside the component and never re-read. The URL is rewritten on every
+ * edit from here on, so treating it as live state would mean the app reading
+ * back its own writes — and a link is an *opening* position, not a channel.
+ */
+const linkedTrade = decodeTrade(window.location.search);
+
 function App() {
-  const [leagueId, setLeagueId] = useState<string | null>(readStoredLeagueId);
-  const [tab, setTab] = useState<Tab>('analysis');
-  // A suggestion sent to the calculator. Bumping `seq` remounts the builder so
-  // it re-reads the seed rather than keeping the user's previous selections.
-  const [pending, setPending] = useState<{ trade: PendingTrade; seq: number } | null>(null);
+  // A link beats the remembered league. Someone opening a trade from their
+  // group chat is asking for that league, whatever they looked at last.
+  const [leagueId, setLeagueId] = useState<string | null>(
+    () => linkedTrade?.leagueId ?? readStoredLeagueId(),
+  );
+  const [tab, setTab] = useState<Tab>(linkedTrade ? 'trade' : 'analysis');
+  /**
+   * The trade the app currently believes in: what the builder holds, what the
+   * address bar says, and what the builder is re-seeded from.
+   *
+   * One piece of state for all three, because they were never allowed to
+   * disagree. `seedSeq` remounts the builder whenever a trade arrives from
+   * *outside* it — a suggestion or a link — so it re-reads the seed instead of
+   * keeping the user's previous selections. It is a remount trigger and nothing
+   * else; the content lives here.
+   */
+  const [shared, setShared] = useState<PendingTrade | null>(null);
+  const [seedSeq, setSeedSeq] = useState(0);
+
+  const seedTrade = useCallback((trade: PendingTrade) => {
+    setShared(trade);
+    setSeedSeq((n) => n + 1);
+  }, []);
   const { myRosterId, setMyRoster } = useMyRoster(leagueId);
   const {
     league,
@@ -48,6 +76,7 @@ function App() {
     summaries,
     picks,
     picksUnavailable,
+    picksSettled,
     snaps,
     usage,
     roles,
@@ -67,6 +96,56 @@ function App() {
       // Storage disabled — the app still works, it just won't remember.
     }
   }, [leagueId]);
+
+  /**
+   * The shared trade, checked against the league that has now loaded.
+   *
+   * Deferred until the league is in hand because the link cannot be trusted:
+   * roster ids can be edited by anyone with an address bar, and `buildSide`
+   * throws on one it does not recognise — which would take the whole render
+   * down rather than showing a slightly wrong trade.
+   *
+   * And deferred until the *picks* are in hand too, which is subtler and was a
+   * real bug: pick values load in their own query, so `picks` is empty for a
+   * moment after the league arrives. Resolving in that window dropped every
+   * traded pick out of the link and then told the recipient, in as many words,
+   * that those picks were no longer on the roster — a false statement produced
+   * by asking the question early.
+   */
+  const fromLink = useMemo(() => {
+    if (!linkedTrade || !league || !picksSettled) return null;
+    if (linkedTrade.leagueId !== league.id) return null;
+    return resolveShare(linkedTrade, league, picks);
+  }, [league, picks, picksSettled]);
+
+  // Seeded exactly once, through the same door the suggestion engine uses.
+  const [linkSeeded, setLinkSeeded] = useState(false);
+  useEffect(() => {
+    if (!fromLink || linkSeeded) return;
+    setLinkSeeded(true);
+    seedTrade(fromLink.trade);
+  }, [fromLink, linkSeeded, seedTrade]);
+
+  /**
+   * Keep the address bar describing what is on screen.
+   *
+   * `replaceState`, not `pushState`: every checkbox tick is a URL, and pushing
+   * each one would turn the back button into an undo history nobody asked for
+   * and leave the page unreachable by going back.
+   */
+  useEffect(() => {
+    if (!leagueId) return;
+    const url = shared
+      ? encodeTrade({ leagueId, ...shared })
+      : window.location.pathname;
+    window.history.replaceState(null, '', url);
+  }, [leagueId, shared]);
+
+  // Identity matters: the builder reports through this on every state change,
+  // so a new function each render would re-fire the effect behind it forever.
+  const handleTradeChange = useCallback((trade: PendingTrade | null) => {
+    setShared(trade);
+  }, []);
 
   const showImport = !leagueId || Boolean(error);
   const ready = league && players && values && !isLoading && !error;
@@ -170,7 +249,7 @@ function App() {
                     trends={trends}
                     season={snapsMeta?.season}
                     onOpenInCalculator={(trade) => {
-                      setPending((prev) => ({ trade, seq: (prev?.seq ?? 0) + 1 }));
+                      seedTrade(trade);
                       setTab('trade');
                     }}
                   />
@@ -192,14 +271,18 @@ function App() {
 
               {tab === 'trade' && (
                 <TradeBuilder
-                  key={pending?.seq ?? 'blank'}
+                  key={seedSeq}
                   league={league}
                   players={players}
                   values={values}
                   picks={picks}
                   picksUnavailable={picksUnavailable}
                   myRosterId={myRosterId}
-                  initial={pending?.trade ?? null}
+                  // Re-seeded from the app's own copy, so switching tabs and
+                  // coming back no longer discards the trade you were building.
+                  initial={shared}
+                  onChange={handleTradeChange}
+                  droppedFromLink={fromLink?.dropped}
                   snaps={snaps}
                   usage={usage}
                   roles={roles}
