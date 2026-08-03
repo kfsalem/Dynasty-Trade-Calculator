@@ -28,8 +28,32 @@ export const FLEX_ELIGIBILITY: Record<string, Position[]> = {
 
 export const BENCH_SLOTS: LineupSlot[] = ['BN', 'IR', 'TAXI'];
 
+/**
+ * A player's availability designation, as the platform reports it.
+ *
+ * The list is longer than the four words a fantasy manager reads on a Sunday
+ * because Sleeper's `injury_status` carries roster designations alongside
+ * injuries, and the difference between them is invisible in the field itself.
+ * `dnr` is the reserve/did-not-report list and `na` is a player not on an
+ * active NFL roster; neither is an injury, and both mean exactly what IR means
+ * for the purpose of filling a lineup slot.
+ *
+ * `unknown` exists so an unrecognised designation survives the mapper with its
+ * raw text in `description` rather than being dropped. See `engine/availability`
+ * for what each one does to a lineup.
+ */
 export interface InjuryStatus {
-  status: 'healthy' | 'questionable' | 'doubtful' | 'out' | 'ir' | 'pup' | 'sus';
+  status:
+    | 'healthy'
+    | 'questionable'
+    | 'doubtful'
+    | 'out'
+    | 'ir'
+    | 'pup'
+    | 'sus'
+    | 'dnr'
+    | 'na'
+    | 'unknown';
   description?: string;
 }
 

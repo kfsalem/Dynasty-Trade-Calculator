@@ -6,10 +6,16 @@ import {
   valuePlayers,
   type ValuedPlayer,
 } from './rosterValue';
-import type { LineupSlot, Player, PlayerValue, Position } from '../types';
+import type { InjuryStatus, LineupSlot, Player, PlayerValue, Position } from '../types';
+import { canStart } from './availability';
 import { makeRoster, makeSettings, makeValue } from './testFixtures';
 
-function player(id: string, position: Position, name = id): Player {
+function player(
+  id: string,
+  position: Position,
+  name = id,
+  injury?: InjuryStatus,
+): Player {
   return {
     id,
     name,
@@ -17,6 +23,7 @@ function player(id: string, position: Position, name = id): Player {
     team: 'FA',
     age: 25,
     yearsExp: 3,
+    injury,
     platformIds: { sleeper: id },
   };
 }
@@ -27,8 +34,17 @@ function entry(
   value: number,
   marketValue = value,
   winNowValue = value,
+  injury?: InjuryStatus,
 ): ValuedPlayer {
-  return { player: player(id, position), value, marketValue, winNowValue, valued: true };
+  const p = player(id, position, id, injury);
+  return {
+    player: p,
+    value,
+    marketValue,
+    winNowValue,
+    valued: true,
+    available: canStart(p),
+  };
 }
 
 const names = (lineup: ReturnType<typeof bestLineup>) =>
@@ -172,7 +188,9 @@ describe('win-now lineups', () => {
     const slots: LineupSlot[] = ['FLEX'];
 
     expect(names(bestLineup([veteran, prospect], slots))).toEqual(['veteran']);
-    expect(names(bestLineup([veteran, prospect], slots, byValue))).toEqual(['prospect']);
+    expect(names(bestLineup([veteran, prospect], slots, { compare: byValue }))).toEqual([
+      'prospect',
+    ]);
   });
 
   it('reports lineup strength and lineup asset value as separate figures', () => {
@@ -222,5 +240,82 @@ describe('valuePlayers', () => {
 
   it('skips ids missing from the player index', () => {
     expect(valuePlayers(['a', 'ghost'], players, values)).toHaveLength(1);
+  });
+
+  it('carries availability onto the entry', () => {
+    const hurt = new Map<string, Player>([
+      ['ir', player('ir', 'WR', 'ir', { status: 'ir' })],
+      ['q', player('q', 'WR', 'q', { status: 'questionable' })],
+    ]);
+    const result = valuePlayers(['ir', 'q'], hurt, new Map());
+    expect(result.find((r) => r.player.id === 'ir')?.available).toBe(false);
+    expect(result.find((r) => r.player.id === 'q')?.available).toBe(true);
+  });
+});
+
+describe('injured players and the lineup', () => {
+  it('does not start a player who is out for the season', () => {
+    // The defect R9 closes: a roster's playerIds includes whoever is parked on
+    // IR, and nothing downstream asked whether he could play.
+    const hurt = entry('hurt', 'WR', 9000, 9000, 9000, { status: 'ir' });
+    const fit = entry('fit', 'WR', 100, 100, 100);
+    const slots: LineupSlot[] = ['WR'];
+
+    expect(names(bestLineup([hurt, fit], slots))).toEqual(['fit']);
+    expect(names(bestLineup([fit, hurt], slots))).toEqual(['fit']);
+  });
+
+  it('leaves the slot empty rather than starting him when nobody else fits', () => {
+    // An unfillable slot is a hole, and saying so is the point — this is the
+    // roster need the trade engine should be solving for.
+    const hurt = entry('hurt', 'TE', 9000, 9000, 9000, { status: 'pup' });
+    expect(names(bestLineup([hurt], ['TE']))).toEqual([null]);
+  });
+
+  it('still starts a questionable player', () => {
+    const knock = entry('knock', 'WR', 9000, 9000, 9000, { status: 'questionable' });
+    const fit = entry('fit', 'WR', 100, 100, 100);
+    expect(names(bestLineup([knock, fit], ['WR']))).toEqual(['knock']);
+  });
+
+  it('ignores this season’s injuries when asked for a future lineup', () => {
+    // A torn ACL this August is not a fact about 2029. `futureScore` passes
+    // this, and it must: one hamstring should not erase a player from a team's
+    // whole three-year outlook.
+    const hurt = entry('hurt', 'WR', 9000, 9000, 9000, { status: 'ir' });
+    const fit = entry('fit', 'WR', 100, 100, 100);
+
+    expect(
+      names(bestLineup([hurt, fit], ['WR'], { compare: byValue, includeUnavailable: true })),
+    ).toEqual(['hurt']);
+  });
+
+  it('costs the roster lineup strength without touching what he is worth', () => {
+    // The whole of R9 in one assertion. He is out of the eleven and worth
+    // exactly what he was worth as an asset — dynasty value already prices the
+    // risk that a player misses time, and charging him again here is charging
+    // him twice.
+    const players = new Map<string, Player>([
+      ['star', player('star', 'WR', 'star', { status: 'ir' })],
+      ['sub', player('sub', 'WR')],
+    ]);
+    const values = new Map<string, PlayerValue>([
+      ['star', makeValue('star', 4000, 'WR', 4000, 4000)],
+      ['sub', makeValue('sub', 300, 'WR', 300, 300)],
+    ]);
+
+    const summary = summarizeRoster(
+      makeRoster(1, ['star', 'sub']),
+      players,
+      values,
+      makeSettings(['WR']),
+    );
+
+    expect([...summary.starterIds]).toEqual(['sub']);
+    expect(summary.starterValue).toBe(300);
+    expect(summary.totalValue).toBe(4300);
+    // Bench value is the dynasty complement, so the injured man's asset value
+    // has to still be in the roster somewhere. Here it is all of it.
+    expect(summary.benchValue).toBe(4000);
   });
 });

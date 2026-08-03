@@ -187,6 +187,56 @@ describe('evaluateTrade', () => {
     expect(result.sides[0].warnings.join(' ')).toContain('age cliff');
   });
 
+  it('warns when an incoming player cannot fill a slot this season', () => {
+    // The lineup maths already prices him at nothing. It prices him at nothing
+    // in a number that could equally mean he is a bad player, and the two facts
+    // a manager wants before accepting are that he is hurt and how badly.
+    const ctx = context();
+    ctx.players.set('wr_hurt', makePlayer('wr_hurt', 'WR', 25, { status: 'ir' }));
+    ctx.values.set('wr_hurt', makeValue('wr_hurt', 8000));
+    ctx.league.rosters[1].playerIds.push('wr_hurt');
+
+    // wr_a for wr_hurt: two receivers priced identically, one of whom plays.
+    const result = evaluateTrade(
+      { rosterId: 1, playerIds: ['wr_a'], pickIds: [] },
+      { rosterId: 2, playerIds: ['wr_hurt'], pickIds: [] },
+      ctx,
+    );
+
+    const warning = result.sides[0].warnings.join(' ');
+    expect(warning).toContain('cannot fill a starting slot this season');
+    expect(warning).toContain('on injured reserve');
+
+    // And the arithmetic agrees with the sentence. Dead even on raw value, and
+    // the lineup drops by the whole gap between the starter who left and the
+    // bench receiver who replaces him.
+    expect(result.sides[0].netValue).toBe(0);
+    expect(result.sides[0].vorsDelta).toBe(-2000); // wr_a 8,000 out, wr_c 6,000 in
+    expect(result.sides[0].warnings.join(' ')).toContain('Starting lineup gets weaker');
+  });
+
+  it('names a week-to-week knock without discounting anything for it', () => {
+    const ctx = context();
+    ctx.players.set(
+      'wr_knock',
+      makePlayer('wr_knock', 'WR', 25, { status: 'questionable' }),
+    );
+    ctx.values.set('wr_knock', makeValue('wr_knock', 6000));
+    ctx.league.rosters[1].playerIds.push('wr_knock');
+
+    const result = evaluateTrade(
+      { rosterId: 1, playerIds: ['wr_c'], pickIds: [] },
+      { rosterId: 2, playerIds: ['wr_knock'], pickIds: [] },
+      ctx,
+    );
+
+    const warning = result.sides[0].warnings.join(' ');
+    expect(warning).toContain('Week to week');
+    expect(warning).not.toContain('cannot fill a starting slot');
+    // Straight swap of equals: he starts, so nothing moves.
+    expect(result.sides[0].vorsDelta).toBe(0);
+  });
+
   it('warns when a side ships most of its pick capital', () => {
     const picks: DraftPick[] = [
       makePick('2027-1-1', '2027', 1, 1, 4000),

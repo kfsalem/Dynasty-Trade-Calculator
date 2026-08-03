@@ -249,6 +249,22 @@ describe('futureScore', () => {
       expect(futureScore(summary, settings)).toBeLessThanOrEqual(summary.starterValue);
     }
   });
+
+  it('keeps an injured player in the three-year lineup', () => {
+    // A torn ACL this August is not a fact about 2029. The one calculation
+    // whose whole subject is the future must not let one hamstring erase a
+    // player from a team's outlook — and this season's lineup, right beside it,
+    // must.
+    const players = new Map<string, Player>([
+      ['hurt', makePlayer('hurt', 'WR', 24, { status: 'ir' })],
+    ]);
+    const values = new Map<string, PlayerValue>([['hurt', makeValue('hurt', 5000)]]);
+    const wrOnly = makeSettings(['WR']);
+    const summary = summarizeRoster(makeRoster(1, ['hurt']), players, values, wrOnly);
+
+    expect(summary.starterValue).toBe(0);
+    expect(futureScore(summary, wrOnly)).toBe(5000);
+  });
 });
 
 describe('contentionProfile', () => {
@@ -427,6 +443,28 @@ describe('analyzeTeam', () => {
     // Still priced as the asset he is, though — the surplus *test* is win-now,
     // the figure the trade is worth is not.
     expect(analysis?.surpluses.find((s) => s.player.id === 't1_vet')?.value).toBe(2000);
+  });
+
+  it('does not offer an injured player as a surplus somebody would start', () => {
+    // R9 took injured players out of lineups, which drops them into the exact
+    // bucket this list draws from. "Benched here, but would start for another
+    // team" is not something to say about a man on injured reserve, and the
+    // suggestion engine reads this list to decide who to shop.
+    const { players, values, summaries } = world();
+
+    players.set('t1_hurt', makePlayer('t1_hurt', 'WR', 24, { status: 'ir' }));
+    values.set('t1_hurt', makeValue('t1_hurt', 2000));
+
+    const boosted = summarizeRoster(
+      makeRoster(1, ['t1_QB', 't1_RB', 't1_WR', 't1_hurt']),
+      players,
+      values,
+      settings,
+    );
+    const analysis = analyzeTeam(1, [boosted, ...summaries.slice(1)], settings);
+
+    // The identical healthy player is a chip; see the test three above.
+    expect(analysis?.surpluses.map((s) => s.player.id)).not.toContain('t1_hurt');
   });
 
   it('measures positional weakness on the lineup, not on the asset pile', () => {

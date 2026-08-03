@@ -232,10 +232,10 @@ function futureLineupValue(playerIds: string[], ctx: SuggestContext): number {
       winNowValue: entry.winNowValue * factor,
     };
   });
-  return bestLineup(entries, ctx.league.settings.startingSlots, byValue).reduce(
-    (total, slot) => total + (slot.entry?.value ?? 0),
-    0,
-  );
+  return bestLineup(entries, ctx.league.settings.startingSlots, {
+    compare: byValue,
+    includeUnavailable: true,
+  }).reduce((total, slot) => total + (slot.entry?.value ?? 0), 0);
 }
 
 /** Ids a roster would start today, given the players it would hold after a trade. */

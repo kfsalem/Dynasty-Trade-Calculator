@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { mapLeague, mapSettings } from './mapper';
-import { parseLeagueId } from './client';
+import { mapLeague, mapPlayer, mapSettings } from './mapper';
+import { parseLeagueId, type SlimPlayer } from './client';
 import type { SleeperLeague, SleeperRoster, SleeperUser } from './schema';
 
 const baseLeague: SleeperLeague = {
@@ -98,6 +98,44 @@ describe('mapLeague', () => {
   it('recombines the split points-for fields', () => {
     const league = mapLeague(baseLeague, rosters, users);
     expect(league.rosters[0].pointsFor).toBeCloseTo(1200.55);
+  });
+});
+
+describe('mapPlayer injuries', () => {
+  const slim = (injuryStatus: string | null): SlimPlayer => ({
+    id: '1',
+    name: 'A Player',
+    position: 'WR',
+    team: 'BUF',
+    age: 25,
+    yearsExp: 3,
+    injuryStatus,
+  });
+
+  it('canonicalises the statuses Sleeper actually publishes', () => {
+    expect(mapPlayer(slim('Questionable'))?.injury?.status).toBe('questionable');
+    expect(mapPlayer(slim('IR'))?.injury?.status).toBe('ir');
+    expect(mapPlayer(slim('PUP'))?.injury?.status).toBe('pup');
+  });
+
+  it('maps the roster designations that are not injuries', () => {
+    // DNR is the reserve/did-not-report list and NA is a player not on an
+    // active NFL roster. Neither is an injury; both mean he cannot play, and
+    // both were dropped on the floor before R9 — the real league rosters a
+    // receiver whose only designation is DNR.
+    expect(mapPlayer(slim('DNR'))?.injury?.status).toBe('dnr');
+    expect(mapPlayer(slim('NA'))?.injury?.status).toBe('na');
+  });
+
+  it('keeps an unrecognised status instead of reporting the player healthy', () => {
+    const injury = mapPlayer(slim('Reserve/Whatever'))?.injury;
+    expect(injury?.status).toBe('unknown');
+    expect(injury?.description).toBe('Reserve/Whatever');
+  });
+
+  it('leaves a player with no status undesignated', () => {
+    expect(mapPlayer(slim(null))?.injury).toBeUndefined();
+    expect(mapPlayer(slim('  '))?.injury).toBeUndefined();
   });
 });
 

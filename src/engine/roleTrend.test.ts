@@ -74,6 +74,7 @@ function league(
       marketValue: p.value,
       winNowValue: p.value,
       valued: true,
+      available: true,
     });
     if (p.move) snapMap.set(p.id, snaps(p.move[0], p.move[1], p.move[2]));
   }

@@ -190,8 +190,14 @@ export function futureScore(summary: RosterSummary, settings: LeagueSettings): n
     };
   });
   // `byValue` explicitly: this lineup is the asset projection, so it must be
-  // picked on the scale it is summed on.
-  return bestLineup(projected, settings.startingSlots, byValue).reduce(
+  // picked on the scale it is summed on. `includeUnavailable` for the same
+  // reason — a torn ACL this August is not a fact about 2029, and letting it
+  // erase a player from the future score would let one injury decide a team's
+  // whole outlook.
+  return bestLineup(projected, settings.startingSlots, {
+    compare: byValue,
+    includeUnavailable: true,
+  }).reduce(
     (sum, slot) => sum + (slot.entry?.value ?? 0),
     0,
   );
@@ -332,6 +338,14 @@ export function analyzeTeam(
   const surpluses: SurplusAsset[] = summary.players
     .filter((entry) => !summary.starterIds.has(entry.player.id))
     .filter((entry) => SKILL_POSITIONS.includes(entry.player.position))
+    // R9 moved injured players out of the lineup, which drops them into exactly
+    // the bucket this list draws from — and the claim it makes about them would
+    // be false. "Benched here, but would start for five other teams" is not
+    // something to say about a man on injured reserve, and the suggestion engine
+    // reads this list to decide who to shop. He remains a tradeable asset with
+    // his dynasty value intact; he is simply not a *surplus starter*, because
+    // there is no lineup in the league he could walk into this season.
+    .filter((entry) => entry.available)
     // Dynasty value, not win-now: a player worth nothing this season is still a
     // tradeable asset, and this filter is only rejecting players worth nothing
     // at all.

@@ -1,4 +1,4 @@
-import type { Position } from '../types';
+import type { InjuryStatus, Position } from '../types';
 
 /**
  * A value, as a human reads it.
@@ -101,7 +101,16 @@ const INJURY_ABBREV: Record<string, string> = {
   ir: 'IR',
   pup: 'PUP',
   sus: 'SUS',
+  dnr: 'DNR',
+  na: 'NA',
 };
 
-export const formatInjury = (status: string): string =>
-  INJURY_ABBREV[status] ?? status.slice(0, 3).toUpperCase();
+/**
+ * Takes the whole status rather than the word, so an unrecognised designation
+ * can fall back to what the platform actually said. `unknown` means the mapper
+ * did not recognise the text, and showing the text is strictly more useful than
+ * showing "UNK" — the manager reading it may well know what it means.
+ */
+export const formatInjury = (injury: InjuryStatus): string =>
+  INJURY_ABBREV[injury.status] ??
+  (injury.description ?? injury.status).slice(0, 3).toUpperCase();

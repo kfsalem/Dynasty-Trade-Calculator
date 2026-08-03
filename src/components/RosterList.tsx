@@ -61,6 +61,13 @@ export function RosterList({
         snap is worse, so a single number was answering both questions with the wrong one.
         Expand a team to see each list in its own units.
       </p>
+      <p className="mt-2 text-sm text-gray-500">
+        Players ruled out for the season — injured reserve, PUP, suspended, or not on an
+        active NFL roster — are left out of these lineups, because a slot they cannot fill
+        is a hole rather than a starter. Their asset value is untouched. A knock that is
+        week to week changes nothing at all: most questionable players play, and the tag
+        moves twice a week.
+      </p>
 
       {snapsMeta && (
         <p className="mt-2 text-sm text-gray-400">
