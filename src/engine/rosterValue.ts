@@ -7,6 +7,7 @@ import {
   type Position,
   type Roster,
 } from '../types';
+import { canStart } from './availability';
 
 /**
  * Pure valuation functions. No fetching, no React — everything here takes plain
@@ -39,6 +40,18 @@ export interface ValuedPlayer {
   winNowValue: number;
   /** False when no source had a value for this player (kickers, defenses, deep bench). */
   valued: boolean;
+  /**
+   * False when a season-ending status keeps him out of every lineup this year.
+   *
+   * Carried on the entry rather than looked up at each use, because it is read
+   * in the innermost loop of `bestLineup` and, more importantly, because the UI
+   * needs the same answer the lineup used. A row that shows an IR badge while
+   * the player sits in the starting eleven is the defect this closes; deriving
+   * the fact twice is how it comes back.
+   *
+   * Says nothing about value. See `engine/availability`.
+   */
+  available: boolean;
 }
 
 /**
@@ -76,6 +89,21 @@ export const byWinNow = (a: ValuedPlayer, b: ValuedPlayer): number =>
 export interface LineupAssignment {
   slot: LineupSlot;
   entry: ValuedPlayer | null;
+}
+
+export interface LineupOptions {
+  /** Order to fill slots in. Defaults to `byWinNow` — who plays on Sunday. */
+  compare?: (a: ValuedPlayer, b: ValuedPlayer) => number;
+  /**
+   * Consider players a season-ending status rules out. Defaults to false.
+   *
+   * The one caller that needs this is the three-year projection, and it needs
+   * it badly: a torn ACL in 2026 says nothing about a lineup in 2029, so
+   * carrying today's injuries into the future score would write a hamstring
+   * into a roster's whole outlook. Every lineup about *this* season leaves it
+   * alone.
+   */
+  includeUnavailable?: boolean;
 }
 
 export interface RosterSummary {
@@ -140,6 +168,7 @@ export function valuePlayers(
       marketValue: value?.marketValue ?? 0,
       winNowValue: value?.winNowValue ?? 0,
       valued: value !== undefined,
+      available: canStart(player),
     });
   }
   return out.sort(byValue);
@@ -163,17 +192,31 @@ export function valuePlayers(
  * thirty-two-year-old receiver who is still the WR20, and before R8 this
  * function claimed he would.
  *
- * `compare` is the escape hatch for the one caller that legitimately wants a
+ * Players ruled out for the season are not in the pool at all (R9). A roster's
+ * `playerIds` includes whoever is parked on IR, and before this they were picked
+ * for starting slots like anyone else — so a lineup could be led by a receiver
+ * who will not take a snap. Note what this does *not* do: nobody's value moves.
+ * He is absent from the eleven, and worth exactly what he was worth as an asset.
+ *
+ * The exclusion cannot destabilise the replacement-level fixed point, which is
+ * the standing hazard in this file. Availability is a fact about a player and
+ * his own status — like an activity factor and unlike a value, it cannot respond
+ * to the lineups it perturbs, so there is no loop for it to run around.
+ *
+ * `LineupOptions` is the escape hatch for callers that legitimately ask a
  * different question — `futureScore` builds the lineup a roster could field in
- * three years, which is an asset projection and belongs on the dynasty scale.
+ * three years, which is an asset projection, so it sorts on the dynasty scale
+ * and ignores this season's injuries.
  */
 export function bestLineup(
   entries: ValuedPlayer[],
   startingSlots: LineupSlot[],
-  compare: (a: ValuedPlayer, b: ValuedPlayer) => number = byWinNow,
+  { compare = byWinNow, includeUnavailable = false }: LineupOptions = {},
 ): LineupAssignment[] {
   const used = new Set<string>();
-  const pool = [...entries].sort(compare);
+  const pool = [...entries]
+    .filter((entry) => includeUnavailable || entry.available)
+    .sort(compare);
 
   const pick = (eligible: Position[]): ValuedPlayer | null => {
     for (const candidate of pool) {

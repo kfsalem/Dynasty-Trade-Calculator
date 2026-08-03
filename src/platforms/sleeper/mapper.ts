@@ -20,19 +20,40 @@ export function avatarUrl(avatar: string | null | undefined): string | null {
   return avatar ? `https://sleepercdn.com/avatars/thumbs/${avatar}` : null;
 }
 
+/**
+ * Sleeper's `injury_status`, canonicalised.
+ *
+ * Two of these are not injuries. `DNR` is the reserve/did-not-report list and
+ * `NA` marks a player who is not on an active NFL roster; Sleeper reports both
+ * in the same field, and both mean the man cannot play. They were missing here
+ * until R9, when the real league turned out to roster a receiver whose only
+ * designation is `DNR` — dropped on the floor by the old map, and therefore
+ * started every week by a model that had just learned to bench injured players.
+ */
+const KNOWN_STATUS: Record<string, InjuryStatus['status']> = {
+  questionable: 'questionable',
+  doubtful: 'doubtful',
+  out: 'out',
+  ir: 'ir',
+  pup: 'pup',
+  sus: 'sus',
+  dnr: 'dnr',
+  na: 'na',
+};
+
+/**
+ * An unrecognised status is kept rather than discarded, carrying its raw text.
+ *
+ * Returning `undefined` for a word we do not know reports the player as
+ * perfectly healthy, which is a claim, and a wrong one — Sleeper adds
+ * designations without asking. `unknown` is treated as week-to-week by
+ * `engine/availability`, so an unfamiliar word shows on the row and changes no
+ * arithmetic, which is the right amount of trust to place in it.
+ */
 function mapInjury(status: string | null): InjuryStatus | undefined {
-  if (!status) return undefined;
-  const normalized = status.toLowerCase();
-  const known: Record<string, InjuryStatus['status']> = {
-    questionable: 'questionable',
-    doubtful: 'doubtful',
-    out: 'out',
-    ir: 'ir',
-    pup: 'pup',
-    sus: 'sus',
-  };
-  const mapped = known[normalized];
-  return mapped ? { status: mapped, description: status } : undefined;
+  if (!status?.trim()) return undefined;
+  const normalized = status.trim().toLowerCase();
+  return { status: KNOWN_STATUS[normalized] ?? 'unknown', description: status };
 }
 
 export function mapPlayer(p: SlimPlayer): Player | null {

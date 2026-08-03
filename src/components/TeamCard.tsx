@@ -4,6 +4,7 @@ import type { SnapShare } from '../engine/snapShare';
 import type { Opportunity } from '../engine/opportunity';
 import type { PlayerRole } from '../engine/role';
 import type { ActivityAdjustment } from '../engine/activityFactor';
+import { injuryNote } from '../engine/availability';
 import type { League, Position } from '../types';
 import { SnapShareCell } from './SnapShareCell';
 import { UsageCell } from './UsageCell';
@@ -83,12 +84,19 @@ function PlayerLine({
         ) : (
           <span className="ml-1.5 text-xs text-gray-400">FA</span>
         )}
+        {/* Season-ending statuses carry the badge in solid red and week-to-week
+            ones in a lighter weight, because after R9 the two mean different
+            things to the numbers on the same row: one player has been left out
+            of the lineup entirely and the other has not been touched. The
+            tooltip says which, in as many words. */}
         {entry.player.injury ? (
           <span
-            className="ml-1.5 text-xs font-semibold text-fantasy-red"
-            title={entry.player.injury.description ?? entry.player.injury.status}
+            className={`ml-1.5 text-xs font-semibold ${
+              entry.available ? 'text-amber-600' : 'text-fantasy-red'
+            }`}
+            title={injuryNote(entry.player.injury)}
           >
-            {formatInjury(entry.player.injury.status)}
+            {formatInjury(entry.player.injury)}
           </span>
         ) : null}
       </span>
@@ -147,6 +155,15 @@ export function TeamCard({
   if (!roster) return null;
 
   const bench = summary.players.filter((p) => !summary.starterIds.has(p.player.id));
+  // Named under the lineup rather than left to be inferred from a badge in the
+  // bench column. A good player missing from a lineup with no explanation is
+  // indistinguishable from a bug, and these are the rosters' best players often
+  // enough that somebody would have reported it as one.
+  const heldOut = summary.players.flatMap((entry) =>
+    !entry.available && entry.player.injury
+      ? [{ player: entry.player, injury: entry.player.injury }]
+      : [],
+  );
   const positionTotal = POSITION_ORDER.reduce(
     (sum, pos) => sum + (summary.byPosition[pos] ?? 0),
     0,
@@ -291,6 +308,21 @@ export function TeamCard({
                   </li>
                 ))}
               </ul>
+              {heldOut.length > 0 && (
+                <p className="mt-3 text-xs text-gray-500">
+                  Held out of this lineup:{' '}
+                  {heldOut.map(({ player, injury }, i) => (
+                    <span key={player.id}>
+                      {i > 0 && ', '}
+                      <span title={injuryNote(injury)}>
+                        {player.name} ({formatInjury(injury)})
+                      </span>
+                    </span>
+                  ))}
+                  . Out for the season, so the best lineup is built without them — nothing
+                  about what they are worth as assets has changed.
+                </p>
+              )}
             </div>
 
             <div>

@@ -1,5 +1,6 @@
 import type {
   DraftPick,
+  InjuryStatus,
   League,
   LeagueSettings,
   LineupSlot,
@@ -15,6 +16,7 @@ export function makePlayer(
   id: string,
   position: Position,
   age: number | null = 25,
+  injury?: InjuryStatus,
 ): Player {
   return {
     id,
@@ -23,6 +25,7 @@ export function makePlayer(
     team: 'FA',
     age,
     yearsExp: 3,
+    injury,
     platformIds: { sleeper: id },
   };
 }

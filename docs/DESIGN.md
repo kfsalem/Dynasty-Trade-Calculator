@@ -1200,6 +1200,99 @@ region it asserts about — the trap `stratified()` was added for.
 David Njoku is defensible on the football merits. That is a question about the
 value source, and it would be answered by blending a second one.
 
+**A lineup is a claim about who plays.** *(2026-08-02, closes #9)*
+
+`Player.injury` has been mapped from Sleeper since Phase 1 and read by nothing
+but a badge. Meanwhile `bestLineup` — which decides every roster ranking, every
+VORS delta and every trade suggestion — started a tight end on the
+physically-unable-to-perform list, because a roster's `playerIds` includes
+whoever is parked on IR and nothing downstream ever asked whether he could play.
+
+Two statuses, two different mistakes, and only the first is the obvious one:
+
+- **Out for the season.** A man on IR is not a worse starter, he is not a
+  starter. Leaving him in overstates the roster.
+- **Week to week.** Questionable and doubtful are surfaced and nothing else.
+  They are noise on a season-length question — most questionable players play,
+  the tag flips twice a week, and a model that repriced on it would rewrite
+  every roster in the league each Friday. Sleeper's `Out` sits here too: it
+  means out for the *next game*, not the year.
+
+**Nothing is repriced, on either scale.** An injured player is worth what the
+market says he is worth; dynasty value already prices the risk that a
+24-year-old misses a season, and marking him down again here would charge him
+twice. He is absent from the eleven and unchanged in the trade. Saying that
+cleanly is only possible because R8 separated the two scales — before it, "out
+of the lineup" and "worth less" were the same number.
+
+**The NFL designation, not the manager's IR slot.** `Roster.reserveIds` was the
+tempting alternative and is the wrong input. On the real league one manager
+parks three players in IR slots, of whom two are merely questionable: reserve
+slots are spare bench space in the offseason, so trusting them would bench a
+healthy WR1 on a roster-management choice.
+
+**Two of the five statuses that matter are not injuries.** Sleeper reports `DNR`
+(reserve/did-not-report) and `NA` (not on an active NFL roster) in the same
+field, and `mapInjury` dropped every word it did not recognise — reporting those
+players as perfectly healthy, which is a claim, and a wrong one. The real league
+rosters a receiver whose only designation is `DNR`. An unrecognised status is now
+kept with its raw text and classified week-to-week, so it shows on the row and
+changes no arithmetic, which is the right amount of trust to place in a word
+nobody has read.
+
+**Measured on the real 10-team league.** Five of 176 rostered players are ruled
+out — Kittle (PUP), Alec Pierce (PUP), Zach Charbonnet (PUP), Ricky Pearsall
+(IR), Brandon Aiyuk (DNR) — against nine merely questionable, who are untouched.
+
+One lineup changes: Slim Pickens starts Juwan Johnson (36 win-now) in place of
+Kittle (1,233), losing **1,197** and dropping from 5th to 6th. That flips two
+quadrants past each other — Slim Pickens from *window closing* to *danger zone*,
+Heist SZN the other way — which is the whole point restated: a team whose best
+tight end will not play is not a team whose window is open.
+
+Starter counts and both replacement levels come out **byte-identical** at every
+position (QB 10, RB 28, WR 31, TE 11). That is the safety result, and it is
+structural rather than lucky. Availability is a fact about a player and his own
+status, so like an activity factor and unlike a value it cannot respond to the
+lineups it perturbs — there is no loop for it to run around, which is the
+standing hazard in this file since *The clamp was destroying the model*.
+
+**The larger half was never the lineup — it was the need.** Surplus asks whether
+a benched player would start elsewhere, and it was answering for men who could
+not start anywhere. The model listed **Alec Pierce, on PUP, as a chip four other
+teams would start**, with Pearsall and Charbonnet claiming one apiece. All three
+are gone from the list; their dynasty value is untouched.
+
+The reciprocal is better still. A tight-end hole at Slim Pickens is a tight-end
+market for everyone else, so four other teams' benched tight ends gained a
+would-start-on: Jake Ferguson 2→3, Harold Fannin 2→3, Dalton Kincaid 1→2, T.J.
+Hockenson 1→2. Slim Pickens' own TE line reads 1,233 (neutral) → **36
+(weakness)**, and Fannin — worth exactly nothing to them while Kittle blocked the
+slot — is now worth **+510** to their lineup. That number is what the trade
+engine is for, and before this it was zero.
+
+**Cost: league-wide suggestions fall from 27 to 24**, all three on teams that
+lost an injured player from their chip list. That is honest as far as it goes,
+but it exposes a real gap: `movableAssets` has no category for an injured asset
+at all. An injured star is one of the most-traded things in dynasty — his owner
+has a reason to move him and the buyer is paid in future value — and he now
+reaches the suggestion engine only if the role-trend lists happen to catch him.
+Not fixed here, because inventing a movable category is a suggestion-engine
+change wearing an injury change's clothes.
+
+**Also still open:** duration. IR, PUP and a suspension are all "out" and all
+different lengths, and the feed carries no return date for any of them, so they
+are treated alike. A four-game PUP stint and a torn achilles are not the same
+fact about a season, and pretending otherwise is the largest simplification here.
+
+**The tests could not see it, and that pattern is now three for three.** Every
+existing fixture leaves `injury` undefined, so the entire suite passed against
+this change once three mechanical signature updates were made — not one existing
+assertion touched a line of it, exactly as in R8. Twenty-one were added that can,
+including the two halves that must not move together: an injured player is out of
+this season's lineup and still in the three-year projection, because a torn ACL
+this August is not a fact about 2029.
+
 ### Phase 5 — Scale out
 - MFL + Fleaflicker providers
 - Real accounts (Supabase) *if and only if* cross-device sync is actually wanted

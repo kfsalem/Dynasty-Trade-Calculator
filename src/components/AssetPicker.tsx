@@ -1,6 +1,7 @@
 import type { DraftPick, League, Player, PlayerValue, Position } from '../types';
 import { POSITION_STYLES, formatInjury, formatValue } from '../lib/format';
 import { valuePlayers } from '../engine/rosterValue';
+import { injuryNote } from '../engine/availability';
 import type { SnapShare } from '../engine/snapShare';
 import type { Opportunity } from '../engine/opportunity';
 import type { PlayerRole } from '../engine/role';
@@ -181,8 +182,13 @@ export function AssetPicker({
               <span className="min-w-0 flex-1 truncate" title={entry.player.name}>
                 {entry.player.name}
                 {entry.player.injury && (
-                  <span className="ml-1.5 text-xs font-semibold text-fantasy-red">
-                    {formatInjury(entry.player.injury.status)}
+                  <span
+                    className={`ml-1.5 text-xs font-semibold ${
+                      entry.available ? 'text-amber-600' : 'text-fantasy-red'
+                    }`}
+                    title={injuryNote(entry.player.injury)}
+                  >
+                    {formatInjury(entry.player.injury)}
                   </span>
                 )}
               </span>

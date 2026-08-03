@@ -8,6 +8,7 @@ import type {
   TradeSideResult,
 } from '../types';
 import { AGE_CLIFF } from './analysis';
+import { availability, INJURY_LABEL } from './availability';
 import { bestLineup, valuePlayers } from './rosterValue';
 
 export interface TradeSideInput {
@@ -103,6 +104,31 @@ function buildSide(
     const added = afterLineup.emptySlots - before.emptySlots;
     warnings.push(
       `Leaves ${added} starting ${added === 1 ? 'slot' : 'slots'} unfilled.`,
+    );
+  }
+
+  // Injuries are stated on the incoming side and nowhere else, deliberately.
+  // The lineup maths above has already priced them — an injured man arrives
+  // contributing nothing, so `vorsDelta` shows the shortfall — but it shows it
+  // as a number that could equally mean the player is bad. The reason matters,
+  // because these are the two facts a manager most wants before accepting: what
+  // he is getting is hurt, and how badly.
+  const describe = (p: Player) =>
+    `${p.name} (${p.position}, ${INJURY_LABEL[p.injury?.status ?? 'healthy'].toLowerCase()})`;
+
+  const sidelined = incomingPlayers.filter((p) => availability(p) === 'out_for_season');
+  if (sidelined.length > 0) {
+    warnings.push(
+      `${sidelined.length === 1 ? 'Taking on a player who' : `Taking on ${sidelined.length} players who`} cannot fill a starting slot this season: ${sidelined
+        .map(describe)
+        .join(', ')}. Counted at full value as an asset, and at nothing in the lineup.`,
+    );
+  }
+
+  const dayToDay = incomingPlayers.filter((p) => availability(p) === 'week_to_week');
+  if (dayToDay.length > 0) {
+    warnings.push(
+      `Week to week: ${dayToDay.map(describe).join(', ')}. Nothing here is discounted for it.`,
     );
   }
 
