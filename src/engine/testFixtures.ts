@@ -116,6 +116,10 @@ export function makeSettings(
     taxiSlots: 0,
     reserveSlots: 0,
     draftRounds: 2,
+    // Sleeper's defaults. A test about anything else should not have to care
+    // when the playoffs start.
+    playoffWeekStart: 15,
+    playoffTeams: 6,
     ...overrides,
   };
 }

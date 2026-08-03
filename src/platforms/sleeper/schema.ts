@@ -27,10 +27,31 @@ export const sleeperLeagueSchema = z.object({
       taxi_slots: z.number().nullish(),
       reserve_slots: z.number().nullish(),
       draft_rounds: z.number().nullish(),
+      /** First playoff week — the regular season is everything before it. */
+      playoff_week_start: z.number().nullish(),
+      playoff_teams: z.number().nullish(),
     })
     .nullish(),
   scoring_settings: z.record(z.string(), z.number()).nullish(),
 });
+
+/**
+ * One roster's entry in a week's matchups.
+ *
+ * Sleeper does not publish a schedule as such. It publishes, per week, a row
+ * per roster carrying a `matchup_id`, and two rows sharing one is what a
+ * fixture *is* — so the schedule has to be reassembled by grouping.
+ *
+ * `matchup_id` is null for a roster with no fixture that week, which happens in
+ * leagues with an odd number of teams and in weeks Sleeper has not scheduled.
+ */
+export const sleeperMatchupSchema = z.object({
+  roster_id: z.number(),
+  matchup_id: z.number().nullish(),
+  points: z.number().nullish(),
+});
+
+export const sleeperMatchupsSchema = z.array(sleeperMatchupSchema);
 
 export const sleeperRosterSchema = z.object({
   roster_id: z.number(),
@@ -143,5 +164,6 @@ export type SleeperUser = z.infer<typeof sleeperUserSchema>;
 export type SleeperPlayer = z.infer<typeof sleeperPlayerSchema>;
 export type SleeperTradedPick = z.infer<typeof sleeperTradedPickSchema>;
 export type SleeperState = z.infer<typeof sleeperStateSchema>;
+export type SleeperMatchup = z.infer<typeof sleeperMatchupSchema>;
 export type SleeperDraft = z.infer<typeof sleeperDraftSchema>;
 export type SleeperAccount = NonNullable<z.infer<typeof sleeperAccountSchema>>;

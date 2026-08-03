@@ -182,6 +182,26 @@ export interface LeagueSettings {
   reserveSlots: number;
   /** Rookie draft rounds — how many picks per team per year exist to trade. */
   draftRounds: number;
+  /**
+   * First week of the playoffs. The regular season is every week before it.
+   *
+   * The number that decides how much season is left to simulate, and therefore
+   * how much a trade can still change. Sleeper's default is 15.
+   */
+  playoffWeekStart: number;
+  /** How many teams make the playoffs. Sleeper's default is 6. */
+  playoffTeams: number;
+}
+
+/**
+ * One head-to-head fixture.
+ *
+ * `rosterIds` carries no home/away meaning — fantasy has no home field, and
+ * inventing one would imply an advantage the scoring does not give.
+ */
+export interface Matchup {
+  week: number;
+  rosterIds: [number, number];
 }
 
 export interface Roster {

@@ -1,4 +1,4 @@
-import type { League, Player } from '../types';
+import type { League, Matchup, Player } from '../types';
 import type { KnownDraftOrder, TradedPickRef } from '../engine/picks';
 
 /**
@@ -15,6 +15,14 @@ export interface LeagueBundle {
   tradedPicks: TradedPickRef[];
   /** Current real-world season, for deciding which draft classes are tradeable. */
   currentSeason: string;
+  /**
+   * Current NFL week, or null if the platform does not say.
+   *
+   * Decides how much of the schedule is still to play. Null is not zero — a
+   * consumer that cannot tell which week it is should decline to answer rather
+   * than simulate a season that has already happened.
+   */
+  currentWeek: number | null;
   /**
    * Draft orders the platform publishes, which beat any projection. Empty when
    * no draft has been set up yet, which is the normal state for seasons past
@@ -36,4 +44,17 @@ export interface LeagueProvider {
   /** Accept a raw id or a pasted league URL. Returns null if unrecognizable. */
   parseLeagueId(input: string): string | null;
   loadLeague(leagueId: string): Promise<LeagueBundle>;
+  /**
+   * The regular season's fixtures, weeks 1 through `throughWeek`.
+   *
+   * Separate from `loadLeague` because only one feature needs it and it costs a
+   * request per week — nothing else in the app should wait on a schedule to
+   * render a roster.
+   *
+   * Optional on purpose. A platform that does not publish a schedule, or
+   * publishes one this app cannot read, costs the playoff-odds feature and
+   * nothing else; the alternative is a required method that some provider has
+   * to satisfy by lying.
+   */
+  loadSchedule?(leagueId: string, throughWeek: number): Promise<Matchup[]>;
 }

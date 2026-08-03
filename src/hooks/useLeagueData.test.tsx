@@ -49,6 +49,7 @@ const bundle: LeagueBundle = {
   players,
   tradedPicks: [],
   currentSeason: '2026',
+  currentWeek: null,
   draftOrders: [],
 };
 

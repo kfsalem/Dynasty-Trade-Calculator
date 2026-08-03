@@ -1,10 +1,11 @@
-import type { Player } from '../../types';
+import type { Matchup, Player } from '../../types';
 import type { LeagueBundle, LeagueProvider } from '../types';
 import type { KnownDraftOrder, TradedPickRef } from '../../engine/picks';
 import {
   getDraft,
   getDrafts,
   getLeague,
+  getMatchups,
   getPlayers,
   getRosters,
   getState,
@@ -12,7 +13,7 @@ import {
   getUsers,
   parseLeagueId,
 } from './client';
-import { mapLeague, mapPlayer } from './mapper';
+import { mapLeague, mapMatchups, mapPlayer } from './mapper';
 
 export const sleeperProvider: LeagueProvider = {
   id: 'sleeper',
@@ -64,8 +65,35 @@ export const sleeperProvider: LeagueProvider = {
       tradedPicks,
       // Fall back to the league's own season if /state is unavailable.
       currentSeason: state?.season ?? league.season,
+      currentWeek: state?.week ?? null,
       draftOrders,
     };
+  },
+
+  /**
+   * The regular-season schedule, one request per week.
+   *
+   * Sleeper has no schedule endpoint — it answers per week, so a 14-week season
+   * is 14 calls. They are independent and each is a few hundred bytes, so they
+   * go out together; the whole thing is one round trip's latency rather than
+   * fourteen.
+   *
+   * A week that fails is skipped rather than failing the set. A missing week
+   * costs the simulation the games in it, which shows up as slightly less
+   * certainty; a rejected promise would cost the feature entirely.
+   */
+  async loadSchedule(leagueId: string, throughWeek: number): Promise<Matchup[]> {
+    const weeks = Array.from({ length: Math.max(0, throughWeek) }, (_, i) => i + 1);
+
+    const perWeek = await Promise.all(
+      weeks.map((week) =>
+        getMatchups(leagueId, week)
+          .then((rows) => mapMatchups(week, rows))
+          .catch(() => [] as Matchup[]),
+      ),
+    );
+
+    return perWeek.flat();
   },
 };
 

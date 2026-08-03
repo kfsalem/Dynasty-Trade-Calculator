@@ -11,6 +11,11 @@ import { opportunities } from '../engine/opportunity';
 import { playerRoles } from '../engine/role';
 import { roleTrends } from '../engine/roleTrend';
 import { fetchDepthCharts, fetchOpportunity, fetchSnapCounts } from '../data/activity';
+import {
+  remainingFixtures,
+  teamStates,
+  type OddsContext,
+} from '../engine/playoffOdds';
 import type { DraftPick, LeagueSettings } from '../types';
 
 export function useLeague(leagueId: string | null) {
@@ -47,6 +52,26 @@ export function usePickValues(settings: LeagueSettings | undefined) {
     staleTime: 60 * 60 * 1000,
     // Picks are a real part of dynasty value but not worth blocking the whole
     // app over — the UI degrades to players-only if this fails.
+    retry: 1,
+  });
+}
+
+/**
+ * The regular-season schedule, for the playoff simulation and nothing else.
+ *
+ * Its own query rather than part of the league load: it costs a request per
+ * week, and no roster, value or trade calculation waits on it. A league whose
+ * provider cannot supply one — or whose schedule fails to load — renders
+ * exactly as it did before, minus the odds.
+ */
+export function useSchedule(leagueId: string | null, playoffWeekStart: number | undefined) {
+  return useQuery({
+    queryKey: ['schedule', leagueId, playoffWeekStart],
+    queryFn: () =>
+      sleeperProvider.loadSchedule!(leagueId as string, (playoffWeekStart as number) - 1),
+    enabled: Boolean(leagueId && playoffWeekStart && sleeperProvider.loadSchedule),
+    // A schedule is fixed when the league is created and does not move.
+    staleTime: 24 * 60 * 60 * 1000,
     retry: 1,
   });
 }
@@ -93,6 +118,7 @@ export function useLeagueSummaries(leagueId: string | null) {
   const settings = leagueQuery.data?.league.settings;
   const valuesQuery = useValues(settings);
   const pickValuesQuery = usePickValues(settings);
+  const scheduleQuery = useSchedule(leagueId, settings?.playoffWeekStart);
   const snapsQuery = useSnapShares();
   const opportunityQuery = useOpportunity();
   const depthQuery = useDepthCharts();
@@ -189,6 +215,31 @@ export function useLeagueSummaries(leagueId: string | null) {
     );
   }, [leagueQuery.data, pickValuesQuery.data, adjusted, summaries]);
 
+  /**
+   * Everything the playoff simulation needs, or undefined if it cannot run.
+   *
+   * Undefined rather than an empty context, because "no games left" and "no
+   * schedule" produce the same empty fixture list and mean opposite things —
+   * one is a season that is over, the other is a question this app cannot
+   * answer. The UI has to be able to tell them apart to know whether to say
+   * nothing or to say the season is done.
+   */
+  const oddsContext = useMemo<OddsContext | undefined>(() => {
+    const bundle = leagueQuery.data;
+    const schedule = scheduleQuery.data;
+    if (!bundle || !schedule || !adjusted || summaries.length === 0) return undefined;
+
+    return {
+      teams: teamStates(bundle.league, summaries),
+      remaining: remainingFixtures(
+        schedule,
+        bundle.currentWeek,
+        bundle.league.settings.playoffWeekStart,
+      ),
+      playoffTeams: bundle.league.settings.playoffTeams,
+    };
+  }, [leagueQuery.data, scheduleQuery.data, adjusted, summaries]);
+
   const roles = useMemo(() => {
     const snapFile = snapsQuery.data;
     const depthFile = depthQuery.data;
@@ -265,6 +316,8 @@ export function useLeagueSummaries(leagueId: string | null) {
      * exists to keep callers out of. Both halves, or the error.
      */
     picksSettled: (pickValuesQuery.isSuccess && adjusted !== undefined) || pickValuesQuery.isError,
+    /** Standings, remaining fixtures and the playoff cut. Undefined = cannot simulate. */
+    oddsContext,
     snaps,
     usage,
     roles,

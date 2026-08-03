@@ -30,6 +30,8 @@ const settings = (overrides: Partial<LeagueSettings> = {}): LeagueSettings => ({
   taxiSlots: 0,
   reserveSlots: 0,
   draftRounds: 4,
+  playoffWeekStart: 15,
+  playoffTeams: 6,
   ...overrides,
 });
 

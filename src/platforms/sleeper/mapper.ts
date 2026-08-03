@@ -2,13 +2,19 @@ import type {
   League,
   LeagueSettings,
   LineupSlot,
+  Matchup,
   Player,
   Position,
   Roster,
   InjuryStatus,
 } from '../../types';
 import type { SlimPlayer } from './client';
-import type { SleeperLeague, SleeperRoster, SleeperUser } from './schema';
+import type {
+  SleeperLeague,
+  SleeperMatchup,
+  SleeperRoster,
+  SleeperUser,
+} from './schema';
 
 const POSITIONS = new Set<Position>(['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
 const BENCH = new Set(['BN', 'IR', 'TAXI']);
@@ -87,7 +93,44 @@ export function mapSettings(league: SleeperLeague): LeagueSettings {
     taxiSlots: league.settings?.taxi_slots ?? 0,
     reserveSlots: league.settings?.reserve_slots ?? 0,
     draftRounds: league.settings?.draft_rounds ?? 4,
+    // Sleeper's own defaults when a league has not overridden them. Both are
+    // read rather than assumed because they decide how much season is left to
+    // play and how many teams that season has to sort out.
+    playoffWeekStart: league.settings?.playoff_week_start ?? 15,
+    playoffTeams: league.settings?.playoff_teams ?? 6,
   };
+}
+
+/**
+ * A week of Sleeper matchup rows, reassembled into fixtures.
+ *
+ * Sleeper publishes a row per roster carrying a `matchup_id`; two rows sharing
+ * one is what a fixture is. Anything that does not come out as a clean pair is
+ * dropped rather than guessed at — a null `matchup_id` is a roster with no game
+ * that week, and a group of one is the bye that falls out of an odd number of
+ * teams. Either way there is no fixture to report, and inventing an opponent
+ * would put a game in the simulation that nobody plays.
+ */
+export function mapMatchups(week: number, rows: SleeperMatchup[]): Matchup[] {
+  const groups = new Map<number, number[]>();
+  for (const row of rows) {
+    if (row.matchup_id == null) continue;
+    const group = groups.get(row.matchup_id) ?? [];
+    group.push(row.roster_id);
+    groups.set(row.matchup_id, group);
+  }
+
+  const fixtures: Matchup[] = [];
+  for (const rosterIds of groups.values()) {
+    if (rosterIds.length !== 2) continue;
+    // Lower roster id first, then fixtures in that order. Sleeper lists rows in
+    // no particular order, and a fixture that reads [4, 3] one week and [3, 4]
+    // the next is the same game wearing two faces — which matters because the
+    // simulation is seeded, and a stable input is half of reproducible.
+    const [a, b] = rosterIds.sort((x, y) => x - y);
+    fixtures.push({ week, rosterIds: [a, b] });
+  }
+  return fixtures.sort((x, y) => x.rosterIds[0] - y.rosterIds[0]);
 }
 
 export function mapLeague(

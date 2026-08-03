@@ -10,6 +10,8 @@ import {
   sleeperDraftsSchema,
   sleeperStateSchema,
   sleeperAccountSchema,
+  sleeperMatchupsSchema,
+  type SleeperMatchup,
   type SleeperLeague,
   type SleeperRoster,
   type SleeperUser,
@@ -79,6 +81,17 @@ export function getDrafts(leagueId: string): Promise<SleeperDraft[]> {
 /** One draft in full. The list endpoint leaves out `slot_to_roster_id`. */
 export function getDraft(draftId: string): Promise<SleeperDraft> {
   return fetchJson(`${BASE}/draft/${draftId}`, sleeperDraftSchema);
+}
+
+/**
+ * One week's fixtures.
+ *
+ * Sleeper publishes this per week and only per week, so a season's schedule is
+ * this call once per regular-season week. They are independent and small, so
+ * the provider fans them out in parallel rather than walking them.
+ */
+export function getMatchups(leagueId: string, week: number): Promise<SleeperMatchup[]> {
+  return fetchJson(`${BASE}/league/${leagueId}/matchups/${week}`, sleeperMatchupsSchema);
 }
 
 /** Current NFL season and phase — decides which draft years are still tradeable. */
