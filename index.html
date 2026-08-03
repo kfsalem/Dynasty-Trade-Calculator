@@ -2,10 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- Relative on purpose. The site is served from a project subpath, so a
-         root-absolute "/vite.svg" resolves off the app entirely and 404s in
-         production — including in the link previews below. -->
-    <link rel="icon" type="image/svg+xml" href="./vite.svg" />
+    <!-- Root-absolute on purpose, and correct despite appearances: Vite
+         rewrites this against `base` at build time, so it ships as
+         /Dynasty-Trade-Calculator/vite.svg. A relative "./vite.svg" resolves
+         today too, but against the document URL rather than `base`, which is
+         the weaker guarantee. Read dist/index.html before "fixing" it. -->
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
