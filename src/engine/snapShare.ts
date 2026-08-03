@@ -1,8 +1,6 @@
 import { SNAP_COLUMNS, type SnapCountsFile, type SnapPlayer } from '../data/types';
 import { summarize, type Sample } from './activity';
 
-export { MATERIAL_DELTA, RECENT_WEEKS } from './activity';
-
 /**
  * Season-to-date and last-four-week snap share, per player.
  *

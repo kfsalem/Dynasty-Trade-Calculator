@@ -339,9 +339,20 @@ Guard against the obvious failure mode: suggestions that are lopsided in your fa
 
 ---
 
-## 5. Roadmap
+## 5. Build log
 
-Sized deliberately small. This project was abandoned once; **momentum is the real risk**, so every phase ends in something visible and shippable.
+Sized deliberately small. This project was abandoned once; **momentum is the real risk**, so every phase ended in something visible and shippable.
+
+**This section is a record, not a plan.** It says what shipped and why, in the
+order it happened, and it is where a decision gets written down so nobody has to
+relitigate it from the diff. The forward-looking backlog lives in
+[`ROADMAP.md`](ROADMAP.md), ordered by dependency and wired to issues — that is
+the file to read to find out what happens next.
+
+The two drifted apart for a while, "Phase" here and "Milestone" there, numbering
+overlapping work in two schemes and leaving the README pointing at this one for
+a roadmap it had stopped keeping. They no longer compete: this file looks
+backwards, that one forwards.
 
 ### Phase 0 — Rescue the repo ✅ *(done 2026-07-25)*
 - Initial commit of the scaffold — the repo had **zero commits**, all work untracked
@@ -608,6 +619,20 @@ pre-draft league with empty rosters); an unclassifiable position failed open,
 keeping full market value while every classified player was docked; and the
 suggestion cards showed league-adjusted figures beneath a market-derived
 fairness verdict, so an even trade could read as wildly lopsided.
+
+### The running record *(2026-07-29 onwards)*
+
+Everything below postdates Phase 4.5 and belongs to no numbered phase. It used
+to sit *inside* Phase 4.5, under a heading marked done on 2026-07-28 — which
+meant a section declared finished quietly absorbed a week of later work and grew
+to three quarters of this document. The phases were the wrong container for it:
+they described a product being built out, and this is a model being corrected in
+use.
+
+That is the pattern here. Something ships, it gets run against a real league,
+and it turns out to be saying something untrue. The fix goes in next to the
+reasoning that produced the error, because the reasoning is usually the thing
+that needs correcting. Entries are dated and name the issue they close.
 
 **The clamp was destroying the model.** *(2026-07-29)*
 
@@ -1320,10 +1345,12 @@ send someone the wrong offer.
 Making the URL authoritative collapsed the seeding machinery rather than adding
 to it. `pending: {trade, seq}` is gone; there is one `shared` trade that the
 address bar, the builder's seed and the suggestion hand-off all read, plus a
-`seedSeq` that exists only to force a remount when a trade arrives from outside.
-A fix fell straight out: switching to the Rosters tab and back **used to discard
-whatever you were building**, because the builder unmounts and re-read a seed
-that was only ever the last suggestion. It now re-reads the live trade.
+`seed: {seq, dropped}` that describes whatever last arrived from outside the
+builder — `seq` forces a remount, `dropped` is how much of that arrival went
+missing on the way in. A fix fell straight out: switching to the Rosters tab and
+back **used to discard whatever you were building**, because the builder unmounts
+and re-read a seed that was only ever the last suggestion. It now re-reads the
+live trade.
 
 **Three ways a link can be wrong, and only one of them could crash.**
 
@@ -1354,6 +1381,11 @@ consumers to guess which empty array they are looking at. Fifteen tests cover th
 encoder, the decoder and the resolver, and not one of them could see this: the
 race is in the wiring rather than in the logic.
 
+*The `picksSettled` described above was the wrong fix, and shipped that way. It
+watched one of the two queries the pick list is built from, so it closed the
+window it was written for and left an identical one open. See the correction
+below.*
+
 **Link previews are static, and necessarily so.** The issue pairs permalinks with
 an OG image, and a card describing the *specific* trade cannot be built here — a
 scraper reads the HTML exactly as served, without running JavaScript, so every
@@ -1379,12 +1411,131 @@ this document as established fact next to claims that had actually been tested.
 A wrong entry here is worse than a wrong line of code, because the code gets
 re-read and this gets cited.
 
-### Phase 5 — Scale out
-- MFL + Fleaflicker providers
-- Real accounts (Supabase) *if and only if* cross-device sync is actually wanted
-- Saved trades, alerts
+**Four bugs in the wiring, and the harness that would have caught them.**
+*(2026-08-03, #38 and #41)*
 
-**Phases 0–2 deliver the original project goal.** Everything past that is upside.
+The permalink work above shipped with four defects, none of them in `lib/share`
+and none of them visible to a suite of 375 passing tests. That is the finding
+worth recording; the individual bugs are almost incidental to it.
+
+**The address bar was cleared on mount.** `shared` is null on the first commit
+and the league id is already set from the link, so the effect that keeps the URL
+current wrote the bare path immediately — deleting the trade a second or more
+before the league arrived to put it back. A refresh on a slow connection, or a
+league that failed to load, left the recipient holding a link to nothing. The
+entry above argues at some length that a URL which *lagged* the page would send
+someone the wrong offer; the first implementation did worse than lag.
+
+Fixing it needed a distinction the code did not have. `fromLink` is null both
+before the league arrives and after a link is judged unusable, and only the first
+deserves protection — `linkDecided` now says which, and an unhandled link is left
+strictly alone.
+
+**`picksSettled` watched the wrong thing.** The pick list is derived from the
+DynastyProcess pick table *and* `adjusted` from FantasyCalc: two hosts, two
+caches, racing from one trigger. Watching only the pick query meant the flag went
+true while `picks` was still empty, which is the same bug the flag was invented to
+prevent. A returning user with a warm pick cache and an expired value cache hits
+it on the common path, not a rare one — and the failure was worse than the
+original, because the false "no longer on the roster" warning then erased itself
+when the values landed, leaving a silently pick-less trade with nothing on screen
+to say so.
+
+The verification that missed it is instructive: *"against the real league with
+`localStorage` cleared"*. Clearing storage forces both caches cold, which is the
+one starting state that hides a race between two independently cached sources.
+The flag now tracks the derived list rather than one of its inputs.
+
+**The dropped-asset notice outlived its trade**, because it was read from a link
+parsed once at module scope and so was fixed for the session — still on screen
+after a Clear, still accusing a trade opened from a suggestion. It now travels
+with the arrival that caused it and retires at the first edit.
+
+**A trade survived a league switch**, seeding the builder with roster ids from
+the previous league. `buildSide` throws on one of those, so the render went down
+— the crash `resolveShare` guards the front door against, reached through the
+back. Notably `useMyRoster` had this right from the start: it re-reads on a
+league change rather than carrying the old value across. The correct pattern was
+one file away.
+
+**What the tests could not see, and now can.** Three of the four were ordering
+bugs, and the end state was correct in every one of them — which is exactly why
+unit tests could not catch them and why a test that waits for everything to
+settle before asserting cannot either. There are now two vitest projects:
+`.test.ts` runs in node, `.test.tsx` gets jsdom. The DOM tests *drive* resolution
+order rather than waiting on it, and the pick-race test asserts an invariant
+across every render rather than the final state — `picksSettled` must never be
+true while `picks` is empty.
+
+Every regression test was checked against the commit before the fix, and fails
+there. That bar is not ceremony: a test written only against fixed code proves
+that it runs, not that it works, and an ordering bug is precisely the kind that
+passes by getting lucky with timing.
+
+**A full read of the repo, with nothing shipping.** *(2026-08-03)*
+
+Not a feature. A deliberate stop to read everything at once — config, CI, engine,
+components, the data pipeline, this document — looking for the things that only
+show up when you stop working on what you were working on.
+
+Most of what it found was drift rather than defect, and the pattern was
+consistent: **the code was in better shape than the writing about the code.**
+Every substantive commit for a month updated this file, and the two immediately
+prior had not, so it described a permalink architecture that no longer existed
+and a `picksSettled` that had already been proven wrong. §9 still nominated a
+next step three milestones stale, and still listed a kicker-pricing problem
+closed a week earlier. §8 credited a `ValueSource` interface and a DynastyProcess
+fallback, neither of which was ever built.
+
+The two findings worth remembering:
+
+**The favicon was the Vite logo.** Two pull requests argued about the *path* to
+`vite.svg` — one asserting it 404'd, one proving it never had, each writing a
+paragraph into this document about the importance of checking claims — and
+neither opened the file. It had been the stock purple triangle since the
+scaffold. The product now has its own mark: two arrows passing, which is the
+whole thesis in a glyph legible at 16px. It is **interim** and labelled as such
+in the file — it exists because shipping someone else's logo is worse than
+shipping a plain one, not because the brand question has been answered. That
+belongs to the design system work (#15). `og:image` was missing entirely for the
+same reason nobody noticed the icon; the link previews that permalinks exist to
+produce were shipping as text in a box. `public/og.png` is generated by
+`npm run og`, which rasterises the same glyph without a dependency, a font, or a
+headless browser — the composition is two polygons on a gradient, so a PNG
+encoder over `zlib` is the entire cost.
+
+**An outage of FantasyCalc took the whole app down while the values sat in
+IndexedDB.** `cached()` discarded an expired entry the moment a refresh failed,
+so a source being briefly unreachable cost the user the league render rather than
+a few hours of freshness. Player values gate everything, so this was the one true
+single point of failure in a design that otherwise degrades well — pick values
+already fell back to a warning and kept going. A failed refresh now serves the
+last good copy. That is not a substitute for a second value source, which is
+still the real answer and still absent.
+
+The rest: three exported symbols nobody imported, a `res.json()` that could throw
+past the error type built to make failures legible, a `typeof null === 'object'`
+guard, a tablist that announced arrow-key navigation it did not implement, and
+one constant reachable by two import paths. Tests went to the four modules that
+had none and deserved them most — `summarize`, which carries two historical bugs
+in its docstring and had never been tested directly; the FantasyCalc mapping and
+its shared-divisor invariant; `parseLeagueId`, the only thing standing between a
+stranger's paste and a fetch; and `cached` itself.
+
+---
+
+### What comes next
+
+Not here. The ordered backlog is [`ROADMAP.md`](ROADMAP.md), tracked as issues
+under [#19](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/19) —
+multi-platform providers, playoff odds for a proposed trade, the start/sit
+optimizer, and the design-system work, in dependency order rather than
+preference order.
+
+Keeping a second list here is what produced the drift described at the top of
+this section, so this heading deliberately holds no items.
+
+**Phases 0–2 delivered the original project goal.** Everything past that is upside.
 
 ---
 
@@ -1425,10 +1576,13 @@ The existing `types/index.ts` is genuinely good and survives largely intact. Nee
 1. **Audience — public.** Anyone with a league ID, no login. Onboarding must therefore assume a stranger who has never seen the app: the league-ID entry path needs to be obvious and forgiving (accept a raw ID, a Sleeper URL, or a username → league picker).
 2. **No accounts, no backend.** localStorage holds league ID, "my team," and saved scenarios. This is reassessed only if cross-device sync is genuinely wanted.
 
+**Decided since:**
+
+3. **Superflex — handled, and it falls out of the model rather than being special-cased.** `numQbs` is read from Sleeper's `roster_positions` at import, and `SUPER_FLEX` is a first-class lineup slot in `FLEX_ELIGIBILITY`. Nothing downstream tests for superflex: twenty quarterbacks having to start raises the replacement level on its own, which is the whole argument for deriving starter counts from real lineups. This was carried as an open question long after it stopped being one.
+
 **Still open:**
 
-3. **Superflex?** Your league's format sets the default `numQbs`, and superflex radically changes QB values (compare Josh Allen at `numQbs=2` vs `numQbs=1`). Read from Sleeper's `roster_positions` at import — but worth confirming the app handles a `SUPER_FLEX` slot correctly in Phase 1.
-4. **How much history?** Sleeper exposes full transaction history. Worth mining for "who trades with whom / who overpays," but it's a Phase 5 nicety.
+4. **How much history?** Sleeper exposes full transaction history. Worth mining for "who trades with whom / who overpays," but it is a scale-out nicety rather than anything the thesis needs.
 
 ---
 
@@ -1436,26 +1590,54 @@ The existing `types/index.ts` is genuinely good and survives largely intact. Nee
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| **Abandoned again** | **Highest** | Tiny phases, each ending in something shippable. Phase 0 today. |
-| FantasyCalc is unofficial and could change or close | Medium | `ValueSource` interface; DynastyProcess as a live fallback; Zod fails loudly at the boundary |
+| **Abandoned again** | **Highest** | Tiny phases, each ending in something shippable. |
+| FantasyCalc is unofficial and could change or close | Medium | Zod fails loudly at the boundary; `cached()` serves the last good copy when a refresh fails, so an outage costs freshness rather than the app. **No second source for player values** — see below |
 | Sleeper rate limits / 5 MB blob | Low | 24h IndexedDB cache, well under 1000/min |
 | Value-scale mismatch between sources | Medium | Normalize to a common basis before any comparison — never mix raw numbers |
 | Trade suggestions nobody accepts | Medium | Require *both* sides to gain; always show "why they say yes" |
 | Scope creep | Medium | Phases 0–2 are the original goal. Ship those before touching anything else. |
 
----
+**On that FantasyCalc row.** It read, until 2026-08-03, "`ValueSource` interface;
+DynastyProcess as a live fallback; Zod fails loudly at the boundary." Two of those
+three were fiction. There is no `ValueSource` interface anywhere in the repo, and
+DynastyProcess supplies pick values and an id crosswalk — never player values, so
+it could not stand in for FantasyCalc if it wanted to.
 
-## 9. Immediate Next Step
+A risk register describing a safety net nobody built is worse than one that
+leaves the box empty, because the empty box gets filled. What exists now is the
+cache fallback: a failed refresh serves the last good copy rather than throwing,
+which converts an outage from a dead app into stale numbers.
 
-**Phase 5.** Phases 0–4 are shipped: the app imports a league, values every roster against its real lineup settings, evaluates a trade, analyses your team, and proposes offers both sides accept. That is the whole product thesis.
+That covers a bad ten minutes for a returning user, and nothing else — a first
+visit during an outage has nothing to serve, and shape drift fails loudly at the
+Zod boundary, which is correct and also terminal. A genuine second source is
+still the right answer and is tracked as
+[#43](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/43), where the
+hard part is named: two markets have to land on one scale before either can be
+compared, and the win-now split depends on that scale holding.
 
-Everything from here is scale-out rather than new ground, so the next step is a choice rather than an obligation:
+## 9. Where the product stands
 
-- **MFL provider** — the `LeagueProvider` seam has never been exercised by a second platform. Until it is, "not limited to Sleeper" is a claim, not a fact.
-- **Saved scenarios** — localStorage already holds the league id and claimed team; saved trades are the obvious third thing, and need no backend.
-- **Accounts (Supabase)** — only if cross-device sync is genuinely wanted.
+The thesis is shipped. The app imports a league, values every roster against its
+real lineup settings on both a dynasty and a win-now scale, evaluates a trade,
+analyses your team, proposes offers both sides accept, and hands the result over
+as a link you can paste into a group chat.
 
-Phase 4 has now been verified against the real league (`1336802780030988288`, "The Eternal Rebuild"), which is what surfaced findings 4 and 5 above. Two smaller things that run showed, neither urgent:
+**This section deliberately does not name the next task.** It used to, and it was
+wrong within a week — still proposing Phase 5 and saved scenarios while three
+milestones of activity-based valuation shipped past it, and still listing an
+unpriced-kickers problem that had already been fixed. A document updated by hand
+cannot track a queue; the queue is [`ROADMAP.md`](ROADMAP.md) and the issues it
+maps to, and those move on their own.
 
-- **10.2% of rostered players are unpriced** (18 of 176) — almost entirely kickers and defenses, which start in this league but have no dynasty market. They count as 0, which is right for trade value but means a lineup slot silently contributes nothing.
-- The league is **1QB, not superflex**, and the earlier synthetic check was superflex. Both work; worth keeping a 1QB league in mind when reasoning about QB values.
+What is worth recording here is the standing context a plan does not carry:
+
+- The model is verified against a real league (`1336802780030988288`, "The
+  Eternal Rebuild") rather than only synthetic fixtures, and that habit is what
+  has surfaced most of the corrections in the running record above. A finding
+  from a real roster outranks a passing test.
+- That league is **1QB, not superflex**, and superflex swings quarterback values
+  hard. Both formats work; a check on one is not a check on both.
+- Kickers and defences are excluded from the maths and kept on the roster
+  (closes #10) — the earlier note here, that they silently contribute zero to a
+  lineup slot, describes behaviour that no longer exists.

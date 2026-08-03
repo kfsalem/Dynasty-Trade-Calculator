@@ -1,4 +1,9 @@
-import { MATERIAL_DELTA, RECENT_WEEKS, type SnapShare } from '../engine/snapShare';
+// The window constants come from `activity`, which defines them, rather than
+// re-exported through `snapShare` — snap share and target share are the same
+// question asked of different columns, and both cells should point at the one
+// answer rather than reaching it two ways.
+import { MATERIAL_DELTA, RECENT_WEEKS } from '../engine/activity';
+import type { SnapShare } from '../engine/snapShare';
 import type { PlayerRole } from '../engine/role';
 import { describeRole } from '../lib/roleText';
 

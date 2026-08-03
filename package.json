@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "ingest": "tsx scripts/ingest.ts",
+    "og": "tsx scripts/og.ts",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview"
@@ -28,7 +30,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^26.1.2",
+    "@types/node": "^20.19.43",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.0",

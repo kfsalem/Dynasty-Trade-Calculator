@@ -51,7 +51,15 @@ function validate<T extends DatasetMeta>(
 ): T | null {
   const parsed = body as Partial<T> & { players?: unknown; columns?: unknown };
 
-  if (!parsed || typeof parsed !== 'object' || typeof parsed.players !== 'object') {
+  // `typeof null === 'object'`, so `players` needs a truthiness check of its
+  // own: a file with `"players": null` would otherwise pass validation here and
+  // throw on the first iteration downstream.
+  if (
+    !parsed ||
+    typeof parsed !== 'object' ||
+    !parsed.players ||
+    typeof parsed.players !== 'object'
+  ) {
     console.warn(`${file} at ${url} is not in the expected shape; ignoring it.`);
     return null;
   }
