@@ -55,17 +55,45 @@ function App() {
    * address bar says, and what the builder is re-seeded from.
    *
    * One piece of state for all three, because they were never allowed to
-   * disagree. `seedSeq` remounts the builder whenever a trade arrives from
-   * *outside* it — a suggestion or a link — so it re-reads the seed instead of
-   * keeping the user's previous selections. It is a remount trigger and nothing
-   * else; the content lives here.
+   * disagree.
    */
   const [shared, setShared] = useState<PendingTrade | null>(null);
-  const [seedSeq, setSeedSeq] = useState(0);
+  /**
+   * What last arrived from *outside* the builder — a suggestion or a link.
+   *
+   * Bumping `seq` remounts the builder so it re-reads the seed instead of
+   * keeping the user's previous selections. `dropped` rides along because it is
+   * a fact about one particular arrival: how much of that seed went missing on
+   * the way in. Kept together so it cannot outlive the trade it describes —
+   * the moment a suggestion lands, a link's losses are somebody else's story.
+   */
+  const [seed, setSeed] = useState({ seq: 0, dropped: 0 });
+  /**
+   * Whether the link the page was opened at has been dealt with — seeded,
+   * judged unusable, or abandoned by a league switch. Until it has, the address
+   * bar is left strictly alone; see the effect that writes it.
+   */
+  const [linkHandled, setLinkHandled] = useState(false);
 
-  const seedTrade = useCallback((trade: PendingTrade) => {
+  const seedTrade = useCallback((trade: PendingTrade, dropped = 0) => {
     setShared(trade);
-    setSeedSeq((n) => n + 1);
+    setSeed((s) => ({ seq: s.seq + 1, dropped }));
+  }, []);
+
+  /**
+   * Switching leagues abandons the trade, and the incoming link with it.
+   *
+   * Roster and asset ids mean nothing in another league. Carrying them across
+   * would seed the builder with a roster this league does not have, and
+   * `buildSide` throws on one of those — the same crash `resolveShare` guards
+   * the front door against, reached through the back. The link is marked
+   * handled in the same breath: a link to a league nobody is looking at any
+   * more has no business holding the address bar.
+   */
+  const changeLeague = useCallback((next: string | null) => {
+    setLeagueId(next);
+    setShared(null);
+    setLinkHandled(true);
   }, []);
   const { myRosterId, setMyRoster } = useMyRoster(leagueId);
   const {
@@ -118,13 +146,22 @@ function App() {
     return resolveShare(linkedTrade, league, picks);
   }, [league, picks, picksSettled]);
 
+  /**
+   * Whether the link has been *judged*, as opposed to merely not seeded yet.
+   *
+   * `fromLink` is null in two situations that must not be confused: before the
+   * league has arrived, and after a link has been found unusable. The first is
+   * a link still worth protecting in the address bar; the second is one worth
+   * clearing out of it. This says which.
+   */
+  const linkDecided = Boolean(linkedTrade && league && picksSettled);
+
   // Seeded exactly once, through the same door the suggestion engine uses.
-  const [linkSeeded, setLinkSeeded] = useState(false);
   useEffect(() => {
-    if (!fromLink || linkSeeded) return;
-    setLinkSeeded(true);
-    seedTrade(fromLink.trade);
-  }, [fromLink, linkSeeded, seedTrade]);
+    if (!linkDecided || linkHandled) return;
+    setLinkHandled(true);
+    if (fromLink) seedTrade(fromLink.trade, fromLink.dropped);
+  }, [linkDecided, fromLink, linkHandled, seedTrade]);
 
   /**
    * Keep the address bar describing what is on screen.
@@ -132,14 +169,22 @@ function App() {
    * `replaceState`, not `pushState`: every checkbox tick is a URL, and pushing
    * each one would turn the back button into an undo history nobody asked for
    * and leave the page unreachable by going back.
+   *
+   * An unhandled link is not touched at all. Writing the bare path here is how
+   * the URL gets *cleared*, and on the first commit there is nothing to write
+   * instead — so an untouched version of this effect deletes the trade from the
+   * address bar a second or more before the league arrives to restore it. That
+   * window is not cosmetic: a refresh on a slow connection lands on a stripped
+   * URL, and a league that fails to load leaves the recipient looking at an
+   * error page with no link left to retry. The link outranks the empty state
+   * until something real replaces it.
    */
   useEffect(() => {
-    if (!leagueId) return;
-    const url = shared
-      ? encodeTrade({ leagueId, ...shared })
-      : window.location.pathname;
+    if (!shared && linkedTrade && !linkHandled) return;
+    const url =
+      leagueId && shared ? encodeTrade({ leagueId, ...shared }) : window.location.pathname;
     window.history.replaceState(null, '', url);
-  }, [leagueId, shared]);
+  }, [leagueId, shared, linkHandled]);
 
   // Identity matters: the builder reports through this on every state change,
   // so a new function each render would re-fire the effect behind it forever.
@@ -167,7 +212,7 @@ function App() {
             </p>
 
             <div className="card mt-8">
-              <LeagueImport onSubmit={setLeagueId} busy={isLoading} />
+              <LeagueImport onSubmit={changeLeague} busy={isLoading} />
             </div>
 
             {error && (
@@ -197,7 +242,7 @@ function App() {
 
         {ready && (
           <>
-            <LeagueHeader league={league} onReset={() => setLeagueId(null)} />
+            <LeagueHeader league={league} onReset={() => changeLeague(null)} />
 
             <div
               role="tablist"
@@ -271,7 +316,7 @@ function App() {
 
               {tab === 'trade' && (
                 <TradeBuilder
-                  key={seedSeq}
+                  key={seed.seq}
                   league={league}
                   players={players}
                   values={values}
@@ -282,7 +327,7 @@ function App() {
                   // coming back no longer discards the trade you were building.
                   initial={shared}
                   onChange={handleTradeChange}
-                  droppedFromLink={fromLink?.dropped}
+                  droppedFromLink={seed.dropped}
                   snaps={snaps}
                   usage={usage}
                   roles={roles}

@@ -249,15 +249,22 @@ export function useLeagueSummaries(leagueId: string | null) {
     picks,
     picksUnavailable: pickValuesQuery.isError,
     /**
-     * Whether the pick query has finished, either way.
+     * Whether `picks` above is the finished list, either way.
      *
      * `picks` is an empty array both before the values arrive and when a league
      * genuinely has none, and a consumer that must not confuse the two needs to
      * be told which it is looking at. A shared link is exactly that consumer:
      * validating its pick ids against a list that has not loaded yet silently
      * discards every one of them.
+     *
+     * Note what the list is built from: the pick *table* from DynastyProcess
+     * and `adjusted` from FantasyCalc, two hosts behind two caches, racing from
+     * the same trigger. The pick query settling proves nothing on its own — a
+     * returning user with a warm pick cache and an expired value cache reaches
+     * it while `picks` is still empty, which is precisely the window this flag
+     * exists to keep callers out of. Both halves, or the error.
      */
-    picksSettled: pickValuesQuery.isSuccess || pickValuesQuery.isError,
+    picksSettled: (pickValuesQuery.isSuccess && adjusted !== undefined) || pickValuesQuery.isError,
     snaps,
     usage,
     roles,
