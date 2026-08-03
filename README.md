@@ -115,13 +115,19 @@ Requires Node 20.19+ (Vite 7).
 
 ```bash
 npm install
-npm run dev      # dev server
-npm run build    # typecheck + production build
+npm run dev        # dev server
+npm run typecheck  # tsc -b across all three projects
+npm run build      # typecheck + production build
 npm run lint
 npm run test
-npm run ingest   # refresh public/data from nflverse
-npm run og       # regenerate public/og.png, the link-preview card
+npm run ingest     # refresh public/data from nflverse
+npm run og         # regenerate public/og.png, the link-preview card
 ```
+
+Use `npm run typecheck`, not `tsc --noEmit`. The root `tsconfig.json` is
+`files: []` plus project references, so `tsc --noEmit` resolves nothing and
+exits 0 on a codebase that does not compile. Only `tsc -b` walks the
+references.
 
 `npm test` runs two suites in one command: logic in Node, and anything that
 mounts a component in jsdom.

@@ -8,6 +8,7 @@
     "ingest": "tsx scripts/ingest.ts",
     "og": "tsx scripts/og.ts",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview"
