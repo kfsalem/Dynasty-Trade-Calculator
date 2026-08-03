@@ -202,6 +202,16 @@ export interface LeagueSettings {
 export interface Matchup {
   week: number;
   rosterIds: [number, number];
+  /**
+   * What each roster scored, aligned with `rosterIds`, or null if the week has
+   * not been played.
+   *
+   * Carried because it is the only record of how this league actually scores.
+   * The simulation's two assumptions — how far apart good and bad lineups
+   * finish, and how much a single week bounces — are guesses until they are
+   * measured against real weeks, and these are those weeks.
+   */
+  points: [number, number] | null;
 }
 
 export interface Roster {

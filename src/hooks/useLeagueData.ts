@@ -12,6 +12,8 @@ import { playerRoles } from '../engine/role';
 import { roleTrends } from '../engine/roleTrend';
 import { fetchDepthCharts, fetchOpportunity, fetchSnapCounts } from '../data/activity';
 import {
+  calibrate,
+  playedFixtures,
   remainingFixtures,
   teamStates,
   type OddsContext,
@@ -229,14 +231,19 @@ export function useLeagueSummaries(leagueId: string | null) {
     const schedule = scheduleQuery.data;
     if (!bundle || !schedule || !adjusted || summaries.length === 0) return undefined;
 
+    const teams = teamStates(bundle.league, summaries);
+
     return {
-      teams: teamStates(bundle.league, summaries),
+      teams,
       remaining: remainingFixtures(
         schedule,
         bundle.currentWeek,
         bundle.league.settings.playoffWeekStart,
       ),
       playoffTeams: bundle.league.settings.playoffTeams,
+      // Measured from this league's completed weeks where there are enough of
+      // them, and assumed where there are not — see `calibrate`.
+      model: calibrate(teams, playedFixtures(schedule)),
     };
   }, [leagueQuery.data, scheduleQuery.data, adjusted, summaries]);
 

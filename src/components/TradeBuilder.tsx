@@ -8,7 +8,7 @@ import type { PlayerRole } from '../engine/role';
 import type { ActivityAdjustment } from '../engine/activityFactor';
 import { formatValue } from '../lib/format';
 import type { TradeSelection } from '../lib/share';
-import { withStrengths, type OddsContext } from '../engine/playoffOdds';
+import { withStrengths, type OddsContext, type ScoringModel } from '../engine/playoffOdds';
 import { usePlayoffOdds } from '../hooks/usePlayoffOdds';
 
 /**
@@ -161,12 +161,27 @@ function PlayoffOdds({
   before,
   after,
   pending,
+  model,
 }: {
   before: number | undefined;
   after: number | undefined;
   pending: boolean;
+  model: ScoringModel | undefined;
 }) {
   if (before === undefined) return null;
+
+  /**
+   * Say what the number rests on.
+   *
+   * Odds carry more authority than they have earned, and the difference between
+   * "measured from your league" and "assumed from a typical one" is the
+   * difference between a projection and an estimate. A user comparing two
+   * leagues deserves to know which they are looking at.
+   */
+  const basis =
+    model?.source === 'league'
+      ? `Tuned to ${model.weeks} completed ${model.weeks === 1 ? 'week' : 'weeks'} of this league's own scoring, blended with typical values while the sample is thin.`
+      : 'This league has not played enough weeks to measure its own scoring, so typical values are assumed.';
 
   const settled = after !== undefined && !pending;
   const points = settled ? Math.round(after * 100) - Math.round(before * 100) : 0;
@@ -175,7 +190,7 @@ function PlayoffOdds({
     <div className="flex justify-between gap-4 border-t border-gray-200 pt-1">
       <dt
         className="text-gray-500"
-        title="Chance of making the playoffs, simulated over the rest of the regular season from each roster's best lineup. Ten thousand seasons, so the same trade always gives the same answer."
+        title={`Chance of making the playoffs, simulated over the rest of the regular season from each roster's best lineup. Ten thousand seasons, so the same trade always gives the same answer. ${basis}`}
       >
         Playoff odds
       </dt>
@@ -221,11 +236,13 @@ function SideSummary({
   oddsBefore,
   oddsAfter,
   oddsPending,
+  oddsModel,
 }: {
   side: TradeSideResult;
   oddsBefore?: number;
   oddsAfter?: number;
   oddsPending: boolean;
+  oddsModel?: ScoringModel;
 }) {
   return (
     <div className="min-w-0">
@@ -271,7 +288,12 @@ function SideSummary({
             {formatValue(side.starterValueBefore)} → {formatValue(side.starterValueAfter)}
           </dd>
         </div>
-        <PlayoffOdds before={oddsBefore} after={oddsAfter} pending={oddsPending} />
+        <PlayoffOdds
+          before={oddsBefore}
+          after={oddsAfter}
+          pending={oddsPending}
+          model={oddsModel}
+        />
       </dl>
 
       {side.warnings.length > 0 && (
@@ -557,6 +579,7 @@ export function TradeBuilder({
                 oddsBefore={before.odds?.get(side.rosterId)}
                 oddsAfter={after.odds?.get(side.rosterId)}
                 oddsPending={after.pending}
+                oddsModel={odds?.model}
               />
             ))}
           </div>

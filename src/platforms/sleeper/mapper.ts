@@ -112,23 +112,42 @@ export function mapSettings(league: SleeperLeague): LeagueSettings {
  * would put a game in the simulation that nobody plays.
  */
 export function mapMatchups(week: number, rows: SleeperMatchup[]): Matchup[] {
-  const groups = new Map<number, number[]>();
+  const groups = new Map<number, SleeperMatchup[]>();
   for (const row of rows) {
     if (row.matchup_id == null) continue;
     const group = groups.get(row.matchup_id) ?? [];
-    group.push(row.roster_id);
+    group.push(row);
     groups.set(row.matchup_id, group);
   }
 
   const fixtures: Matchup[] = [];
-  for (const rosterIds of groups.values()) {
-    if (rosterIds.length !== 2) continue;
+  for (const group of groups.values()) {
+    if (group.length !== 2) continue;
     // Lower roster id first, then fixtures in that order. Sleeper lists rows in
     // no particular order, and a fixture that reads [4, 3] one week and [3, 4]
     // the next is the same game wearing two faces — which matters because the
     // simulation is seeded, and a stable input is half of reproducible.
-    const [a, b] = rosterIds.sort((x, y) => x - y);
-    fixtures.push({ week, rosterIds: [a, b] });
+    const [first, second] = [...group].sort((x, y) => x.roster_id - y.roster_id);
+
+    /**
+     * A week nobody has played yet.
+     *
+     * Sleeper returns the fixture with points at 0 well before kickoff, so an
+     * unplayed week is indistinguishable from one in which both teams were
+     * shut out. That second thing does not happen — a fantasy lineup scoring
+     * exactly nothing would need every starter to post a zero — so two zeroes
+     * is read as "not yet", which is right essentially always and costs one
+     * week of calibration data in the case where it is not.
+     */
+    const a = first.points ?? 0;
+    const b = second.points ?? 0;
+    const played = a > 0 || b > 0;
+
+    fixtures.push({
+      week,
+      rosterIds: [first.roster_id, second.roster_id],
+      points: played ? [a, b] : null,
+    });
   }
   return fixtures.sort((x, y) => x.rosterIds[0] - y.rosterIds[0]);
 }

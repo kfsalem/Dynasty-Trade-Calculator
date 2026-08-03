@@ -194,8 +194,8 @@ describe('mapMatchups', () => {
     const fixtures = mapMatchups(3, [row(1, 1), row(4, 2), row(2, 1), row(3, 2)]);
 
     expect(fixtures).toEqual([
-      { week: 3, rosterIds: [1, 2] },
-      { week: 3, rosterIds: [3, 4] },
+      { week: 3, rosterIds: [1, 2], points: null },
+      { week: 3, rosterIds: [3, 4], points: null },
     ]);
   });
 
@@ -207,7 +207,54 @@ describe('mapMatchups', () => {
     // An odd number of teams leaves someone out, and a null matchup_id is
     // Sleeper saying so. A phantom game would be played in the simulation.
     const fixtures = mapMatchups(1, [row(1, 1), row(2, 1), row(3, null)]);
-    expect(fixtures).toEqual([{ week: 1, rosterIds: [1, 2] }]);
+    expect(fixtures).toEqual([{ week: 1, rosterIds: [1, 2], points: null }]);
+  });
+
+  it('carries the scores of a week that has been played', () => {
+    // The only record of how this league actually scores, and therefore the
+    // only way the simulation stops guessing at its two constants.
+    const fixtures = mapMatchups(4, [
+      { roster_id: 2, matchup_id: 1, points: 98.4 },
+      { roster_id: 1, matchup_id: 1, points: 121.7 },
+    ]);
+    expect(fixtures).toEqual([{ week: 4, rosterIds: [1, 2], points: [121.7, 98.4] }]);
+  });
+
+  it('aligns scores with roster ids after sorting the pair', () => {
+    // The pair is reordered to put the lower roster id first; the points have
+    // to travel with their roster rather than staying where they were listed.
+    const [fixture] = mapMatchups(4, [
+      { roster_id: 7, matchup_id: 1, points: 150 },
+      { roster_id: 3, matchup_id: 1, points: 90 },
+    ]);
+    expect(fixture.rosterIds).toEqual([3, 7]);
+    expect(fixture.points).toEqual([90, 150]);
+  });
+
+  it('reads a week where nobody has scored as not yet played', () => {
+    // Sleeper returns the fixture with points at 0 well before kickoff. A real
+    // lineup scoring exactly nothing would need every starter to post a zero.
+    const [fixture] = mapMatchups(9, [
+      { roster_id: 1, matchup_id: 1, points: 0 },
+      { roster_id: 2, matchup_id: 1, points: 0 },
+    ]);
+    expect(fixture.points).toBeNull();
+  });
+
+  it('treats a shutout on one side as played, because the other side scored', () => {
+    const [fixture] = mapMatchups(9, [
+      { roster_id: 1, matchup_id: 1, points: 0 },
+      { roster_id: 2, matchup_id: 1, points: 104 },
+    ]);
+    expect(fixture.points).toEqual([0, 104]);
+  });
+
+  it('reads a missing points field as no result rather than zero', () => {
+    const [fixture] = mapMatchups(9, [
+      { roster_id: 1, matchup_id: 1 },
+      { roster_id: 2, matchup_id: 1 },
+    ]);
+    expect(fixture.points).toBeNull();
   });
 
   it('drops a group that is not a clean pair', () => {

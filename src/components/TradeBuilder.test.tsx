@@ -10,7 +10,7 @@ import {
   makeValue,
 } from '../engine/testFixtures';
 import type { Player, PlayerValue, Position } from '../types';
-import type { OddsContext } from '../engine/playoffOdds';
+import { DEFAULT_MODEL, type OddsContext } from '../engine/playoffOdds';
 
 // Three rosters, not two: each side's dropdown excludes the other side, so a
 // two-team league leaves team A with nothing to switch to.
@@ -76,11 +76,12 @@ const oddsContext: OddsContext = {
     { rosterId: 3, wins: 3, losses: 3, ties: 0, pointsFor: 900, strength: 1300 },
   ],
   remaining: [
-    { week: 7, rosterIds: [1, 2] },
-    { week: 8, rosterIds: [2, 3] },
-    { week: 9, rosterIds: [1, 3] },
+    { week: 7, rosterIds: [1, 2], points: null },
+    { week: 8, rosterIds: [2, 3], points: null },
+    { week: 9, rosterIds: [1, 3], points: null },
   ],
   playoffTeams: 2,
+  model: DEFAULT_MODEL,
 };
 
 const notice = () => screen.queryByText(/no longer on the roster that was sending/);

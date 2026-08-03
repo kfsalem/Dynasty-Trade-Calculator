@@ -1592,6 +1592,50 @@ the phone a trade actually gets argued on is several times slower than the
 machine that was measured. Replies are correlated by id, because odds for a trade
 the user has already edited past are worse than no odds at all.
 
+**The two constants are now measured, not assumed.** *(2026-08-03)*
+
+Shipping them hardcoded left this as the one place in the app still reasoning
+from a generic league rather than the one in front of it — precisely what the
+README criticises every other calculator for. Sleeper's matchup rows already
+carry `points` for completed weeks, so the schedule was fetching the evidence and
+throwing it away.
+
+`weeklySD` is pooled *within* team: each roster's variance about its own average,
+averaged. That distinction is the measurement. The spread of all scores in the
+league mixes how much a team bounces week to week with how much teams differ from
+one another, and only the first is the noise the simulation needs. `pointsPerSD`
+is the slope of average points on lineup strength in standard units, which is
+exactly the question the constant asks.
+
+The pairing is imperfect and worth saying so: strength is the best lineup a
+roster could field *today*, while the points are what it scored weeks ago with
+whatever it started, possibly with players it has since traded away.
+
+**A threshold was the wrong tool, and measuring showed it.** The first version
+refused any estimate below four weeks and accepted it wholesale above. Run against
+a synthetic season with known parameters, the raw slope swung between 2.5 and 11.5
+over four to six weeks against a true 9 — and 2.5 reports a strong roster as a
+coin flip, which is worse than the assumption it replaced. A cutoff has both
+failures at once: it refuses good evidence at three weeks and swallows bad
+evidence at four.
+
+Shrinking toward the assumption in proportion to the evidence fixes it, with a
+half-life of six weeks. Averaged over 200 synthetic seasons, mean absolute error
+in `pointsPerSD` falls from 2.00 with the flat assumption to 1.55 at three weeks
+and 1.28 at thirteen, while `weeklySD` recovers 25.8 against a true 26. Better
+than either the raw measurement or the flat assumption at every sample size, and
+no longer a cliff.
+
+Only the two parameters that matter are shrunk. The baseline sets the level and
+nothing depends on it, so it is taken as measured — there is no wrong answer to
+shrink away from. A negative slope floors at zero, because over a handful of weeks
+"the weaker rosters scored more" is noise rather than a discovery, and it is then
+blended up from there: measuring no relationship is not proof there is none.
+
+The panel says which basis it used. Odds carry more authority than they have
+earned, and the difference between a number tuned to your league and one assumed
+from a typical one belongs where the user can find it.
+
 ---
 
 ### What comes next

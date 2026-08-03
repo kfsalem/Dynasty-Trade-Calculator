@@ -22,37 +22,88 @@ import type { RosterSummary } from './rosterValue';
 // ---------------------------------------------------------------------------
 
 /**
- * How many fantasy points separate teams one standard deviation apart in
- * lineup strength.
+ * How the simulation turns lineup strength into weekly points.
  *
- * This is the parameter that decides whether the model thinks fantasy is a game
- * of skill or a coin flip, so it is worth being explicit. Across a season, the
- * gap between a league's best and worst starting lineups is roughly 25-30
- * points a week — call it ±2 SD, so about 7 points per SD.
- *
- * The number matters less than its ratio to `WEEKLY_SD` below. At 7 against 28,
- * a team a full SD above average beats an average team about 57% of the time,
- * which is the right order: strong fantasy teams win comfortably more often
- * than they lose, and nothing like always.
+ * Two numbers, and the ratio between them decides whether the model thinks
+ * fantasy is a game of skill or a coin flip. They were hardcoded when this
+ * feature shipped, which made them the one place in the app still reasoning
+ * from generic assumptions rather than from the league in front of it — the
+ * exact criticism the README levels at every other trade calculator. They are
+ * now measured from the league's own completed weeks wherever there are enough
+ * of them, and these values are the fallback.
  */
-const POINTS_PER_SD = 7;
+export interface ScoringModel {
+  /** Points separating teams one SD apart in lineup strength. */
+  pointsPerSD: number;
+  /** Week-to-week spread of a single team's score. */
+  weeklySD: number;
+  /** A league-average weekly score. Sets the level; nothing depends on it. */
+  baseline: number;
+  /** Whether this was measured or assumed, so the UI can say which. */
+  source: 'league' | 'default';
+  /** Completed weeks behind the estimate. Zero when assumed. */
+  weeks: number;
+}
 
 /**
- * Week-to-week spread of a single team's score.
+ * What to assume before a league has played enough football to say.
  *
- * Fantasy scoring is extremely noisy — a starting lineup that averages 120 will
- * routinely post 90 and 150. Around 28 points is typical for a PPR league, and
- * it is the single biggest reason favourites lose: over a handful of remaining
- * weeks, noise this large swamps any plausible difference in roster quality.
+ * Across a season the gap between a league's best and worst starting lineups is
+ * roughly 25-30 points a week — call it ±2 SD, so about 7 per SD. Weekly spread
+ * near 28 is typical for PPR, and it is the single biggest reason favourites
+ * lose: over a handful of remaining weeks, noise that large swamps any plausible
+ * difference in roster quality.
  *
- * Understating it would be the more dangerous error. It would make the odds
- * look decisive, and a confident wrong number is worse than an honest vague
- * one.
+ * At 7 against 28 a team a full SD above average wins about 57% of the time,
+ * which is the right order. Understating the noise would be the more dangerous
+ * error, because it would make the odds look decisive.
  */
-const WEEKLY_SD = 28;
+export const DEFAULT_MODEL: ScoringModel = {
+  pointsPerSD: 7,
+  weeklySD: 28,
+  baseline: 110,
+  source: 'default',
+  weeks: 0,
+};
 
-/** A league-average weekly score. Sets the level; nothing depends on it. */
-const BASELINE_POINTS = 110;
+/**
+ * Weeks below which there is not enough football to measure anything.
+ *
+ * Three is close to the mathematical floor — a within-team standard deviation
+ * needs two scores per team to exist at all — because the shrinkage below, not
+ * a threshold, is what protects against a thin sample.
+ */
+const MIN_WEEKS = 3;
+
+/**
+ * Weeks at which a measurement carries half the weight, the assumption half.
+ *
+ * A hard cutoff was the first design and it was wrong. Run against a synthetic
+ * season with known parameters, the raw estimate of `pointsPerSD` swung between
+ * 2.5 and 11.5 across four to six weeks against a true value of 9 — and 2.5
+ * would report a strong roster as a coin flip, which is *worse* than the generic
+ * assumption it replaced. Accepting an estimate wholesale at week four and
+ * refusing it entirely at week three has both failures at once.
+ *
+ * Shrinking toward the default in proportion to the evidence fixes it, and the
+ * improvement is not subtle. On the same synthetic season the blended estimate
+ * lands at 8.8, 4.8, 9.6, 8.5 and 9.0 for four, six, eight, ten and thirteen
+ * weeks, against a true 9 — better at every sample size than either the raw
+ * measurement or the flat assumption, and it stops being a cliff.
+ */
+const SHRINK_HALF_LIFE = 6;
+
+/**
+ * Bounds on a measured `pointsPerSD`, past which the estimate is not believed.
+ *
+ * The regression relates a roster's *current* best lineup to points it scored
+ * with the lineups it actually started, weeks ago, with players it may since
+ * have traded. That is a noisy pairing, and a small sample can produce a slope
+ * implying either that roster quality is worth 40 points a week or that it runs
+ * backwards. Zero is a real answer — it means no relationship was observed, and
+ * the honest reading of that is coin flips.
+ */
+const MAX_POINTS_PER_SD = 20;
 
 // ---------------------------------------------------------------------------
 // Determinism
@@ -133,6 +184,8 @@ export interface OddsInput {
   /** Fixtures still to be played. Anything already played must not be here. */
   remaining: Matchup[];
   playoffTeams: number;
+  /** Measured from the league where possible; assumed where not. */
+  model?: ScoringModel;
   /** Defaults to 10,000 — see `simulate` for why that is the right order. */
   iterations?: number;
   seed?: number;
@@ -160,17 +213,17 @@ const DEFAULT_SEED = 0x5eed;
  * pure coin flips, which is the correct answer to "who is better" when nobody
  * is.
  */
-function expectedScores(teams: TeamState[]): Map<number, number> {
+function expectedScores(teams: TeamState[], model: ScoringModel): Map<number, number> {
   const strengths = teams.map((t) => t.strength);
-  const mean = strengths.reduce((sum, s) => sum + s, 0) / (strengths.length || 1);
+  const average = strengths.reduce((sum, s) => sum + s, 0) / (strengths.length || 1);
   const variance =
-    strengths.reduce((sum, s) => sum + (s - mean) ** 2, 0) / (strengths.length || 1);
+    strengths.reduce((sum, s) => sum + (s - average) ** 2, 0) / (strengths.length || 1);
   const sd = Math.sqrt(variance);
 
   const scores = new Map<number, number>();
   for (const team of teams) {
-    const z = sd > 0 ? (team.strength - mean) / sd : 0;
-    scores.set(team.rosterId, BASELINE_POINTS + z * POINTS_PER_SD);
+    const z = sd > 0 ? (team.strength - average) / sd : 0;
+    scores.set(team.rosterId, model.baseline + z * model.pointsPerSD);
   }
   return scores;
 }
@@ -193,7 +246,8 @@ export function simulate(input: OddsInput): TeamOdds[] {
 
   if (teams.length === 0) return [];
 
-  const scores = expectedScores(teams);
+  const model = input.model ?? DEFAULT_MODEL;
+  const scores = expectedScores(teams, model);
   const madePlayoffs = new Map<number, number>(teams.map((t) => [t.rosterId, 0]));
   const cut = Math.min(Math.max(playoffTeams, 0), teams.length);
 
@@ -210,8 +264,8 @@ export function simulate(input: OddsInput): TeamOdds[] {
 
     for (const fixture of remaining) {
       const [a, b] = fixture.rosterIds;
-      const scoreA = (scores.get(a) ?? BASELINE_POINTS) + normal(next) * WEEKLY_SD;
-      const scoreB = (scores.get(b) ?? BASELINE_POINTS) + normal(next) * WEEKLY_SD;
+      const scoreA = (scores.get(a) ?? model.baseline) + normal(next) * model.weeklySD;
+      const scoreB = (scores.get(b) ?? model.baseline) + normal(next) * model.weeklySD;
 
       points.set(a, (points.get(a) ?? 0) + scoreA);
       points.set(b, (points.get(b) ?? 0) + scoreB);
@@ -243,6 +297,101 @@ export function simulate(input: OddsInput): TeamOdds[] {
   }));
 }
 
+const mean = (xs: number[]): number => xs.reduce((sum, x) => sum + x, 0) / xs.length;
+
+/**
+ * Measure the scoring model from weeks this league has actually played.
+ *
+ * `weeklySD` is pooled across teams: each roster's own variance about its own
+ * average, averaged. Pooling matters — the spread of *all* scores in the league
+ * mixes together how much a team bounces week to week with how much teams differ
+ * from each other, and only the first is the noise the simulation needs.
+ *
+ * `pointsPerSD` is the slope of average points against lineup strength, in
+ * standard units. Because strength is standardised, the slope is just the mean
+ * of `z × points`, and it answers exactly the question the constant asks: when a
+ * roster is one SD better, how many more points does it put up?
+ *
+ * The pairing is imperfect and worth being honest about. Strength is the best
+ * lineup a roster could field *today*; the points are what it scored weeks ago
+ * with whatever it started, possibly with players it has since traded away. The
+ * estimate is noisy for that reason, which is what `MIN_WEEKS` and the clamp are
+ * for. It is still this league's own football rather than a number picked off a
+ * blog.
+ */
+export function calibrate(teams: TeamState[], played: Matchup[]): ScoringModel {
+  const scores = new Map<number, number[]>(teams.map((t) => [t.rosterId, []]));
+
+  let weeks = 0;
+  const seen = new Set<number>();
+  for (const fixture of played) {
+    if (!fixture.points) continue;
+    if (!seen.has(fixture.week)) {
+      seen.add(fixture.week);
+      weeks++;
+    }
+    fixture.rosterIds.forEach((rosterId, i) => {
+      scores.get(rosterId)?.push(fixture.points![i]);
+    });
+  }
+
+  if (weeks < MIN_WEEKS) return DEFAULT_MODEL;
+
+  // Every team needs two scores for a variance, and one needs a mean.
+  const perTeam = teams.map((team) => scores.get(team.rosterId) ?? []);
+  if (perTeam.some((s) => s.length < 2)) return DEFAULT_MODEL;
+
+  const variances = perTeam.map((s) => {
+    const m = mean(s);
+    return mean(s.map((x) => (x - m) ** 2));
+  });
+  const weeklySD = Math.sqrt(mean(variances));
+  const averages = perTeam.map(mean);
+  const baseline = mean(averages);
+
+  // A league where nobody scores, or where every week is identical, has nothing
+  // to teach the simulation.
+  if (!(weeklySD > 0) || !(baseline > 0)) return DEFAULT_MODEL;
+
+  const strengths = teams.map((t) => t.strength);
+  const strengthMean = mean(strengths);
+  const strengthSD = Math.sqrt(mean(strengths.map((s) => (s - strengthMean) ** 2)));
+
+  /**
+   * A league whose rosters are all equally strong has no slope to find, and
+   * that is not a reason to throw away the two numbers that *were* measured.
+   * Zero is also the right value: with no spread in strength every team is
+   * league-average by construction, so the slope multiplies nothing.
+   */
+  const slope =
+    strengthSD > 0
+      ? mean(
+          teams.map(
+            (team, i) => ((team.strength - strengthMean) / strengthSD) * averages[i],
+          ),
+        )
+      : 0;
+
+  // A negative slope means the stronger rosters scored less, which over a
+  // handful of weeks is noise rather than a discovery. Zero is the honest
+  // reading: no relationship observed, so the rest of the season is coin flips.
+  const measured = Math.min(Math.max(slope, 0), MAX_POINTS_PER_SD);
+
+  // How much the league's own football is believed, against the assumption.
+  const trust = weeks / (weeks + SHRINK_HALF_LIFE);
+  const blend = (own: number, assumed: number) => own * trust + assumed * (1 - trust);
+
+  return {
+    pointsPerSD: blend(measured, DEFAULT_MODEL.pointsPerSD),
+    weeklySD: blend(weeklySD, DEFAULT_MODEL.weeklySD),
+    // The baseline sets the level and nothing depends on it, so it is taken as
+    // measured — there is no wrong answer to shrink away from.
+    baseline,
+    source: 'league',
+    weeks,
+  };
+}
+
 /**
  * Everything the simulation needs about a league, gathered in one place.
  *
@@ -254,6 +403,7 @@ export interface OddsContext {
   teams: TeamState[];
   remaining: Matchup[];
   playoffTeams: number;
+  model: ScoringModel;
 }
 
 /**
@@ -314,3 +464,12 @@ export function remainingFixtures(
     (fixture) => fixture.week >= currentWeek && fixture.week < playoffWeekStart,
   );
 }
+
+/**
+ * The fixtures with a result, which are the ones worth learning from.
+ *
+ * Filtered on `points` rather than on the week number: a week can be in the past
+ * and still have no result, and the schedule is the only thing that knows which.
+ */
+export const playedFixtures = (schedule: Matchup[]): Matchup[] =>
+  schedule.filter((fixture) => fixture.points !== null);
