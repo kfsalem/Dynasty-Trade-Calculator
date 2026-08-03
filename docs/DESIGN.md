@@ -1360,10 +1360,24 @@ scraper reads the HTML exactly as served, without running JavaScript, so every
 trade link previews identically no matter what the page later draws. Per-trade
 cards need a server, which §3.1 rules out for v1. `index.html` gets honest static
 tags — "a trade calculator that knows your league", plus an instruction to open
-the link — rather than a card naming two players it might not contain. Fixed
-alongside: the favicon was `/vite.svg`, root-absolute on a site served from a
-project subpath, so it has been 404ing in production, and in every link preview,
-since Phase 0.
+the link — rather than a card naming two players it might not contain.
+
+A favicon change went in alongside, on a diagnosis that was wrong, and the
+correction is worth more than the change was. `/vite.svg` reads as root-absolute
+on a site served from a project subpath, and was written up here as having 404ed
+in production, and in every link preview, since Phase 0. It never did. Vite
+rewrites root-absolute URLs in `index.html` against `base` at build time, so the
+tag has always shipped as `/Dynasty-Trade-Calculator/vite.svg` and has always
+resolved — confirmed by building both revisions and reading the output. The
+reference is back as it was. The relative `./vite.svg` that briefly replaced it
+also worked, but it resolves against the document URL rather than against `base`,
+which is the weaker of the two guarantees, and it was bought for nothing.
+
+The lesson is not about favicons. A bug was asserted from reading the source,
+in a build system whose entire job is to rewrite that source, and it went into
+this document as established fact next to claims that had actually been tested.
+A wrong entry here is worse than a wrong line of code, because the code gets
+re-read and this gets cited.
 
 ### Phase 5 — Scale out
 - MFL + Fleaflicker providers
