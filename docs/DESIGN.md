@@ -1522,6 +1522,76 @@ in its docstring and had never been tested directly; the FantasyCalc mapping and
 its shared-divisor invariant; `parseLeagueId`, the only thing standing between a
 stranger's paste and a fetch; and `cached` itself.
 
+**What the trade does to your season.** *(2026-08-03, closes #13)*
+
+Every other number this app produces is a valuation. This one is a consequence.
+"+312 starting lineup" is a quantity a manager has to interpret; "34% to 51%" is
+not, and it is the first thing here that answers *does this help me* in the units
+the question was asked in.
+
+It also became possible only recently. The issue was written expecting
+`starterValue` as the per-roster strength input, and until #8 that number was a
+dynasty ranking — simulating a season off it would have been asking which roster
+is worth most in 2029 and reporting the answer as this year's playoff odds.
+Win-now value is the input this needs, and it landed two features ago.
+
+**Sleeper does not publish a schedule.** It answers per week with a row per
+roster carrying a `matchup_id`, and two rows sharing one *is* a fixture, so a
+season has to be reassembled by grouping — one request per week, fanned out
+together rather than walked. Anything that does not resolve to a clean pair is
+dropped: a null `matchup_id` is a roster with no game, and a group of one is the
+bye an odd number of teams produces. Inventing an opponent would put a game in
+the simulation that nobody plays.
+
+It arrives through `LeagueProvider`, as an *optional* method. A platform that
+cannot supply a schedule loses this feature and nothing else, which is a better
+bargain than a required method some future provider has to satisfy by lying —
+and #11 inherits the seam either way. The schedule is its own query for the same
+reason: it costs a request per week, and no roster, value or trade calculation
+should wait on it.
+
+**Two constants carry the model**, and the ratio between them is the whole
+argument: 7 fantasy points per standard deviation of lineup strength, against a
+28-point weekly spread. That makes a team a full SD above average win about 57%
+of the time — the right order, because strong fantasy teams win comfortably more
+often than they lose and nothing like always. Understating the noise would be the
+more dangerous error: it would make the odds look decisive, and a confident wrong
+number is worse than an honest vague one.
+
+Strength enters as a z-score against the team's own league rather than converted
+to points. `starterValue` is a sum of league-adjusted values whose units depend
+on the value source and the lineup settings, so an exchange rate to fantasy
+points would be invented. What is meaningful is where a roster sits among the
+rosters it actually plays.
+
+**The seeding was wrong in a way that looked right.** Each iteration was keyed on
+`seed + i`, so seeds 1 and 2 share every stream but one and produce odds
+differing by at most a single iteration — usually not at all. A test asserting
+that the seed changes the answer is what caught it; iteration seeds are mixed
+now, not added. Seeding per iteration rather than one stream across the run also
+means nothing can depend on the order teams or fixtures are visited in, which is
+its own test.
+
+**Before and after both substitute.** The obvious version leaves the "before" run
+on the strengths that arrived from `RosterSummary` and only replaces lineups in
+the "after" — but those two numbers come from different code paths, and any day
+they disagreed the difference would surface as a swing in the odds attributed to
+a trade that had not caused it. Taking both ends from the same `evaluateTrade`
+result makes the delta mean exactly one thing.
+
+Checked against a realistic 12-team league at week 8: a 6-1 team with the best
+roster reads 98.9%, a 2-5 team with the worst reads 1.7%, the bubble sits between
+55% and 62%, and a trade worth 150 of lineup strength moves a bubble team from
+28.9% to 39.1%. The odds sum to exactly 6.000 against six places, which is now a
+test — off-by-one seeding or a double-counted team breaks it and nothing else
+would notice.
+
+**It runs in a worker**, which 62ms per simulation makes look unnecessary until
+you count: the panel needs two runs and re-runs them on every checkbox tick, and
+the phone a trade actually gets argued on is several times slower than the
+machine that was measured. Replies are correlated by id, because odds for a trade
+the user has already edited past are worse than no odds at all.
+
 ---
 
 ### What comes next

@@ -1,4 +1,5 @@
-import type { Matchup } from '../types';
+import type { League, Matchup } from '../types';
+import type { RosterSummary } from './rosterValue';
 
 /**
  * What a trade does to your chances of playing in January.
@@ -240,6 +241,59 @@ export function simulate(input: OddsInput): TeamOdds[] {
     rosterId: team.rosterId,
     odds: (madePlayoffs.get(team.rosterId) ?? 0) / iterations,
   }));
+}
+
+/**
+ * Everything the simulation needs about a league, gathered in one place.
+ *
+ * Held as a unit because the three travel together and are meaningless apart:
+ * odds without a schedule are a guess, and a schedule without the standings is
+ * a fixture list.
+ */
+export interface OddsContext {
+  teams: TeamState[];
+  remaining: Matchup[];
+  playoffTeams: number;
+}
+
+/**
+ * Current standings and lineup strength, per roster.
+ *
+ * A roster with no summary is dropped rather than defaulted. Every roster in a
+ * loaded league has one, so its absence means something has gone wrong
+ * upstream, and a team entered at zero strength would be a free win for
+ * whoever plays it.
+ */
+export function teamStates(league: League, summaries: RosterSummary[]): TeamState[] {
+  const strengthOf = new Map(summaries.map((s) => [s.rosterId, s.starterValue]));
+
+  return league.rosters
+    .filter((roster) => strengthOf.has(roster.rosterId))
+    .map((roster) => ({
+      rosterId: roster.rosterId,
+      wins: roster.wins,
+      losses: roster.losses,
+      ties: roster.ties,
+      pointsFor: roster.pointsFor,
+      strength: strengthOf.get(roster.rosterId) as number,
+    }));
+}
+
+/**
+ * The same league, with some lineups replaced — a proposed trade, simulated.
+ *
+ * Only strength changes. Records and points already banked are facts about a
+ * season that has been played, and a trade does not reach back into them.
+ */
+export function withStrengths(
+  teams: TeamState[],
+  replacements: Map<number, number>,
+): TeamState[] {
+  return teams.map((team) =>
+    replacements.has(team.rosterId)
+      ? { ...team, strength: replacements.get(team.rosterId) as number }
+      : team,
+  );
 }
 
 /**

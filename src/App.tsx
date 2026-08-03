@@ -105,6 +105,7 @@ function App() {
     picks,
     picksUnavailable,
     picksSettled,
+    oddsContext,
     snaps,
     usage,
     roles,
@@ -364,6 +365,7 @@ function App() {
                   initial={shared}
                   onChange={handleTradeChange}
                   droppedFromLink={seed.dropped}
+                  odds={oddsContext}
                   snaps={snaps}
                   usage={usage}
                   roles={roles}

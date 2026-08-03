@@ -8,6 +8,8 @@ import type { PlayerRole } from '../engine/role';
 import type { ActivityAdjustment } from '../engine/activityFactor';
 import { formatValue } from '../lib/format';
 import type { TradeSelection } from '../lib/share';
+import { withStrengths, type OddsContext } from '../engine/playoffOdds';
+import { usePlayoffOdds } from '../hooks/usePlayoffOdds';
 
 /**
  * A trade handed to the builder pre-filled — from the suggestion engine, so an
@@ -54,6 +56,15 @@ interface Props {
    * the trade that arrived, not the one on screen a dozen edits later.
    */
   droppedFromLink?: number;
+  /**
+   * Standings, remaining fixtures and the playoff cut.
+   *
+   * Undefined when the season cannot be simulated — no schedule, a platform
+   * that does not publish one, or an unknown week. The panel then reports value
+   * and lineup change and says nothing about the playoffs, which is exactly
+   * what it did before this existed.
+   */
+  odds?: OddsContext;
 }
 
 const toggle = (set: Set<string>, id: string): Set<string> => {
@@ -132,7 +143,90 @@ function CopyLink() {
   );
 }
 
-function SideSummary({ side }: { side: TradeSideResult }) {
+const pct = (odds: number): string => `${Math.round(odds * 100)}%`;
+
+/**
+ * What the trade does to this team's chances of making the playoffs.
+ *
+ * The one number on this panel that is a consequence rather than a valuation,
+ * and the reason it earns the space: "+312 starting lineup" is a quantity a
+ * manager has to interpret, and "34% to 51%" is not.
+ *
+ * A move smaller than a point is shown as no change rather than rounded into
+ * one. Ten thousand iterations puts the standard error near half a point, so a
+ * sub-point difference is the simulation's noise, and dressing it up as a
+ * result would be claiming precision the model does not have.
+ */
+function PlayoffOdds({
+  before,
+  after,
+  pending,
+}: {
+  before: number | undefined;
+  after: number | undefined;
+  pending: boolean;
+}) {
+  if (before === undefined) return null;
+
+  const settled = after !== undefined && !pending;
+  const points = settled ? Math.round(after * 100) - Math.round(before * 100) : 0;
+
+  return (
+    <div className="flex justify-between gap-4 border-t border-gray-200 pt-1">
+      <dt
+        className="text-gray-500"
+        title="Chance of making the playoffs, simulated over the rest of the regular season from each roster's best lineup. Ten thousand seasons, so the same trade always gives the same answer."
+      >
+        Playoff odds
+      </dt>
+      <dd className="tabular-nums">
+        {settled ? (
+          <>
+            <span className="text-gray-500">{pct(before)}</span>
+            <span className="mx-1 text-gray-400" aria-hidden="true">
+              →
+            </span>
+            <span
+              className={`font-semibold ${
+                points > 0
+                  ? 'text-fantasy-green'
+                  : points < 0
+                    ? 'text-fantasy-red'
+                    : ''
+              }`}
+            >
+              {pct(after)}
+            </span>
+            {points !== 0 && (
+              <span
+                className={`ml-1 text-xs ${
+                  points > 0 ? 'text-fantasy-green' : 'text-fantasy-red'
+                }`}
+              >
+                ({points > 0 ? '+' : ''}
+                {points})
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="text-gray-400">{pct(before)} …</span>
+        )}
+      </dd>
+    </div>
+  );
+}
+
+function SideSummary({
+  side,
+  oddsBefore,
+  oddsAfter,
+  oddsPending,
+}: {
+  side: TradeSideResult;
+  oddsBefore?: number;
+  oddsAfter?: number;
+  oddsPending: boolean;
+}) {
   return (
     <div className="min-w-0">
       <h4 className="truncate font-semibold">{side.teamName}</h4>
@@ -177,6 +271,7 @@ function SideSummary({ side }: { side: TradeSideResult }) {
             {formatValue(side.starterValueBefore)} → {formatValue(side.starterValueAfter)}
           </dd>
         </div>
+        <PlayoffOdds before={oddsBefore} after={oddsAfter} pending={oddsPending} />
       </dl>
 
       {side.warnings.length > 0 && (
@@ -203,6 +298,7 @@ export function TradeBuilder({
   initial,
   onChange,
   droppedFromLink,
+  odds,
   snaps,
   usage,
   roles,
@@ -281,6 +377,35 @@ export function TradeBuilder({
       ctx,
     );
   }, [anySelected, teamA, teamB, givesA, givesB, ctx]);
+
+  /**
+   * The league before and after the trade, as two scenarios to simulate.
+   *
+   * Both substitute, and that is the point. The obvious version leaves the
+   * "before" run on the strengths that arrived in `odds` and only replaces
+   * lineups in the "after" — but those two numbers come from different places.
+   * `odds.teams` carries `RosterSummary.starterValue`, while
+   * `starterValueBefore` is computed inside `evaluateTrade`. They ought to
+   * agree, and any day they did not the difference would surface as a phantom
+   * swing in the odds attributed to a trade that had not caused it.
+   *
+   * Taking both ends from the same `analysis` makes the delta mean exactly one
+   * thing: the trade, and nothing about how two parts of the engine round.
+   */
+  const scenarios = useMemo(() => {
+    if (!odds || !analysis) return { before: odds ?? null, after: null };
+
+    const at = (pick: (s: TradeSideResult) => number) =>
+      new Map(analysis.sides.map((side) => [side.rosterId, pick(side)]));
+
+    return {
+      before: { ...odds, teams: withStrengths(odds.teams, at((s) => s.starterValueBefore)) },
+      after: { ...odds, teams: withStrengths(odds.teams, at((s) => s.starterValueAfter)) },
+    };
+  }, [odds, analysis]);
+
+  const before = usePlayoffOdds(scenarios.before);
+  const after = usePlayoffOdds(scenarios.after);
 
   // Market value, to match the "Sends"/"Receives" figures in the verdict below —
   // both are the numbers the other manager will check.
@@ -425,8 +550,15 @@ export function TradeBuilder({
           <p className="mt-3 text-gray-700">{analysis.summary}</p>
 
           <div className="mt-5 grid gap-6 border-t border-gray-200 pt-5 sm:grid-cols-2">
-            <SideSummary side={analysis.sides[0]} />
-            <SideSummary side={analysis.sides[1]} />
+            {analysis.sides.map((side) => (
+              <SideSummary
+                key={side.rosterId}
+                side={side}
+                oddsBefore={before.odds?.get(side.rosterId)}
+                oddsAfter={after.odds?.get(side.rosterId)}
+                oddsPending={after.pending}
+              />
+            ))}
           </div>
         </div>
       ) : (
