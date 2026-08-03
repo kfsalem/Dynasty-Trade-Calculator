@@ -47,7 +47,12 @@ interface Props {
    * it.
    */
   onChange?: (trade: PendingTrade | null) => void;
-  /** How many assets a shared link named that its roster no longer holds. */
+  /**
+   * How many assets a shared link named that its roster no longer holds.
+   *
+   * Read once at mount, like `initial` and for the same reason: it describes
+   * the trade that arrived, not the one on screen a dozen edits later.
+   */
   droppedFromLink?: number;
 }
 
@@ -224,6 +229,18 @@ export function TradeBuilder({
     pickIds: new Set<string>(initial?.givesB.pickIds),
   });
 
+  /**
+   * The link's losses, retired at the first touch.
+   *
+   * Held here rather than read from the prop on every render because the notice
+   * speaks about the trade *as it arrived*. Once the user has moved an asset the
+   * trade is theirs, and a standing complaint about a link they have already
+   * edited past — or cleared outright — is a statement about something that is
+   * no longer on the screen. A fresh seed remounts this component and brings its
+   * own count, so nothing needs to be reset by hand.
+   */
+  const [dropped, setDropped] = useState(droppedFromLink ?? 0);
+
   const ctx: TradeContext = useMemo(
     () => ({ league, players, values, picks }),
     [league, players, values, picks],
@@ -274,9 +291,25 @@ export function TradeBuilder({
     return total;
   };
 
+  // Every edit below retires the shared-link notice, and only edits do — the
+  // mount-time report to `onChange` above must leave it standing, or a link
+  // would explain itself and be dismissed in the same commit.
+  function togglePlayer(side: 'a' | 'b', id: string) {
+    setDropped(0);
+    const set = side === 'a' ? setGivesA : setGivesB;
+    set((s) => ({ ...s, playerIds: toggle(s.playerIds, id) }));
+  }
+
+  function togglePick(side: 'a' | 'b', id: string) {
+    setDropped(0);
+    const set = side === 'a' ? setGivesA : setGivesB;
+    set((s) => ({ ...s, pickIds: toggle(s.pickIds, id) }));
+  }
+
   function changeTeam(side: 'a' | 'b', rosterId: number) {
     // Selections belong to the old roster; carrying them over would price
     // players the new team doesn't own.
+    setDropped(0);
     if (side === 'a') {
       setTeamA(rosterId);
       setGivesA({ playerIds: new Set(), pickIds: new Set() });
@@ -287,6 +320,7 @@ export function TradeBuilder({
   }
 
   function reset() {
+    setDropped(0);
     setGivesA({ playerIds: new Set(), pickIds: new Set() });
     setGivesB({ playerIds: new Set(), pickIds: new Set() });
   }
@@ -310,11 +344,11 @@ export function TradeBuilder({
         )}
       </div>
 
-      {droppedFromLink !== undefined && droppedFromLink > 0 && (
+      {dropped > 0 && (
         <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          {droppedFromLink === 1 ? 'One asset' : `${droppedFromLink} assets`} in that link{' '}
-          {droppedFromLink === 1 ? 'is' : 'are'} no longer on the roster that was sending{' '}
-          {droppedFromLink === 1 ? 'it' : 'them'}, so {droppedFromLink === 1 ? 'it has' : 'they have'}{' '}
+          {dropped === 1 ? 'One asset' : `${dropped} assets`} in that link{' '}
+          {dropped === 1 ? 'is' : 'are'} no longer on the roster that was sending{' '}
+          {dropped === 1 ? 'it' : 'them'}, so {dropped === 1 ? 'it has' : 'they have'}{' '}
           been left out. The trade below is not quite the one that was shared.
         </p>
       )}
@@ -336,10 +370,8 @@ export function TradeBuilder({
           picks={picks}
           selectedPlayerIds={givesA.playerIds}
           selectedPickIds={givesA.pickIds}
-          onTogglePlayer={(id) =>
-            setGivesA((s) => ({ ...s, playerIds: toggle(s.playerIds, id) }))
-          }
-          onTogglePick={(id) => setGivesA((s) => ({ ...s, pickIds: toggle(s.pickIds, id) }))}
+          onTogglePlayer={(id) => togglePlayer('a', id)}
+          onTogglePick={(id) => togglePick('a', id)}
           outgoingValue={sumValue(givesA.playerIds, givesA.pickIds)}
           snaps={snaps}
           usage={usage}
@@ -358,10 +390,8 @@ export function TradeBuilder({
           picks={picks}
           selectedPlayerIds={givesB.playerIds}
           selectedPickIds={givesB.pickIds}
-          onTogglePlayer={(id) =>
-            setGivesB((s) => ({ ...s, playerIds: toggle(s.playerIds, id) }))
-          }
-          onTogglePick={(id) => setGivesB((s) => ({ ...s, pickIds: toggle(s.pickIds, id) }))}
+          onTogglePlayer={(id) => togglePlayer('b', id)}
+          onTogglePick={(id) => togglePick('b', id)}
           outgoingValue={sumValue(givesB.playerIds, givesB.pickIds)}
           snaps={snaps}
           usage={usage}
