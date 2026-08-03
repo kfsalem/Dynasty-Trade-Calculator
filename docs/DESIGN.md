@@ -1606,9 +1606,15 @@ it could not stand in for FantasyCalc if it wanted to.
 A risk register describing a safety net nobody built is worse than one that
 leaves the box empty, because the empty box gets filled. What exists now is the
 cache fallback: a failed refresh serves the last good copy rather than throwing,
-which converts an outage from a dead app into stale numbers. A genuine second
-source for player values is still absent, and is still the right answer if this
-risk is ever taken seriously.
+which converts an outage from a dead app into stale numbers.
+
+That covers a bad ten minutes for a returning user, and nothing else — a first
+visit during an outage has nothing to serve, and shape drift fails loudly at the
+Zod boundary, which is correct and also terminal. A genuine second source is
+still the right answer and is tracked as
+[#43](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/43), where the
+hard part is named: two markets have to land on one scale before either can be
+compared, and the win-now split depends on that scale holding.
 
 ## 9. Where the product stands
 
