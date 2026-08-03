@@ -1293,6 +1293,78 @@ including the two halves that must not move together: an injured player is out o
 this season's lineup and still in the three-year projection, because a torn ACL
 this August is not a fact about 2029.
 
+**A trade you can paste into the group chat.** *(2026-08-03, closes #12)*
+
+Trades are argued in league chats, and until now the app could only be described
+there in words. A proposal is nothing but a league, two roster ids and four lists
+of asset ids, so the encoding was never the hard part — the hard part is that a
+link is opened later, by someone else, against a roster that may have changed.
+
+**Seven query parameters, not one opaque blob.** `?l=…&a=…&b=…&ap=…&ak=…&bp=…&bk=…`,
+lists joined on `_` because it is one of the few characters `URLSearchParams`
+leaves alone; a comma comes back as `%2C` and turns a shareable link into an
+eyesore. Base64 of a JSON object was the obvious alternative and loses on both
+counts that matter: it is **260 characters against 109** for the same trade, and
+it cannot be read in an address bar when somebody reports that a link "opened the
+wrong trade". Players and picks stay in separate parameters rather than one list
+split by shape on arrival — telling them apart by hyphen works today, and makes
+the format depend on a coincidence of two id schemes this app does not own.
+
+**The URL is the state, not a copy of it.** The builder reports its selection
+upward on every edit and `App` writes it with `replaceState` — `pushState` would
+turn the back button into an undo history nobody asked for. Writing the link only
+behind the copy button was the tempting shortcut and the wrong one: people copy
+from the address bar out of habit, and a URL that silently lagged the page would
+send someone the wrong offer.
+
+Making the URL authoritative collapsed the seeding machinery rather than adding
+to it. `pending: {trade, seq}` is gone; there is one `shared` trade that the
+address bar, the builder's seed and the suggestion hand-off all read, plus a
+`seedSeq` that exists only to force a remount when a trade arrives from outside.
+A fix fell straight out: switching to the Rosters tab and back **used to discard
+whatever you were building**, because the builder unmounts and re-read a seed
+that was only ever the last suggestion. It now re-reads the live trade.
+
+**Three ways a link can be wrong, and only one of them could crash.**
+
+1. **A roster id this league does not have.** `buildSide` throws on one, so a
+   hand-edited `?a=99` would take the render down rather than show a slightly
+   wrong trade. Checked before the trade is handed to the builder; the page then
+   opens normally with an empty calculator.
+2. **An asset the sending roster no longer holds.** Rosters move, and
+   `evaluateTrade` would quietly drop the missing ids and price what was left —
+   a different offer under the same URL, with nothing on the page to say so. The
+   count is surfaced: *"One asset in that link is no longer on the roster that
+   was sending it."* Membership is checked per side rather than league-wide,
+   because the asset picker only ever shows a roster its own players, so an id
+   belonging to the opponent would price into the totals while appearing nowhere
+   in the two columns above them.
+3. **Truncated or hand-edited generally.** Chat clients stop URLs at punctuation.
+   Every such failure has the same answer — ignore the trade, open the app — and
+   nothing in the decoder throws.
+
+**The bug the unit tests could not have found, and the browser found in one
+click.** Pick values load in their own query, so `picks` is empty for a moment
+after the league arrives. Resolving the link in that window dropped **every
+traded pick** out of the trade and then told the recipient those picks were no
+longer on the roster — a false statement produced entirely by asking the question
+too early. `picks` is `[]` both before the values load and when a league genuinely
+has none, which is why the hook now publishes `picksSettled` rather than leaving
+consumers to guess which empty array they are looking at. Fifteen tests cover the
+encoder, the decoder and the resolver, and not one of them could see this: the
+race is in the wiring rather than in the logic.
+
+**Link previews are static, and necessarily so.** The issue pairs permalinks with
+an OG image, and a card describing the *specific* trade cannot be built here — a
+scraper reads the HTML exactly as served, without running JavaScript, so every
+trade link previews identically no matter what the page later draws. Per-trade
+cards need a server, which §3.1 rules out for v1. `index.html` gets honest static
+tags — "a trade calculator that knows your league", plus an instruction to open
+the link — rather than a card naming two players it might not contain. Fixed
+alongside: the favicon was `/vite.svg`, root-absolute on a site served from a
+project subpath, so it has been 404ing in production, and in every link preview,
+since Phase 0.
+
 ### Phase 5 — Scale out
 - MFL + Fleaflicker providers
 - Real accounts (Supabase) *if and only if* cross-device sync is actually wanted

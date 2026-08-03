@@ -248,6 +248,16 @@ export function useLeagueSummaries(leagueId: string | null) {
     summaries,
     picks,
     picksUnavailable: pickValuesQuery.isError,
+    /**
+     * Whether the pick query has finished, either way.
+     *
+     * `picks` is an empty array both before the values arrive and when a league
+     * genuinely has none, and a consumer that must not confuse the two needs to
+     * be told which it is looking at. A shared link is exactly that consumer:
+     * validating its pick ids against a list that has not loaded yet silently
+     * discards every one of them.
+     */
+    picksSettled: pickValuesQuery.isSuccess || pickValuesQuery.isError,
     snaps,
     usage,
     roles,

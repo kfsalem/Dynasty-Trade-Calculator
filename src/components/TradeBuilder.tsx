@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { DraftPick, League, Player, PlayerValue, Position, TradeSideResult } from '../types';
 import { evaluateTrade, FAIRNESS_LABEL, type TradeContext } from '../engine/trade';
 import { AssetPicker } from './AssetPicker';
@@ -7,17 +7,16 @@ import type { Opportunity } from '../engine/opportunity';
 import type { PlayerRole } from '../engine/role';
 import type { ActivityAdjustment } from '../engine/activityFactor';
 import { formatValue } from '../lib/format';
+import type { TradeSelection } from '../lib/share';
 
 /**
- * A trade handed to the builder pre-filled — currently from the suggestion
- * engine, so an idea can be inspected and edited rather than only read.
+ * A trade handed to the builder pre-filled — from the suggestion engine, so an
+ * idea can be inspected and edited rather than only read, or from a shared link.
+ *
+ * The shape lives in `lib/share` because that is what a permalink encodes, and
+ * one definition beats two that must agree.
  */
-export interface PendingTrade {
-  teamA: number;
-  teamB: number;
-  givesA: { playerIds: string[]; pickIds: string[] };
-  givesB: { playerIds: string[]; pickIds: string[] };
-}
+export type PendingTrade = TradeSelection;
 
 interface Props {
   league: League;
@@ -40,6 +39,16 @@ interface Props {
    * read once — after that the selections belong to the user.
    */
   initial?: PendingTrade | null;
+  /**
+   * Reports the current selection so the parent can keep it in the URL.
+   *
+   * Null when nothing is selected, which is what clears the trade out of the
+   * address bar again — a link is only worth having while there is a trade in
+   * it.
+   */
+  onChange?: (trade: PendingTrade | null) => void;
+  /** How many assets a shared link named that its roster no longer holds. */
+  droppedFromLink?: number;
 }
 
 const toggle = (set: Set<string>, id: string): Set<string> => {
@@ -61,6 +70,60 @@ function VorsBadge({ delta }: { delta: number }) {
       {positive ? '+' : ''}
       {formatValue(delta)}
     </span>
+  );
+}
+
+/**
+ * Copy the current address, which is the trade.
+ *
+ * The button exists even though the URL is already correct in the address bar,
+ * because on a phone the address bar is half-hidden and selecting it is
+ * fiddly — and a trade gets discussed in a league group chat, on a phone, far
+ * more often than anywhere else.
+ *
+ * `navigator.clipboard` needs a secure context and a permission that can be
+ * refused, so the failure path shows the link instead of insisting. Falling
+ * back to a `document.execCommand` trick would be the other option; showing
+ * someone the thing they asked for is less clever and never breaks.
+ */
+function CopyLink() {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+
+  useEffect(() => {
+    if (state !== 'copied') return;
+    const timer = setTimeout(() => setState('idle'), 2000);
+    return () => clearTimeout(timer);
+  }, [state]);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setState('copied');
+    } catch {
+      setState('failed');
+    }
+  }
+
+  return (
+    <div className="flex flex-col">
+      <button
+        type="button"
+        onClick={copy}
+        className="btn-secondary text-sm"
+        title="Copies a link to this exact trade. Anyone who opens it gets the league loaded and both sides filled in."
+      >
+        {state === 'copied' ? 'Link copied' : 'Copy link'}
+      </button>
+      {state === 'failed' && (
+        <input
+          readOnly
+          value={window.location.href}
+          onFocus={(e) => e.currentTarget.select()}
+          aria-label="Link to this trade"
+          className="mt-2 w-64 max-w-full rounded-lg border border-gray-300 px-2 py-1 text-xs text-gray-600"
+        />
+      )}
+    </div>
   );
 }
 
@@ -133,6 +196,8 @@ export function TradeBuilder({
   picksUnavailable,
   myRosterId,
   initial,
+  onChange,
+  droppedFromLink,
   snaps,
   usage,
   roles,
@@ -167,6 +232,29 @@ export function TradeBuilder({
   const anySelected =
     givesA.playerIds.size + givesA.pickIds.size + givesB.playerIds.size + givesB.pickIds.size >
     0;
+
+  // Publish the selection upward so the address bar always describes what is on
+  // screen. Doing this only behind the copy button was the tempting shortcut and
+  // the wrong one: people copy from the address bar out of habit, and a URL that
+  // silently lagged the page would send someone the wrong offer.
+  useEffect(() => {
+    onChange?.(
+      anySelected
+        ? {
+            teamA,
+            teamB,
+            givesA: {
+              playerIds: [...givesA.playerIds],
+              pickIds: [...givesA.pickIds],
+            },
+            givesB: {
+              playerIds: [...givesB.playerIds],
+              pickIds: [...givesB.pickIds],
+            },
+          }
+        : null,
+    );
+  }, [anySelected, teamA, teamB, givesA, givesB, onChange]);
 
   const analysis = useMemo(() => {
     if (!anySelected) return null;
@@ -213,11 +301,23 @@ export function TradeBuilder({
           </p>
         </div>
         {anySelected && (
-          <button type="button" onClick={reset} className="btn-secondary text-sm">
-            Clear
-          </button>
+          <div className="flex items-start gap-2">
+            <CopyLink />
+            <button type="button" onClick={reset} className="btn-secondary text-sm">
+              Clear
+            </button>
+          </div>
         )}
       </div>
+
+      {droppedFromLink !== undefined && droppedFromLink > 0 && (
+        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          {droppedFromLink === 1 ? 'One asset' : `${droppedFromLink} assets`} in that link{' '}
+          {droppedFromLink === 1 ? 'is' : 'are'} no longer on the roster that was sending{' '}
+          {droppedFromLink === 1 ? 'it' : 'them'}, so {droppedFromLink === 1 ? 'it has' : 'they have'}{' '}
+          been left out. The trade below is not quite the one that was shared.
+        </p>
+      )}
 
       {picksUnavailable && (
         <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">

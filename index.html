@@ -2,13 +2,42 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <!-- Relative on purpose. The site is served from a project subpath, so a
+         root-absolute "/vite.svg" resolves off the app entirely and 404s in
+         production — including in the link previews below. -->
+    <link rel="icon" type="image/svg+xml" href="./vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
       content="A dynasty fantasy football utility that knows your league: trade calculator, roster analysis, and trade suggestions."
     />
     <title>Dynasty Utility</title>
+
+    <!--
+      Link previews, for the group chat a shared trade gets pasted into.
+
+      Static, and necessarily so. A card describing the *specific* trade in the
+      URL would have to be rendered somewhere a scraper can reach without
+      running JavaScript, and this app has no backend to render it in — Slack,
+      iMessage and Facebook all read the HTML exactly as served, so every trade
+      link previews identically no matter what the page later draws. Calling it
+      a trade proposal is honest; naming two players it might not contain is
+      not.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Dynasty Utility" />
+    <meta property="og:title" content="A trade calculator that knows your league" />
+    <meta
+      property="og:description"
+      content="Every roster valued against your league's real lineup settings, not generic dynasty rankings. Open the link to see the trade."
+    />
+    <meta property="og:url" content="https://kfsalem.github.io/Dynasty-Trade-Calculator/" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="A trade calculator that knows your league" />
+    <meta
+      name="twitter:description"
+      content="Every roster valued against your league's real lineup settings, not generic dynasty rankings. Open the link to see the trade."
+    />
   </head>
   <body>
     <div id="root"></div>
