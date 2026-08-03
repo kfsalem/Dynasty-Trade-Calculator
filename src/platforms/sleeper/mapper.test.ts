@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { mapLeague, mapPlayer, mapSettings } from './mapper';
+import { mapLeague, mapMatchups, mapPlayer, mapSettings } from './mapper';
 import { parseLeagueId, type SlimPlayer } from './client';
-import type { SleeperLeague, SleeperRoster, SleeperUser } from './schema';
+import type {
+  SleeperLeague,
+  SleeperMatchup,
+  SleeperRoster,
+  SleeperUser,
+} from './schema';
 
 const baseLeague: SleeperLeague = {
   league_id: '123',
@@ -157,5 +162,68 @@ describe('parseLeagueId', () => {
   it('rejects input with no id in it', () => {
     expect(parseLeagueId('my league')).toBeNull();
     expect(parseLeagueId('')).toBeNull();
+  });
+});
+
+describe('mapSettings — playoffs', () => {
+  it('reads when the playoffs start and how many teams make them', () => {
+    const settings = mapSettings({
+      ...baseLeague,
+      settings: { ...baseLeague.settings, playoff_week_start: 14, playoff_teams: 4 },
+    });
+    expect(settings.playoffWeekStart).toBe(14);
+    expect(settings.playoffTeams).toBe(4);
+  });
+
+  it("falls back to Sleeper's defaults when the league does not say", () => {
+    const settings = mapSettings(baseLeague);
+    expect(settings.playoffWeekStart).toBe(15);
+    expect(settings.playoffTeams).toBe(6);
+  });
+});
+
+describe('mapMatchups', () => {
+  const row = (roster_id: number, matchup_id: number | null): SleeperMatchup => ({
+    roster_id,
+    matchup_id,
+    points: 0,
+  });
+
+  it('pairs the two rosters that share a matchup id', () => {
+    // Sleeper publishes no schedule; a fixture *is* two rows with one id.
+    const fixtures = mapMatchups(3, [row(1, 1), row(4, 2), row(2, 1), row(3, 2)]);
+
+    expect(fixtures).toEqual([
+      { week: 3, rosterIds: [1, 2] },
+      { week: 3, rosterIds: [3, 4] },
+    ]);
+  });
+
+  it('stamps every fixture with the week it was asked for', () => {
+    expect(mapMatchups(11, [row(1, 1), row(2, 1)])[0].week).toBe(11);
+  });
+
+  it('drops a roster with no fixture rather than inventing an opponent', () => {
+    // An odd number of teams leaves someone out, and a null matchup_id is
+    // Sleeper saying so. A phantom game would be played in the simulation.
+    const fixtures = mapMatchups(1, [row(1, 1), row(2, 1), row(3, null)]);
+    expect(fixtures).toEqual([{ week: 1, rosterIds: [1, 2] }]);
+  });
+
+  it('drops a group that is not a clean pair', () => {
+    // Three rosters on one id is not something Sleeper should produce, and
+    // guessing which two play would put a game in that nobody scheduled.
+    expect(mapMatchups(1, [row(1, 1), row(2, 1), row(3, 1)])).toEqual([]);
+  });
+
+  it('returns nothing for a week that has not been scheduled', () => {
+    expect(mapMatchups(17, [])).toEqual([]);
+  });
+
+  it('orders fixtures the same way every time', () => {
+    // The simulation is seeded, and a stable input is half of reproducible.
+    const one = mapMatchups(1, [row(3, 2), row(1, 1), row(4, 2), row(2, 1)]);
+    const two = mapMatchups(1, [row(1, 1), row(2, 1), row(3, 2), row(4, 2)]);
+    expect(one).toEqual(two);
   });
 });
