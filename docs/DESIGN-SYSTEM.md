@@ -189,10 +189,24 @@ behaviour is ahead of the colour.
 
 ## 7. Claude skills
 
-`.claude/skills/frontend-design/SKILL.md` carries the enforceable subset of this
+`.claude/skills/design-system/SKILL.md` carries the enforceable subset of this
 document: the tokens, the two obliged rules, and the do-not list. It is checked
 in, so it applies to anyone working in the repo rather than living in one
-person's memory.
+person's memory. **It is authoritative** — see `.claude/skills/README.md` for
+the full roster and precedence order.
+
+Three general design skills are vendored alongside it from
+[anthropics/skills](https://github.com/anthropics/skills) (Apache-2.0):
+`frontend-design` for aesthetic direction on new surfaces, `webapp-testing` for
+Playwright viewport and interaction checks, and `web-artifacts-builder` for
+standalone artifacts built *beside* the project rather than inside it.
+[Impeccable](https://github.com/pbakaus/impeccable) is installed as a plugin.
+
+**Where the general skills stop.** They know nothing about this app. The
+position palette here is validated, not chosen — restyling QB back to blue on
+aesthetic grounds reintroduces a measured colourblindness failure. The register
+is settled. Use the general skills for layout ideation, copy, motion and
+critique; not to relitigate §4.
 
 **Charts do not get a bespoke skill.** Claude Code ships a `dataviz` skill whose
 method is design-system-agnostic and whose non-negotiables already match what

@@ -1,128 +1,55 @@
 ---
 name: frontend-design
-description: The design system for this app — tokens, position colours, density, light/dark rules. Load BEFORE styling or restyling any component, adding or changing a colour, picking a Tailwind utility for text/background/border, building a chart or bar, adding dark-mode support, or writing anything in src/index.css or src/lib/format.ts. Triggers on "style", "restyle", "colour/color", "palette", "theme", "dark mode", "token", "spacing", "typography", "chart", "make it look".
+description: Guidance for distinctive, intentional visual design when building new UI or reshaping an existing one. Helps with aesthetic direction, typography, and making choices that don't read as templated defaults.
+license: Complete terms in LICENSE.txt
 ---
 
-# Frontend design
+# Frontend Design
 
-Full rationale: `docs/DESIGN-SYSTEM.md`. This file is the enforceable subset —
-what to do, and what never to do.
+Approach this as the design lead at a small studio known for giving every client a visual identity that could not be mistaken for anyone else's. This client has already rejected proposals that felt templated, and is paying for a distinctive point of view: make deliberate, opinionated choices about palette, typography, and layout that are specific to this brief, and take one real aesthetic risk you can justify.
 
-## The one-line register
+## Ground it in the subject
 
-**Loud with type and scale. Disciplined with hue.**
+If the brief does not pin down what the product or subject is, pin it yourself before designing: name one concrete subject, its audience, and the page's single job, and state your choice. If there's any information in your memory about the human's preferences, context about what they're building, or designs you've made before – use that as a hint. The subject's own world, its materials, instruments, artifacts, and vernacular, is where distinctive choices come from. Build with the brief's real content and subject matter throughout.
 
-Weight, size and fill are free. Hue is not: every colour in the data layer has a
-fixed meaning, listed below. If you are reaching for a colour to make something
-look nicer, use weight or size instead.
+## Design principles
 
-## Tokens — use these, never raw utilities
+For web designs, the hero is a thesis. Open with the most characteristic thing in the subject's world, in whatever form makes sense for it: a headline, an image, an animation, a live demo, an interactive moment. Be deliberate with your choice: a big number with a small label, supporting stats, and a gradient accent is the template answer, only use if that's truly the best option.
 
-Never write `text-gray-500`, `bg-white`, `border-gray-200`, or any raw
-`{bg,text,border}-{hue}-{step}` utility in a component. Use the semantic token.
+Typography carries the personality of the page. Pair the display and body faces deliberately, not the same families you would reach for on any other project, and set a clear type scale with intentional weights, widths, and spacing. Make the type treatment itself a memorable part of the design, not a neutral delivery vehicle for the content.
 
-| token | role |
-|---|---|
-| `--color-ink` / `-muted` / `-subtle` | text, three levels |
-| `--color-surface` / `-raised` / `-page` | backgrounds |
-| `--color-border` / `-strong` | hairlines |
-| `--color-accent` | interactive: links, focus, selected tab |
-| `--color-positive` / `-negative` / `-caution` | status only |
+Structure is information. Structural devices, numbering, eyebrows, dividers, labels, should encode something true about the content, not decorate it. Many generic designs use numbered markers (01 / 02 / 03), but that's only appropriate if the content actually is a sequence - like a real process or a typed timeline where order carries information the reader needs. Question if choices like numbered markers actually make sense before incorporating them.
 
-Status colours are **reserved**: never a category, never a series, never
-decoration.
+Leverage motion deliberately. Think about where and if animation can serve the subject: a page-load sequence, a scroll-triggered reveal, hover micro-interactions, ambient atmosphere. An orchestrated moment usually lands harder than scattered effects; choose what the direction calls for. However, sometimes less is more, and extra animation contributes to the feeling that the design is AI-generated.
 
-## Position colours — fixed, validated, do not improvise
+Match complexity to the vision. Maximalist directions need elaborate execution; minimal directions need precision in spacing, type, and detail. Elegance is executing the chosen vision well.
 
-| position | light | dark |
-|---|---|---|
-| QB | `#0ea5e9` sky-500 | `#0284c7` sky-600 |
-| RB | `#10b981` emerald-500 | `#059669` emerald-600 |
-| WR | `#f59e0b` amber-500 | `#d97706` amber-600 |
-| TE | `#8b5cf6` violet-500 | `#7c3aed` violet-600 |
-| K / DEF | `--color-subtle` | `--color-subtle` |
+Consider written content carefully. Often a design brief may not contain real content, and it's up to you to come up with copy. Copy can make a design feel as templated as the design itself. See the below section on writing for more guidance.
 
-Fixed order QB → RB → WR → TE. Never cycled, never reassigned by rank or by
-filter state. K/DEF are grey because they are excluded from the maths (#10) —
-they are an absence, not a fifth colour.
+## Process: brainstorm, explore, plan, critique, build, critique again
 
-**QB is sky, not blue.** Blue-500 and violet-500 are ΔE 1.3 apart under
-deuteranopia — indistinguishable for red-green colourblind users. Do not "fix"
-QB back to blue.
+For calibration: AI-generated design right now clusters around three looks: (1) a warm cream background (near #F4F1EA) with a high-contrast serif display and a terracotta accent; (2) a near-black background with a single bright acid-green or vermilion accent; (3) a broadsheet-style layout with hairline rules, zero border-radius, and dense newspaper-like columns. All three are legitimate for some briefs, but they are defaults rather than choices, and they appear regardless of subject. Where the brief pins down a visual direction, follow it exactly — the brief's own words always win, including when it asks for one of these looks. Where it leaves an axis free, don't spend that freedom on one of these defaults. Just like a human designer who's hired, there's often a careful balance between doing what you're good at and taking each project as a chance to experiment and learn.
 
-## Two rules that are not optional
+Work in two passes. First, brainstorm a short design plan based on the human's design brief: create a compact token system with color, type, layout, and signature. Color: describe the palette as 4–6 named hex values. Type: the typefaces for 2+ roles (a characterful display face that's used with restraint, a complementary body face, and a utility face for captions or data if needed). Layout: a layout concept, using one-sentence prose descriptions and ASCII wireframes to ideate and compare. Signature: the single unique element this page will be remembered by that embodies the brief in an appropriate way.
 
-The palette passes validation *conditionally*. These are the conditions.
+Then review that plan against the brief before building: if any part of it reads like the generic default you would produce for any similar page (work through a similar prompt to see if you arrive somewhere similar) rather than a choice made for this specific brief — revise that part, say what you changed and why. Only after you've confirmed the relative uniqueness of your design plan should you start to write the code, following the revised plan exactly and deriving every color and type decision from it.
 
-1. **Every coloured mark carries a text label.** Position chips show `QB`, `RB`,
-   `WR`, `TE`. Never drop the letters and rely on colour — in light mode these
-   colours sit below 3:1 against the surface and the label is what makes them
-   legal.
-2. **Stacked segments get a 2px gap in the surface colour.** Amber↔emerald is
-   ΔE 7.9 in dark mode, which is legal only with secondary encoding. This
-   applies to the roster team-strength bar and every stacked bar after it.
+When writing the code, be careful of structuring your CSS selector specificities. It's easy to generate CSS classes that cancel each other out (especially with a type-based selector like .section and a element-based selector like .cta). This can happen often with paddings/margins between sections.
 
-## Layout
+Try to do a lot of this planning and iteration in your thinking, and only show ideas to the user when you have higher confidence it'll delight them.
 
-- Container `max-w-6xl` (1152px). Not `max-w-4xl` — it truncates player names on
-  a 1440px screen.
-- Data text 13px, meta 12px, row padding 8px vertical. Compact is deliberate: a
-  17-row roster should fit.
-- **Tabular figures** (`font-variant-numeric: tabular-nums`) on every column of
-  numbers.
+## Restraint and self-critique
 
-## Light and dark
+Spend your boldness in one place. Let the signature element be the one memorable thing, keep everything around it quiet and disciplined, and cut any decoration that does not serve the brief. Not taking a risk can be a risk itself! Build to a quality floor without announcing it: responsive down to mobile, visible keyboard focus, reduced motion respected. Critique your own work as you build, taking screenshots if your environment supports it – a picture is worth 1000 tokens. Consider Chanel's advice: before leaving the house, take a look in the mirror and remove one accessory. Human creators have memory and always try to do something new, so if you have a space to quickly jot down notes about what you've tried, it can help you in future passes.
 
-Every token needs both values. Dark is **selected**, not computed — never an
-automatic inversion, never `filter: invert`. Honour `prefers-color-scheme` plus
-the manual toggle.
+## More on writing in design
 
-Surfaces: light page `#f9fafb` / surface `#ffffff`; dark page `#0f1115` /
-surface `#16181d`.
+Words appear in a design for one reason: to make it easier to understand, and therefore easier to use. They are design material, not decoration. Bring the same intentionality to copy that you would bring to spacing and color. Before writing anything, ask what the design needs to say, and how it can best be said to help the person navigate the experience.
 
-## Charts
+Write from the end user's side of the screen. Name things by what people control and recognize, never by how the system is built. A person manages notifications, not webhook config. Describe what something does in plain terms rather than selling it. Being specific is always better than being clever.
 
-Load the built-in **`dataviz`** skill. Do not hand-roll chart colour, and do not
-write a bespoke chart skill — `dataviz` is design-system-agnostic and takes this
-system's values as parameters:
+Use active voice as default. A control should say exactly what happens when it's used: "Save changes," not "Submit." An action keeps the same name through the whole flow, so the button that says "Publish" produces a toast that says "Published." The vocabulary of an interface is the signposting for someone navigating the product. Cohesion and consistency are how people learn their way around.
 
-- categorical order: QB, RB, WR, TE (above)
-- sequential: single hue, the sky ramp, light→dark
-- diverging: emerald ↔ red, **neutral grey midpoint**, never a hue in the middle
-- surfaces: `#ffffff` light, `#16181d` dark
+Treat failure and emptiness as moments for direction, not mood. Explain what went wrong and how to fix it, in the interface's voice rather than a person's. Errors don't apologize, and they are never vague about what happened. An empty screen is an invitation to act.
 
-**One axis. Never a dual-axis chart.** Dynasty and win-now are the standing
-temptation — they are two bars or two charts, never two y-scales on one plot.
-
-## Accessibility — non-negotiable
-
-- WCAG AA both themes: text ≥ 4.5:1, large text and UI ≥ 3:1.
-- **Never colour alone.** Gain/loss carries a sign or arrow. Status carries a
-  word. Position carries its letters.
-- Visible focus ring on every interactive element, both themes.
-- Touch targets ≥ 44px.
-- Respect `prefers-reduced-motion`.
-
-The app already has a real tablist with roving `tabIndex` and arrow-key
-navigation. Do not regress that when restyling — if you declare a role,
-implement its keyboard contract.
-
-## Before changing any colour
-
-```
-node scripts/validate_palette.js "<hex,hex,…>" --mode light --pairs all --surface "#ffffff"
-node scripts/validate_palette.js "<hex,hex,…>" --mode dark  --pairs all --surface "#16181d"
-```
-
-from the `dataviz` skill directory. **Run it. Do not reason about ΔE.** Needs
-Node 20.12+.
-
-## Do not
-
-- Add a colour utility that is not a token.
-- Reuse a status colour as a category.
-- Add a second icon library. (Both `@heroicons/react` and `lucide-react` were
-  dependencies with zero imports; if you need icons, pick one and use it.)
-- Re-add the Google Fonts `@import`. Inter is self-hosted.
-- Recreate `.player-card`, or add a second card style.
-- Use `shadow-lg` as the default card treatment — borders and a small radius.
+Keep the register conversational and tuned: plain verbs, sentence case, no filler, with tone matched to the brand and the audience. Let each element do exactly one job. A label labels, an example demonstrates, and nothing quietly does double duty.
