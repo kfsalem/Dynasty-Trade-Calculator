@@ -111,7 +111,17 @@ Sleeper-keyed JSON as static assets — so the app stays backend-free. See
 
 ## Development
 
-Requires Node 20.19+ (Vite 7).
+Requires Node `^20.19 || >=22.12` (Vite 7). `.nvmrc` pins 22, and CI reads that
+same file, so local and CI cannot drift apart. With `nvm` or `fnm`:
+
+```bash
+nvm use     # or: fnm use
+```
+
+The requirement is enforced rather than documented: `engines` in `package.json`
+plus `engine-strict` in `.npmrc` means a wrong version fails at `npm install`
+with the version it wanted, instead of surfacing later as
+`TypeError: crypto.hash is not a function` when Vite starts.
 
 ```bash
 npm install
