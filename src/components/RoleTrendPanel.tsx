@@ -55,27 +55,27 @@ function TrendRow({
       <div className="min-w-0 flex-1">
         <div className="truncate">
           {trend.player.name}
-          <span className="ml-1.5 text-xs text-gray-400">{teamName}</span>
+          <span className="ml-1.5 text-xs text-subtle">{teamName}</span>
         </div>
-        <div className="text-xs text-gray-500">
+        <div className="text-xs text-subtle">
           {evidence(trend)}
           {/* Never hidden, and never silently down-ranked into invisibility: a
               three-game trend is worth reading with the caveat attached, and
               worth nothing without it. */}
           {trend.thin && (
-            <span className="ml-1 font-medium text-amber-700">· short window</span>
+            <span className="ml-1 font-medium text-caution">· short window</span>
           )}
         </div>
         {/* The reason the row cleared the gate, not decoration. Without it the
             list reads as "these players' usage moved", which is the claim that
             put the second-most-expensive asset in dynasty at the top of a
             buy-low list. */}
-        <div className="text-xs text-gray-400">{mispricing(trend, rising)}</div>
+        <div className="text-xs text-subtle">{mispricing(trend, rising)}</div>
       </div>
 
       <span
         className={`shrink-0 tabular-nums text-sm font-semibold ${
-          rising ? 'text-emerald-600' : 'text-fantasy-red'
+          rising ? 'text-positive' : 'text-fantasy-red'
         }`}
       >
         {rising ? '+' : '−'}
@@ -97,12 +97,12 @@ function TrendList({
 }) {
   return (
     <div>
-      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500">{title}</h4>
-      <p className="mt-1 text-sm text-gray-500">{blurb}</p>
+      <h4 className="text-xs font-semibold uppercase tracking-wide text-subtle">{title}</h4>
+      <p className="mt-1 text-sm text-subtle">{blurb}</p>
       {trends.length === 0 ? (
-        <p className="mt-3 text-sm text-gray-400">{empty}</p>
+        <p className="mt-3 text-sm text-subtle">{empty}</p>
       ) : (
-        <ul className="mt-2 divide-y divide-gray-100 text-sm">
+        <ul className="mt-2 divide-y divide-line text-sm">
           {trends.map((trend) => (
             <TrendRow
               key={trend.player.id}
@@ -142,7 +142,7 @@ export function RoleTrendPanel({
   return (
     <section className="card">
       <h3 className="text-lg font-semibold tracking-tight">Role trends</h3>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-subtle">
         The market reprices a role change slowly, so the gap between what a player costs and
         what his current role is worth is the edge. Two things have to be true: his role
         moved, and the role he moved to is not already in his price. Ranked by that gap in
@@ -154,7 +154,7 @@ export function RoleTrendPanel({
           reader who mistakes it for one already applied would double-count it
           in exactly the way the season gate exists to prevent. */}
       {!trends.applied && (
-        <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p className="mt-2 rounded border border-caution bg-caution-soft px-3 py-2 text-sm text-caution">
           Preview{season ? ` of the ${season} season` : ''}. These moves are real, but the
           market has had all offseason to price them, so none of it is applied to any value
           on this page. The adjustment resumes once the season being played has data.

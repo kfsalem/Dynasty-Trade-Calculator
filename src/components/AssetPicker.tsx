@@ -48,11 +48,11 @@ interface Props {
 function ValuePair({ market, league }: { market: number; league: number }) {
   return (
     <span className="flex shrink-0 items-baseline justify-end gap-2 tabular-nums">
-      <span className="w-12 text-right text-gray-500" title="Market value">
+      <span className="w-12 text-right text-subtle" title="Market value">
         {formatValue(market)}
       </span>
       <span
-        className="w-12 text-right text-xs font-semibold text-primary-600"
+        className="w-12 text-right text-xs font-semibold text-accent"
         title="Value over replacement in this league"
       >
         {formatValue(league)}
@@ -89,7 +89,7 @@ export function AssetPicker({
 
   return (
     <div className="card !p-0 flex min-w-0 flex-col overflow-hidden">
-      <div className="border-b border-gray-200 p-4">
+      <div className="border-b border-line p-4">
         <label className="sr-only" htmlFor={`team-${rosterId}`}>
           Team
         </label>
@@ -97,7 +97,7 @@ export function AssetPicker({
           id={`team-${rosterId}`}
           value={rosterId}
           onChange={(e) => onRosterChange(Number(e.target.value))}
-          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-semibold outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200"
+          className="w-full rounded-lg border border-control bg-surface px-3 py-2 font-semibold outline-none focus:border-accent focus:ring-2 focus:ring-accent"
         >
           {league.rosters.map((r) => (
             <option key={r.rosterId} value={r.rosterId} disabled={r.rosterId === excludeRosterId}>
@@ -105,48 +105,48 @@ export function AssetPicker({
             </option>
           ))}
         </select>
-        <p className="mt-2 text-sm text-gray-500">
+        <p className="mt-2 text-sm text-subtle">
           Sending away:{' '}
-          <span className="font-semibold tabular-nums text-gray-900">
+          <span className="font-semibold tabular-nums text-ink">
             {formatValue(outgoingValue)}
           </span>
         </p>
       </div>
 
       {/* Widths mirror ValuePair so the headings sit above their columns. */}
-      <div className="flex justify-end gap-2 border-b border-gray-100 px-2 py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide">
+      <div className="flex justify-end gap-2 border-b border-line px-2 py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide">
         <span
-          className="hidden w-14 text-right text-gray-400 sm:inline-block"
+          className="hidden w-14 text-right text-subtle sm:inline-block"
           title="Offensive snap share this season"
         >
           Snaps
         </span>
         <span
-          className="hidden w-14 text-right text-gray-400 sm:inline-block"
+          className="hidden w-14 text-right text-subtle sm:inline-block"
           title="Share of his team's work in his own role — targets for a receiver, carries for a back"
         >
           Usage
         </span>
-        <span className="w-12 text-right text-gray-400">Market</span>
-        <span className="w-12 text-right text-primary-500">Yours</span>
+        <span className="w-12 text-right text-subtle">Market</span>
+        <span className="w-12 text-right text-accent">Yours</span>
       </div>
 
       <div className="max-h-96 overflow-y-auto p-2">
         {ownedPicks.length > 0 && (
           <>
-            <p className="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+            <p className="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-subtle">
               Picks
             </p>
             {ownedPicks.map((pick) => (
               <label
                 key={pick.id}
-                className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-gray-50"
+                className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-page"
               >
                 <input
                   type="checkbox"
                   checked={selectedPickIds.has(pick.id)}
                   onChange={() => onTogglePick(pick.id)}
-                  className="h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  className="h-4 w-4 shrink-0 rounded border-control text-accent focus:ring-accent"
                 />
                 <span className="min-w-0 flex-1 truncate">{pick.label}</span>
                 {/* A pick has no activity; hold the columns so the grid lines up. */}
@@ -158,7 +158,7 @@ export function AssetPicker({
           </>
         )}
 
-        <p className="px-2 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <p className="px-2 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-subtle">
           Players
         </p>
         {entries.map((entry) => {
@@ -166,13 +166,13 @@ export function AssetPicker({
           return (
             <label
               key={entry.player.id}
-              className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-gray-50"
+              className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-page"
             >
               <input
                 type="checkbox"
                 checked={selectedPlayerIds.has(entry.player.id)}
                 onChange={() => onTogglePlayer(entry.player.id)}
-                className="h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                className="h-4 w-4 shrink-0 rounded border-control text-accent focus:ring-accent"
               />
               <span
                 className={`inline-flex w-10 shrink-0 justify-center rounded px-1 py-0.5 text-xs font-semibold ${style.chip}`}
@@ -184,7 +184,7 @@ export function AssetPicker({
                 {entry.player.injury && (
                   <span
                     className={`ml-1.5 text-xs font-semibold ${
-                      entry.available ? 'text-amber-600' : 'text-fantasy-red'
+                      entry.available ? 'text-caution' : 'text-fantasy-red'
                     }`}
                     title={injuryNote(entry.player.injury)}
                   >

@@ -85,7 +85,8 @@ Rename to what they mean:
 | `--color-accent` | interactive: links, focus, selected tab |
 | `--color-ink` / `-muted` / `-subtle` | text, three levels |
 | `--color-surface` / `-raised` / `-page` | backgrounds |
-| `--color-border` / `-strong` | hairlines |
+| `--color-line` | decorative hairlines and dividers (no contrast floor) |
+| `--color-control` | the visible boundary of an input/select/checkbox — must clear 3:1 |
 
 **Status colours are reserved.** `positive` / `negative` / `caution` never
 double as a category or a series colour, and they never appear alone — a status
@@ -264,3 +265,13 @@ node scripts/validate_palette.js "#3b82f6,#10b981,#f59e0b,#8b5cf6" \
 ```
 
 **Re-run the validator before changing any colour.** Do not reason about ΔE.
+
+Text and UI contrast has its own gate, which reads the tokens straight out of
+`src/index.css` so it cannot drift from what ships:
+
+```
+npm run check:contrast
+```
+
+It fails the build on any text token below 4.5:1 against either surface, or any
+control border or focus ring below 3:1. Both run in CI.

@@ -1,52 +1,193 @@
-/* @import rules must come before all other rules. */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 /*
- * Tailwind 4 is CSS-first: theme values live here as CSS variables rather than
- * in a tailwind.config.js. These generate utilities like `bg-primary-600` and
- * `text-fantasy-green` exactly as the old JS config did.
+ * Design tokens. Full rationale in docs/DESIGN-SYSTEM.md; the enforceable
+ * subset is .claude/skills/design-system/SKILL.md.
+ *
+ * Two rules that hold this file together:
+ *
+ * 1. Tokens name ROLES, not colours. `--color-positive`, never
+ *    `--color-fantasy-green`. A role survives a palette change; a colour name
+ *    becomes a lie the first time the palette moves.
+ * 2. Dark is SELECTED, not computed. Every value below was chosen for its own
+ *    surface and checked against it. An automatic inversion produces
+ *    washed-out charts and unreadable status colours.
+ *
+ * Every value here is verified, not eyeballed:
+ *   - text tokens clear WCAG AA (4.5:1) against both surface and page
+ *   - control borders and focus rings clear 3:1 (WCAG 1.4.11)
+ *   - the position scale passes the dataviz palette validator in both modes,
+ *     including colour-vision-deficiency separation
+ * `npm run check:contrast` re-runs the first two. Do not change a colour here
+ * without re-running it.
  */
-@theme {
-  --color-primary-50: #eff6ff;
-  --color-primary-100: #dbeafe;
-  --color-primary-200: #bfdbfe;
-  --color-primary-300: #93c5fd;
-  --color-primary-400: #60a5fa;
-  --color-primary-500: #3b82f6;
-  --color-primary-600: #2563eb;
-  --color-primary-700: #1d4ed8;
-  --color-primary-800: #1e40af;
-  --color-primary-900: #1e3a8a;
 
-  --color-fantasy-green: #10b981;
-  --color-fantasy-red: #ef4444;
-  --color-fantasy-orange: #f59e0b;
-  --color-fantasy-blue: #3b82f6;
+@theme {
+  /* ---- Position scale -----------------------------------------------------
+   * Categorical: identity, not magnitude. Fixed order QB -> RB -> WR -> TE,
+   * never cycled, never reassigned by rank.
+   *
+   * QB is SKY, not blue. Blue-500 and violet-500 sit dE 1.3 apart under
+   * deuteranopia — indistinguishable for red-green colourblind readers — and
+   * dE 12.0 for normal vision, under the validator's hard floor of 15. Moving
+   * QB off blue is the fix; RB, WR and TE are unchanged. Do not "restore" it.
+   */
+  --color-pos-qb: #0ea5e9;
+  --color-pos-rb: #10b981;
+  --color-pos-wr: #f59e0b;
+  --color-pos-te: #8b5cf6;
+  /* K and DEF are excluded from the maths (#10): an absence, not a category. */
+  --color-pos-none: #6b7280;
+
+  /* Chip backgrounds — the tint behind the position letters. */
+  --color-pos-qb-soft: #e0f2fe;
+  --color-pos-rb-soft: #d1fae5;
+  --color-pos-wr-soft: #fef3c7;
+  --color-pos-te-soft: #ede9fe;
+  --color-pos-none-soft: #f3f4f6;
+
+  /* ---- Surfaces ---- */
+  --color-page: #f9fafb;
+  --color-surface: #ffffff;
+  --color-raised: #ffffff;
+
+  /* ---- Ink ---- */
+  --color-ink: #111827;
+  --color-muted: #4b5563;
+  --color-subtle: #6b7280;
+
+  /* ---- Lines ----
+   * `border` is a decorative hairline and carries no contrast requirement.
+   * `control` is the visible boundary of an input, select or checkbox and
+   * must clear 3:1 — that is why it is much darker than it looks like it
+   * should be.
+   */
+  --color-line: #e5e7eb;
+  --color-control: #78808c;
+
+  /* ---- Meaning ----
+   * Reserved. Never a category, never a series, never decoration, and never
+   * alone: a status always carries a word, a sign or an icon beside it.
+   */
+  --color-accent: #2563eb;
+  /* Label on an accent fill. Flips with the theme: the dark-mode accent is a
+   * light blue, and white on it is 2.17:1 — a fail this token exists to stop. */
+  --color-on-accent: #ffffff;
+  --color-positive: #047857;
+  --color-negative: #b91c1c;
+  --color-caution: #b45309;
+
+  /* Soft fills for callouts. */
+  --color-accent-soft: #eff6ff;
+  --color-positive-soft: #ecfdf5;
+  --color-negative-soft: #fef2f2;
+  --color-caution-soft: #fffbeb;
 
   --font-sans: Inter, system-ui, sans-serif;
 }
 
+/*
+ * Dark. Selected against #16181d, not flipped.
+ *
+ * `.dark` rather than a bare media query because the toggle has to be able to
+ * beat the OS preference in both directions; the class is set on <html> before
+ * first paint by the inline script in index.html. The media query below only
+ * supplies the default for someone who has never touched the toggle.
+ */
+@layer theme {
+  .dark {
+    --color-page: #0f1115;
+    --color-surface: #16181d;
+    --color-raised: #1f242b;
+
+    --color-ink: #f3f4f6;
+    --color-muted: #c3c9d2;
+    --color-subtle: #98a1ae;
+
+    --color-line: #2a2f37;
+    --color-control: #626b78;
+
+    --color-accent: #7cb2ff;
+    --color-on-accent: #0f1115;
+    --color-positive: #34d399;
+    --color-negative: #f87171;
+    --color-caution: #fbbf24;
+
+    --color-accent-soft: #10243f;
+    --color-positive-soft: #0b2a20;
+    --color-negative-soft: #341015;
+    --color-caution-soft: #2e2008;
+
+    /* One step darker than light mode: the -500s are too bright on a dark
+     * surface and fall outside the validator's dark lightness band. */
+    --color-pos-qb: #0284c7;
+    --color-pos-rb: #059669;
+    --color-pos-wr: #d97706;
+    --color-pos-te: #7c3aed;
+    --color-pos-none: #6b7280;
+
+    --color-pos-qb-soft: #0c2a3d;
+    --color-pos-rb-soft: #06281f;
+    --color-pos-wr-soft: #2e1f08;
+    --color-pos-te-soft: #221a3d;
+    --color-pos-none-soft: #21252c;
+  }
+}
+
 @layer base {
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+
   body {
     font-family: var(--font-sans);
+    background-color: var(--color-page);
+    color: var(--color-ink);
+  }
+
+  /*
+   * Numbers stack in columns all over this app. Proportional digits change
+   * width between rows, which makes a column of values impossible to scan.
+   */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* One focus treatment everywhere, visible in both themes. */
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+    @apply bg-accent text-on-accent font-medium py-2 px-4 rounded-lg transition-colors duration-200;
   }
 
   .btn-secondary {
-    @apply bg-gray-200 hover:bg-gray-300 text-gray-900 font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+    @apply bg-page text-ink border border-line font-medium py-2 px-4 rounded-lg transition-colors duration-200 hover:bg-raised;
   }
 
+  /*
+   * One card. The old `.card` leaned on shadow-lg and `.player-card` was a
+   * near-duplicate nobody used; a border and a small radius read better and
+   * survive dark mode, where a drop shadow is invisible.
+   */
   .card {
-    @apply bg-white rounded-xl shadow-lg border border-gray-200 p-6;
-  }
-
-  .player-card {
-    @apply bg-white rounded-lg shadow-md border border-gray-200 p-4 hover:shadow-lg transition-shadow duration-200;
+    @apply bg-surface border border-line rounded-xl p-5;
   }
 }

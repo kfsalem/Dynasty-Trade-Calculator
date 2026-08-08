@@ -43,7 +43,8 @@ Never write `text-gray-500`, `bg-white`, `border-gray-200`, or any raw
 |---|---|
 | `--color-ink` / `-muted` / `-subtle` | text, three levels |
 | `--color-surface` / `-raised` / `-page` | backgrounds |
-| `--color-border` / `-strong` | hairlines |
+| `--color-line` | hairlines and dividers |
+| `--color-control` | input/select/checkbox boundary (3:1 — darker than it looks like it should be) |
 | `--color-accent` | interactive: links, focus, selected tab |
 | `--color-positive` / `-negative` / `-caution` | status only |
 
@@ -86,8 +87,8 @@ The palette passes validation *conditionally*. These are the conditions.
   a 1440px screen.
 - Data text 13px, meta 12px, row padding 8px vertical. Compact is deliberate: a
   17-row roster should fit.
-- **Tabular figures** (`font-variant-numeric: tabular-nums`) on every column of
-  numbers.
+- **Tabular figures** on every column of numbers: add the `tabular` class,
+  defined once in `src/index.css`.
 
 ## Light and dark
 
@@ -127,13 +128,20 @@ implement its keyboard contract.
 
 ## Before changing any colour
 
+Text and UI contrast — run from the repo, reads `src/index.css` directly:
+
+```
+npm run check:contrast
+```
+
+Position colours — run from the `dataviz` skill directory:
+
 ```
 node scripts/validate_palette.js "<hex,hex,…>" --mode light --pairs all --surface "#ffffff"
 node scripts/validate_palette.js "<hex,hex,…>" --mode dark  --pairs all --surface "#16181d"
 ```
 
-from the `dataviz` skill directory. **Run it. Do not reason about ΔE.** Needs
-Node 20.12+.
+**Run them. Do not reason about ΔE.** Both are in CI; neither is advisory.
 
 ## Do not
 

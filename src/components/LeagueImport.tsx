@@ -23,7 +23,7 @@ export function LeagueImport({ onSubmit, busy }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="w-full">
-      <label htmlFor="league-input" className="block text-sm font-medium text-gray-700">
+      <label htmlFor="league-input" className="block text-sm font-medium text-muted">
         Sleeper league ID or URL
       </label>
       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
@@ -37,7 +37,7 @@ export function LeagueImport({ onSubmit, busy }: Props) {
           spellCheck={false}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? 'league-input-error' : 'league-input-hint'}
-          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 shadow-sm outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200"
+          className="min-w-0 flex-1 rounded-lg border border-control px-4 py-2.5 text-ink shadow-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent"
         />
         <button
           type="submit"
@@ -53,7 +53,7 @@ export function LeagueImport({ onSubmit, busy }: Props) {
           {error}
         </p>
       ) : (
-        <p id="league-input-hint" className="mt-2 text-sm text-gray-500">
+        <p id="league-input-hint" className="mt-2 text-sm text-subtle">
           Open your league on Sleeper and paste the URL, or just the numeric ID.
         </p>
       )}

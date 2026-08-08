@@ -8,7 +8,7 @@ interface Props {
 
 function Badge({ children }: { children: ReactNode }) {
   return (
-    <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
+    <span className="rounded-full bg-page px-2.5 py-1 text-xs font-medium text-muted">
       {children}
     </span>
   );

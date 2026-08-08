@@ -80,7 +80,7 @@ function VorsBadge({ delta }: { delta: number }) {
   return (
     <span
       className={`font-semibold tabular-nums ${
-        neutral ? 'text-gray-500' : positive ? 'text-fantasy-green' : 'text-fantasy-red'
+        neutral ? 'text-subtle' : positive ? 'text-fantasy-green' : 'text-fantasy-red'
       }`}
     >
       {positive ? '+' : ''}
@@ -136,7 +136,7 @@ function CopyLink() {
           value={window.location.href}
           onFocus={(e) => e.currentTarget.select()}
           aria-label="Link to this trade"
-          className="mt-2 w-64 max-w-full rounded-lg border border-gray-300 px-2 py-1 text-xs text-gray-600"
+          className="mt-2 w-64 max-w-full rounded-lg border border-control px-2 py-1 text-xs text-muted"
         />
       )}
     </div>
@@ -187,9 +187,9 @@ function PlayoffOdds({
   const points = settled ? Math.round(after * 100) - Math.round(before * 100) : 0;
 
   return (
-    <div className="flex justify-between gap-4 border-t border-gray-200 pt-1">
+    <div className="flex justify-between gap-4 border-t border-line pt-1">
       <dt
-        className="text-gray-500"
+        className="text-subtle"
         title={`Chance of making the playoffs, simulated over the rest of the regular season from each roster's best lineup. Ten thousand seasons, so the same trade always gives the same answer. ${basis}`}
       >
         Playoff odds
@@ -197,8 +197,8 @@ function PlayoffOdds({
       <dd className="tabular-nums">
         {settled ? (
           <>
-            <span className="text-gray-500">{pct(before)}</span>
-            <span className="mx-1 text-gray-400" aria-hidden="true">
+            <span className="text-subtle">{pct(before)}</span>
+            <span className="mx-1 text-subtle" aria-hidden="true">
               →
             </span>
             <span
@@ -224,7 +224,7 @@ function PlayoffOdds({
             )}
           </>
         ) : (
-          <span className="text-gray-400">{pct(before)} …</span>
+          <span className="text-subtle">{pct(before)} …</span>
         )}
       </dd>
     </div>
@@ -249,15 +249,15 @@ function SideSummary({
       <h4 className="truncate font-semibold">{side.teamName}</h4>
       <dl className="mt-2 space-y-1 text-sm">
         <div className="flex justify-between gap-4">
-          <dt className="text-gray-500">Receives</dt>
+          <dt className="text-subtle">Receives</dt>
           <dd className="tabular-nums">{formatValue(side.incomingValue)}</dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt className="text-gray-500">Sends</dt>
+          <dt className="text-subtle">Sends</dt>
           <dd className="tabular-nums">{formatValue(side.outgoingValue)}</dd>
         </div>
-        <div className="flex justify-between gap-4 border-t border-gray-200 pt-1">
-          <dt className="text-gray-500">Net value</dt>
+        <div className="flex justify-between gap-4 border-t border-line pt-1">
+          <dt className="text-subtle">Net value</dt>
           <dd
             className={`font-semibold tabular-nums ${
               side.netValue > 0
@@ -271,9 +271,9 @@ function SideSummary({
             {formatValue(side.netValue)}
           </dd>
         </div>
-        <div className="flex justify-between gap-4 border-t border-gray-200 pt-1">
+        <div className="flex justify-between gap-4 border-t border-line pt-1">
           <dt
-            className="text-gray-500"
+            className="text-subtle"
             title="Change in best-lineup strength, measured on win-now value — what these players do for you this season, not what they are worth as assets."
           >
             Starting lineup
@@ -282,7 +282,7 @@ function SideSummary({
             <VorsBadge delta={side.vorsDelta} />
           </dd>
         </div>
-        <div className="flex justify-between gap-4 text-xs text-gray-400">
+        <div className="flex justify-between gap-4 text-xs text-subtle">
           <dt>&nbsp;</dt>
           <dd className="tabular-nums">
             {formatValue(side.starterValueBefore)} → {formatValue(side.starterValueAfter)}
@@ -299,7 +299,7 @@ function SideSummary({
       {side.warnings.length > 0 && (
         <ul className="mt-3 space-y-1">
           {side.warnings.map((warning) => (
-            <li key={warning} className="flex gap-1.5 text-xs text-amber-700">
+            <li key={warning} className="flex gap-1.5 text-xs text-caution">
               <span aria-hidden="true">▲</span>
               <span>{warning}</span>
             </li>
@@ -477,7 +477,7 @@ export function TradeBuilder({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold tracking-tight">Trade calculator</h2>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-subtle">
             Check the assets each team sends. Values reflect this league's format.
           </p>
         </div>
@@ -492,7 +492,7 @@ export function TradeBuilder({
       </div>
 
       {dropped > 0 && (
-        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <p className="mt-3 rounded-lg border border-caution bg-caution-soft p-3 text-sm text-caution">
           {dropped === 1 ? 'One asset' : `${dropped} assets`} in that link{' '}
           {dropped === 1 ? 'is' : 'are'} no longer on the roster that was sending{' '}
           {dropped === 1 ? 'it' : 'them'}, so {dropped === 1 ? 'it has' : 'they have'}{' '}
@@ -501,7 +501,7 @@ export function TradeBuilder({
       )}
 
       {picksUnavailable && (
-        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <p className="mt-3 rounded-lg border border-caution bg-caution-soft p-3 text-sm text-caution">
           Draft pick values are unavailable right now, so only players can be traded.
         </p>
       )}
@@ -555,23 +555,23 @@ export function TradeBuilder({
             <span
               className={`rounded-full px-3 py-1 text-sm font-semibold ${
                 analysis.fairnessRating === 'very_fair' || analysis.fairnessRating === 'fair'
-                  ? 'bg-emerald-100 text-emerald-800'
+                  ? 'bg-positive-soft text-positive'
                   : analysis.fairnessRating === 'slightly_unfair'
-                    ? 'bg-amber-100 text-amber-800'
-                    : 'bg-red-100 text-red-800'
+                    ? 'bg-caution-soft text-caution'
+                    : 'bg-negative-soft text-negative'
               }`}
             >
               {FAIRNESS_LABEL[analysis.fairnessRating]}
             </span>
-            <span className="text-sm text-gray-500 tabular-nums">
+            <span className="text-sm text-subtle tabular-nums">
               {formatValue(analysis.valueDifference)} apart (
               {Math.round(analysis.valueDifferencePct * 100)}%)
             </span>
           </div>
 
-          <p className="mt-3 text-gray-700">{analysis.summary}</p>
+          <p className="mt-3 text-muted">{analysis.summary}</p>
 
-          <div className="mt-5 grid gap-6 border-t border-gray-200 pt-5 sm:grid-cols-2">
+          <div className="mt-5 grid gap-6 border-t border-line pt-5 sm:grid-cols-2">
             {analysis.sides.map((side) => (
               <SideSummary
                 key={side.rosterId}
@@ -585,7 +585,7 @@ export function TradeBuilder({
           </div>
         </div>
       ) : (
-        <p className="mt-6 text-center text-sm text-gray-400">
+        <p className="mt-6 text-center text-sm text-subtle">
           Select at least one asset to evaluate a trade.
         </p>
       )}

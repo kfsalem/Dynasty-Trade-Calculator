@@ -6,6 +6,7 @@ import { TradeBuilder, type PendingTrade } from './components/TradeBuilder';
 import { TradeSuggestions } from './components/TradeSuggestions';
 import { TeamAnalysis } from './components/TeamAnalysis';
 import { ClaimTeam } from './components/ClaimTeam';
+import { ThemeToggle } from './components/ThemeToggle';
 import { useLeagueSummaries } from './hooks/useLeagueData';
 import { useMyRoster } from './hooks/useMyRoster';
 import { decodeTrade, encodeTrade, resolveShare } from './lib/share';
@@ -197,17 +198,26 @@ function App() {
   const ready = league && players && values && !isLoading && !error;
 
   return (
-    <main className="min-h-screen bg-gray-50 text-gray-900">
-      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-16">
+    <main className="min-h-screen bg-page text-ink">
+      {/*
+        max-w-6xl, not 4xl. At 896px the trade calculator truncated player names
+        to "Ja'Marr …" on a 1440px screen while the 390px mobile layout showed
+        them in full — the desktop view was the degraded one. See
+        docs/DESIGN-SYSTEM.md §2.
+      */}
+      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-16">
+        <div className="mb-6 flex justify-end">
+          <ThemeToggle />
+        </div>
         {showImport && (
           <div className="mx-auto max-w-xl">
-            <p className="text-sm font-semibold uppercase tracking-widest text-primary-600">
+            <p className="text-sm font-semibold uppercase tracking-widest text-accent">
               Dynasty Fantasy Football
             </p>
             <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
               A trade calculator that knows your league
             </h1>
-            <p className="mt-4 text-gray-600">
+            <p className="mt-4 text-muted">
               Import a Sleeper dynasty league to see every roster valued against your
               actual lineup settings.
             </p>
@@ -219,7 +229,7 @@ function App() {
             {error && (
               <div
                 role="alert"
-                className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+                className="mt-4 rounded-lg border border-negative bg-negative-soft p-4 text-sm text-negative"
               >
                 <p className="font-semibold">Couldn't load that league.</p>
                 <p className="mt-1">{(error as Error).message}</p>
@@ -231,11 +241,11 @@ function App() {
         {leagueId && isLoading && !error && (
           <div className="py-20 text-center">
             <div
-              className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-primary-600"
+              className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-line border-t-accent"
               role="status"
               aria-label="Loading league"
             />
-            <p className="mt-4 text-sm text-gray-500">
+            <p className="mt-4 text-sm text-subtle">
               Loading rosters and dynasty values…
             </p>
           </div>
@@ -258,7 +268,7 @@ function App() {
             <div
               role="tablist"
               aria-label="League views"
-              className="mt-6 flex gap-1 border-b border-gray-200"
+              className="mt-6 flex gap-1 border-b border-line"
               onKeyDown={(e) => {
                 const step =
                   e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
@@ -288,8 +298,8 @@ function App() {
                   onClick={() => setTab(value)}
                   className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
                     tab === value
-                      ? 'border-primary-600 text-primary-700'
-                      : 'border-transparent text-gray-500 hover:text-gray-800'
+                      ? 'border-accent text-accent'
+                      : 'border-transparent text-subtle hover:text-ink'
                   }`}
                 >
                   {label}

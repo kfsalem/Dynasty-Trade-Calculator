@@ -23,7 +23,7 @@ import type { Position } from '../types';
 export function UnvaluedCell({
   position,
   priced,
-  className = 'w-24 shrink-0 text-right tabular-nums text-gray-400',
+  className = 'w-24 shrink-0 text-right tabular-nums text-subtle',
 }: {
   position: Position;
   /** Positions the value source prices at all — see `replacement.pricedPositions`. */

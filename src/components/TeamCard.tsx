@@ -80,9 +80,9 @@ function PlayerLine({
       <span className="min-w-0 flex-1 truncate" title={entry.player.name}>
         {entry.player.name}
         {entry.player.team ? (
-          <span className="ml-1.5 text-xs text-gray-400">{entry.player.team}</span>
+          <span className="ml-1.5 text-xs text-subtle">{entry.player.team}</span>
         ) : (
-          <span className="ml-1.5 text-xs text-gray-400">FA</span>
+          <span className="ml-1.5 text-xs text-subtle">FA</span>
         )}
         {/* Season-ending statuses carry the badge in solid red and week-to-week
             ones in a lighter weight, because after R9 the two mean different
@@ -92,7 +92,7 @@ function PlayerLine({
         {entry.player.injury ? (
           <span
             className={`ml-1.5 text-xs font-semibold ${
-              entry.available ? 'text-amber-600' : 'text-fantasy-red'
+              entry.available ? 'text-caution' : 'text-fantasy-red'
             }`}
             title={injuryNote(entry.player.injury)}
           >
@@ -117,11 +117,11 @@ function PlayerLine({
           className="shrink-0 tabular-nums"
           title={`Dynasty ${formatValue(entry.value)} — what he is worth to hold. Win-now ${formatValue(entry.winNowValue)} — what he does for this lineup this season.`}
         >
-          <span className={scale === 'dynasty' ? 'text-gray-700' : 'text-gray-400'}>
+          <span className={scale === 'dynasty' ? 'text-muted' : 'text-subtle'}>
             {formatValue(entry.value)}
           </span>
-          <span className="text-gray-300"> · </span>
-          <span className={scale === 'winNow' ? 'text-gray-700' : 'text-gray-400'}>
+          <span className="text-subtle"> · </span>
+          <span className={scale === 'winNow' ? 'text-muted' : 'text-subtle'}>
             {formatValue(entry.winNowValue)}
           </span>
         </span>
@@ -129,7 +129,7 @@ function PlayerLine({
         <UnvaluedCell
           position={entry.player.position}
           priced={priced}
-          className="shrink-0 text-right tabular-nums text-gray-400"
+          className="shrink-0 text-right tabular-nums text-subtle"
         />
       )}
     </>
@@ -173,16 +173,16 @@ export function TeamCard({
   return (
     <div
       className={`card !p-0 overflow-hidden ${
-        isMine ? 'ring-2 ring-primary-500 ring-offset-2' : ''
+        isMine ? 'ring-2 ring-accent ring-offset-2' : ''
       }`}
     >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-4 p-4 text-left transition-colors hover:bg-gray-50 sm:p-5"
+        className="flex w-full items-center gap-4 p-4 text-left transition-colors hover:bg-page sm:p-5"
       >
-        <span className="w-6 shrink-0 text-lg font-bold tabular-nums text-gray-400">
+        <span className="w-6 shrink-0 text-lg font-bold tabular-nums text-subtle">
           {rank}
         </span>
 
@@ -191,22 +191,22 @@ export function TeamCard({
             src={roster.avatar}
             alt=""
             loading="lazy"
-            className="h-10 w-10 shrink-0 rounded-full bg-gray-100 object-cover"
+            className="h-10 w-10 shrink-0 rounded-full bg-page object-cover"
           />
         ) : (
-          <span className="h-10 w-10 shrink-0 rounded-full bg-gray-200" aria-hidden="true" />
+          <span className="h-10 w-10 shrink-0 rounded-full bg-line" aria-hidden="true" />
         )}
 
         <span className="min-w-0 flex-1">
           <span className="block truncate font-semibold">
             {roster.teamName}
             {isMine && (
-              <span className="ml-2 rounded bg-primary-100 px-1.5 py-0.5 text-xs font-semibold text-primary-700">
+              <span className="ml-2 rounded bg-accent-soft px-1.5 py-0.5 text-xs font-semibold text-accent">
                 You
               </span>
             )}
           </span>
-          <span className="block truncate text-sm text-gray-500">
+          <span className="block truncate text-sm text-subtle">
             {roster.ownerName} · {roster.wins}-{roster.losses}
             {roster.ties > 0 ? `-${roster.ties}` : ''} · avg {formatAge(summary.weightedAge)}
           </span>
@@ -222,7 +222,7 @@ export function TeamCard({
               empty slot and a filled one are otherwise indistinguishable in the
               one figure the rankings rank on. */}
           <span
-            className="block text-xs text-gray-500"
+            className="block text-xs text-subtle"
             title={
               summary.pricedSlots < summary.totalSlots
                 ? `Win-now strength of the best lineup this roster can field. ${summary.pricedSlots} of ${summary.totalSlots} starting slots hold a player the value source prices. Kickers, defences and deep-bench players have no market, so they count as zero here.`
@@ -236,7 +236,7 @@ export function TeamCard({
         </span>
 
         <svg
-          className={`h-5 w-5 shrink-0 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`h-5 w-5 shrink-0 text-subtle transition-transform ${open ? 'rotate-180' : ''}`}
           viewBox="0 0 20 20"
           fill="currentColor"
           aria-hidden="true"
@@ -250,13 +250,22 @@ export function TeamCard({
       </button>
 
       {/* Starter strength relative to the strongest roster in the league. */}
-      <div className="h-1 w-full bg-gray-100">
-        <div className="h-full bg-primary-500" style={{ width: `${barWidth}%` }} />
+      <div className="h-1 w-full bg-page">
+        <div className="h-full bg-accent" style={{ width: `${barWidth}%` }} />
       </div>
 
-      {/* Positional value mix. */}
+      {/*
+        Positional value mix.
+
+        `gap-0.5` is load-bearing, not styling. On a dark surface WR's amber and
+        RB's emerald sit at dE 7.9 under protanopia — inside the 6-8 band the
+        palette validator permits *only* with secondary encoding. A 2px gap in
+        the surface colour is that encoding: it gives every segment an edge, so
+        the boundary survives when the hues do not. Removing it reintroduces a
+        colourblindness failure. See docs/DESIGN-SYSTEM.md §4.3.
+      */}
       {positionTotal > 0 && (
-        <div className="flex h-1.5 w-full">
+        <div className="flex h-1.5 w-full gap-0.5 bg-surface">
           {POSITION_ORDER.map((pos) => {
             const share = ((summary.byPosition[pos] ?? 0) / positionTotal) * 100;
             if (share <= 0) return null;
@@ -273,22 +282,22 @@ export function TeamCard({
       )}
 
       {open && (
-        <div className="border-t border-gray-200 bg-gray-50 p-4 sm:p-5">
+        <div className="border-t border-line bg-page p-4 sm:p-5">
           <div className="grid gap-6 sm:grid-cols-2">
             <div>
               <h4
-                className="flex items-baseline justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500"
+                className="flex items-baseline justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-subtle"
                 title="What this lineup does for you this season. Aging starters are worth more here than their dynasty price says; prospects are worth less."
               >
                 <span>Best lineup · win-now {formatValue(summary.starterValue)}</span>
-                <span className="shrink-0 font-normal normal-case tracking-normal text-gray-400">
-                  dyn · <span className="text-gray-700">now</span>
+                <span className="shrink-0 font-normal normal-case tracking-normal text-subtle">
+                  dyn · <span className="text-muted">now</span>
                 </span>
               </h4>
               <ul className="mt-3 space-y-1.5 text-sm">
                 {summary.lineup.map((assignment, i) => (
                   <li key={`${assignment.slot}-${i}`} className="flex items-center gap-2">
-                    <span className="w-12 shrink-0 text-xs font-medium text-gray-400">
+                    <span className="w-12 shrink-0 text-xs font-medium text-subtle">
                       {formatSlot(assignment.slot)}
                     </span>
                     {assignment.entry ? (
@@ -303,13 +312,13 @@ export function TeamCard({
                         priced={priced}
                       />
                     ) : (
-                      <span className="flex-1 italic text-gray-400">empty</span>
+                      <span className="flex-1 italic text-subtle">empty</span>
                     )}
                   </li>
                 ))}
               </ul>
               {heldOut.length > 0 && (
-                <p className="mt-3 text-xs text-gray-500">
+                <p className="mt-3 text-xs text-subtle">
                   Held out of this lineup:{' '}
                   {heldOut.map(({ player, injury }, i) => (
                     <span key={player.id}>
@@ -327,18 +336,18 @@ export function TeamCard({
 
             <div>
               <h4
-                className="flex items-baseline justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500"
+                className="flex items-baseline justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-subtle"
                 title="What the bench is worth as assets, on the dynasty scale — a prospect who cannot start yet is still something you can trade."
               >
                 <span>
                   Bench · dynasty {formatValue(summary.benchValue)} ({bench.length})
                 </span>
-                <span className="shrink-0 font-normal normal-case tracking-normal text-gray-400">
-                  <span className="text-gray-700">dyn</span> · now
+                <span className="shrink-0 font-normal normal-case tracking-normal text-subtle">
+                  <span className="text-muted">dyn</span> · now
                 </span>
               </h4>
               <ul className="mt-3 space-y-1.5 text-sm">
-                {bench.length === 0 && <li className="text-gray-400">No bench players.</li>}
+                {bench.length === 0 && <li className="text-subtle">No bench players.</li>}
                 {bench.slice(0, 15).map((entry) => (
                   <li key={entry.player.id} className="flex items-center gap-2">
                     <PlayerLine
@@ -354,7 +363,7 @@ export function TeamCard({
                   </li>
                 ))}
                 {bench.length > 15 && (
-                  <li className="pt-1 text-xs text-gray-400">
+                  <li className="pt-1 text-xs text-subtle">
                     + {bench.length - 15} more
                   </li>
                 )}

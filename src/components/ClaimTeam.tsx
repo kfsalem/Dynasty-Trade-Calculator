@@ -37,7 +37,7 @@ export function ClaimTeam({ league, onClaim }: Props) {
   return (
     <div className="card">
       <h3 className="font-semibold">Which team is yours?</h3>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-subtle">
         Claiming your team personalizes the analysis and defaults the trade
         calculator to you. Stored in this browser only.
       </p>
@@ -51,7 +51,7 @@ export function ClaimTeam({ league, onClaim }: Props) {
           autoComplete="username"
           spellCheck={false}
           aria-label="Sleeper username"
-          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200"
+          className="min-w-0 flex-1 rounded-lg border border-control px-4 py-2.5 outline-none focus:border-accent focus:ring-2 focus:ring-accent"
         />
         <button
           type="submit"
@@ -69,15 +69,15 @@ export function ClaimTeam({ league, onClaim }: Props) {
       )}
 
       {/* Orphan teams and co-owned rosters can't be resolved from a username. */}
-      <div className="mt-4 border-t border-gray-200 pt-4">
-        <label htmlFor="claim-select" className="text-sm text-gray-500">
+      <div className="mt-4 border-t border-line pt-4">
+        <label htmlFor="claim-select" className="text-sm text-subtle">
           Or pick it from the list
         </label>
         <select
           id="claim-select"
           defaultValue=""
           onChange={(e) => e.target.value && onClaim(Number(e.target.value))}
-          className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200"
+          className="mt-2 w-full rounded-lg border border-control bg-surface px-3 py-2 outline-none focus:border-accent focus:ring-2 focus:ring-accent"
         >
           <option value="" disabled>
             Select a team…

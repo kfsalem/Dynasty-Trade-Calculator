@@ -27,7 +27,7 @@ export function RoleMarker({
   return (
     <span
       className={`ml-1.5 shrink-0 rounded px-1 py-0.5 text-[10px] font-semibold ${
-        up ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'
+        up ? 'bg-positive-soft text-positive' : 'bg-caution-soft text-caution'
       }`}
       title={describeRole(role, chartSeason)}
     >
