@@ -733,6 +733,19 @@ and `user_id` is, so every historical stat has to key on the manager rather than
 the roster slot, and manager identity has to come from `roster.owner_id` rather
 than `/users` — that endpoint returns more people than there are teams.
 
+**Final standings are a decision, not a lookup**, and championships, playoff
+appearances and last-place finishes all rest on it. Playoff teams rank by how
+long they survived, with same-round eliminations split by points scored in the
+losing matchup; everyone else ranks on regular-season record, points for
+breaking ties. Placement games and the consolation bracket are ignored by
+default — they measure who still sets a lineup after elimination rather than who
+was better, and the 2025 season is a live example of the two rules disagreeing.
+
+That default is **exposed as a user setting rather than imposed**. Some leagues
+take their placement games seriously; plenty of leagues never play them at all,
+which is also why the points-based rule has to exist regardless — it is the only
+one that works everywhere.
+
 Deliberately a different register from the rest of the app: entertainment built
 on real arithmetic, and it should not pretend to predict anything.
 
