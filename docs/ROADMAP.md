@@ -589,9 +589,21 @@ one worth trusting — so the condition the deferral was waiting on is satisfied
 Milestone 5 is now most of what remains. R15 was always the safe thing to pull
 forward; it is now simply next.
 
+**Start with [#53](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/53).**
+These four issues are execution, and there is no agreed direction underneath
+them — #53 produces the design brief they spend, and is cheap enough that
+deciding it first costs almost nothing next to four issues each guessing
+separately.
+
 ## R15 — Design system foundation
 
 **Status:** Open — [#15](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/15).
+Sequenced after [#53](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/53),
+which also corrects this item's premise: `POSITION_STYLES` is no longer the only
+shared token set. `src/index.css` carries a Tailwind 4 `@theme` block that is
+half-adopted — three of its declared tokens are dead while 51 distinct raw color
+utilities run alongside it. A partly-used vocabulary is a harder starting point
+than none.
 
 **Labels:** `enhancement`
 
@@ -706,3 +718,31 @@ not market value, has to do the ranking.
 - [#50](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/50) — mine Sleeper
   transaction history. Closes out `DESIGN.md` §7 open question 4, and unblocks the
   bid model in #47.
+
+## League history
+
+**Status:** Open — [#52](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/52).
+
+A dashboard of records, all-time tables and the fun statistics, built on the
+seasons Sleeper already chains to the current league via `previous_league_id` —
+a field the schema does not yet parse. The test league walks back four seasons to
+2023 (renamed from Westeros along the way), giving 510 scored team-weeks.
+
+The trap worth knowing before starting: `roster_id` is not stable across seasons
+and `user_id` is, so every historical stat has to key on the manager rather than
+the roster slot, and manager identity has to come from `roster.owner_id` rather
+than `/users` — that endpoint returns more people than there are teams.
+
+Deliberately a different register from the rest of the app: entertainment built
+on real arithmetic, and it should not pretend to predict anything.
+
+## Frontend design direction
+
+**Status:** Open — [#53](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/53).
+Sequenced before R15 — see Milestone 5 above.
+
+The design brief that Milestone 5 currently lacks: register, density, typography,
+a semantic color layer, light and dark, and the accessibility bar. Also the place
+where the repo's first `.claude/skills/` entry gets written, so the decisions
+apply to everyone working in the codebase rather than living in one person's
+head.
