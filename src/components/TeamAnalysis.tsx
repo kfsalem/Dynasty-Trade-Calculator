@@ -14,10 +14,10 @@ interface Props {
 }
 
 const QUADRANT_STYLE: Record<Quadrant, string> = {
-  juggernaut: 'bg-emerald-50 border-emerald-200 text-emerald-900',
-  win_now: 'bg-amber-50 border-amber-200 text-amber-900',
-  rebuilding: 'bg-blue-50 border-blue-200 text-blue-900',
-  danger: 'bg-red-50 border-red-200 text-red-900',
+  juggernaut: 'bg-positive-soft border-positive text-positive',
+  win_now: 'bg-caution-soft border-caution text-caution',
+  rebuilding: 'bg-accent-soft border-accent text-accent',
+  danger: 'bg-negative-soft border-negative text-negative',
 };
 
 /** Diverging bar: strengths grow right, weaknesses left, centred on the median. */
@@ -35,15 +35,15 @@ function StrengthBar({ item }: { item: PositionalStrength }) {
         {item.position}
       </span>
 
-      <div className="relative h-6 flex-1 rounded bg-gray-100">
-        <div className="absolute inset-y-0 left-1/2 w-px bg-gray-300" aria-hidden="true" />
+      <div className="relative h-6 flex-1 rounded bg-page">
+        <div className="absolute inset-y-0 left-1/2 w-px bg-line" aria-hidden="true" />
         <div
           className={`absolute inset-y-1 rounded ${
             item.verdict === 'strength'
-              ? 'bg-emerald-500'
+              ? 'bg-positive'
               : item.verdict === 'weakness'
-                ? 'bg-red-500'
-                : 'bg-gray-400'
+                ? 'bg-negative'
+                : 'bg-subtle'
           }`}
           style={
             strong
@@ -53,9 +53,9 @@ function StrengthBar({ item }: { item: PositionalStrength }) {
         />
       </div>
 
-      <span className="w-28 shrink-0 text-right text-sm tabular-nums text-gray-500">
+      <span className="w-28 shrink-0 text-right text-sm tabular-nums text-subtle">
         {formatValue(item.starterValue)}
-        <span className="text-gray-400"> / {formatValue(item.leagueMedian)}</span>
+        <span className="text-subtle"> / {formatValue(item.leagueMedian)}</span>
       </span>
     </div>
   );
@@ -91,7 +91,7 @@ function ScarcityPanel({
   return (
     <section className="card mt-4">
       <h3 className="font-semibold">What each position is really worth here</h3>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-subtle">
         With {teamCount} teams and this lineup, a player is only worth what he adds over
         the best man at his position who starts for nobody. The bars show how much of an
         elite player's value survives that test — high means the position is scarce and
@@ -114,14 +114,14 @@ function ScarcityPanel({
                 wider than the card — this panel sits in a narrow column and the
                 fixed labels beside it already claim most of the width. */}
             <div className="min-w-0 flex-1 space-y-1">
-              <div className="h-2 rounded bg-gray-100">
+              <div className="h-2 rounded bg-page">
                 <div
                   className={`h-2 rounded ${POSITION_STYLES[row.position].bar}`}
                   style={{ width: `${Math.round(row.retained * 100)}%` }}
                   title={`Dynasty: an elite ${row.position} keeps ${Math.round(row.retained * 100)}% of his market value here.`}
                 />
               </div>
-              <div className="h-2 rounded bg-gray-100">
+              <div className="h-2 rounded bg-page">
                 <div
                   className={`h-2 rounded border ${POSITION_STYLES[row.position].border} bg-transparent`}
                   style={{ width: `${Math.round(row.retainedWinNow * 100)}%` }}
@@ -135,12 +135,12 @@ function ScarcityPanel({
             >
               <span className="block text-sm">
                 <span className="font-semibold">{Math.round(row.retained * 100)}%</span>
-                <span className="text-gray-400">
+                <span className="text-subtle">
                   {' '}
                   · {Math.round(row.retainedWinNow * 100)}%
                 </span>
               </span>
-              <span className="hidden text-[10px] leading-tight text-gray-400 sm:block">
+              <span className="hidden text-[10px] leading-tight text-subtle sm:block">
                 {row.startersNeeded} start · {formatValue(row.value)}/
                 {formatValue(row.winNow)}
               </span>
@@ -165,7 +165,7 @@ export function TeamAnalysis({
   if (!analysis || !roster) {
     return (
       <div className="card">
-        <p className="text-gray-600">That team is no longer in this league.</p>
+        <p className="text-muted">That team is no longer in this league.</p>
         <button type="button" onClick={onChangeTeam} className="btn-secondary mt-3 text-sm">
           Pick a different team
         </button>
@@ -180,7 +180,7 @@ export function TeamAnalysis({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold tracking-tight">{roster.teamName}</h2>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-subtle">
             Measured against the other {contention.teamCount - 1} teams in this league.
           </p>
         </div>
@@ -214,7 +214,7 @@ export function TeamAnalysis({
 
       <section className="card mt-4">
         <h3 className="font-semibold">Strengths and weaknesses</h3>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-subtle">
           Starting value at each position versus the league median. Flex slots count
           toward the position of whoever fills them.
         </p>
@@ -229,12 +229,12 @@ export function TeamAnalysis({
 
       <section className="card mt-4">
         <h3 className="font-semibold">Tradeable surplus</h3>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-subtle">
           Players who don't crack your lineup but would start elsewhere. These are what
           you trade from.
         </p>
         {surpluses.length === 0 ? (
-          <p className="mt-4 text-sm text-gray-400">
+          <p className="mt-4 text-sm text-subtle">
             No clear surplus — every player good enough to start somewhere is already in
             your lineup.
           </p>
@@ -252,11 +252,11 @@ export function TeamAnalysis({
                 <span className="min-w-0 flex-1 truncate font-medium">
                   {surplus.player.name}
                 </span>
-                <span className="shrink-0 text-gray-500">
+                <span className="shrink-0 text-subtle">
                   starts on {surplus.wouldStartOn}{' '}
                   {surplus.wouldStartOn === 1 ? 'team' : 'teams'}
                 </span>
-                <span className="w-16 shrink-0 text-right tabular-nums text-gray-500">
+                <span className="w-16 shrink-0 text-right tabular-nums text-subtle">
                   {formatValue(surplus.value)}
                 </span>
               </li>
@@ -269,8 +269,8 @@ export function TeamAnalysis({
         <h3 className="font-semibold">What to focus on</h3>
         <ul className="mt-3 space-y-2.5">
           {focus.map((item) => (
-            <li key={item} className="flex gap-2 text-sm text-gray-700">
-              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" />
+            <li key={item} className="flex gap-2 text-sm text-muted">
+              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
               <span>{item}</span>
             </li>
           ))}

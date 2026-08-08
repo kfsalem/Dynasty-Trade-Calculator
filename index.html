@@ -57,6 +57,32 @@
       name="twitter:image"
       content="https://kfsalem.github.io/Dynasty-Trade-Calculator/og.png"
     />
+    <!--
+      Theme, applied before first paint.
+
+      This has to be an inline blocking script rather than anything React does:
+      by the time a module bundle has parsed, the browser has already painted,
+      and a dark-mode user gets a white flash on every load. Reading storage
+      here costs a fraction of a millisecond and removes it entirely.
+
+      Storage wins over the OS preference in *both* directions — someone who
+      chose light on a dark-mode machine meant it. `null` means untouched, and
+      only then does the media query decide.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('dynasty:theme');
+          var dark =
+            stored === 'dark' ||
+            (stored === null &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.classList.add('dark');
+        } catch (e) {
+          /* Storage disabled — fall through to the light default. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

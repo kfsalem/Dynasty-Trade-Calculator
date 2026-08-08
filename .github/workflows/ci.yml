@@ -30,6 +30,12 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
+      # Accessibility gate. Reads the tokens out of src/index.css, so it checks
+      # what actually ships rather than a copy that can drift, and fails on any
+      # text token below WCAG AA or any control border below 3:1. A colour
+      # regression is exactly the kind of thing review misses, and the palette
+      # this replaced shipped a colourblindness failure for months.
+      - run: npm run check:contrast
       # tsc -b across all three projects, then the production build. Runs
       # against the committed public/data, so it needs no network and an
       # nflverse outage cannot fail a pull request.

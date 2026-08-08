@@ -71,7 +71,7 @@ export function SnapShareCell({
   if (!share) {
     return (
       <span
-        className="hidden w-14 shrink-0 text-right tabular-nums text-gray-300 sm:inline-block"
+        className="hidden w-14 shrink-0 text-right tabular-nums text-subtle sm:inline-block"
         title={`No snap data for this player.${roleText}`}
       >
         —
@@ -88,13 +88,13 @@ export function SnapShareCell({
       className="hidden w-14 shrink-0 items-baseline justify-end gap-0.5 tabular-nums sm:flex"
       title={`${describe(share)}${roleText}`}
     >
-      <span className="text-gray-500">{pct(share.season)}</span>
+      <span className="text-subtle">{pct(share.season)}</span>
       {material && (
         // Never colour alone: the arrow carries the direction for anyone who
         // cannot separate the emerald from the red.
         <span
           className={`text-[10px] font-semibold ${
-            rising ? 'text-emerald-600' : 'text-fantasy-red'
+            rising ? 'text-positive' : 'text-fantasy-red'
           }`}
           aria-label={`${rising ? 'up' : 'down'} ${Math.abs(points)} points over the last ${RECENT_WEEKS} weeks, against the weeks before them`}
         >

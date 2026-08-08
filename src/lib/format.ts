@@ -40,45 +40,65 @@ export const formatAge = (age: number | null): string =>
  * so dynasty and win-now stay distinguishable without spending a second colour.
  * Written out in full rather than composed, because Tailwind scans source for
  * complete class names and an interpolated `border-${hue}-500` is not one.
+ *
+ * These are tokens, so dark mode is already handled — `--color-pos-*` steps
+ * down one stop on a dark surface, where the light-mode values fall outside the
+ * validator's lightness band.
+ *
+ * **QB is sky, not blue, and this is not a taste call.** The previous blue-500
+ * sat dE 1.3 from TE's violet-500 under deuteranopia — indistinguishable for
+ * red-green colourblind readers — and dE 12.0 for normal vision, below the hard
+ * floor of 15. RB, WR and TE are unchanged; only QB moved, which was the
+ * smallest edit that made the set pass. Re-run the validator before touching
+ * any of them:
+ *
+ *   node scripts/validate_palette.js "#0ea5e9,#10b981,#f59e0b,#8b5cf6" \
+ *     --mode light --pairs all --surface "#ffffff"
+ *
+ * from the dataviz skill. See docs/DESIGN-SYSTEM.md §4.2.
+ *
+ * The palette passes *conditionally*: in light mode these colours sit below 3:1
+ * against the surface, which is legal only with a visible text label. That is
+ * what `label` is for, and why a chip must never render as colour alone.
  */
 export const POSITION_STYLES: Record<
   Position,
   { chip: string; bar: string; border: string; label: string }
 > = {
   QB: {
-    chip: 'bg-blue-100 text-blue-800',
-    bar: 'bg-blue-500',
-    border: 'border-blue-500',
+    chip: 'bg-pos-qb-soft text-pos-qb',
+    bar: 'bg-pos-qb',
+    border: 'border-pos-qb',
     label: 'QB',
   },
   RB: {
-    chip: 'bg-emerald-100 text-emerald-800',
-    bar: 'bg-emerald-500',
-    border: 'border-emerald-500',
+    chip: 'bg-pos-rb-soft text-pos-rb',
+    bar: 'bg-pos-rb',
+    border: 'border-pos-rb',
     label: 'RB',
   },
   WR: {
-    chip: 'bg-amber-100 text-amber-800',
-    bar: 'bg-amber-500',
-    border: 'border-amber-500',
+    chip: 'bg-pos-wr-soft text-pos-wr',
+    bar: 'bg-pos-wr',
+    border: 'border-pos-wr',
     label: 'WR',
   },
   TE: {
-    chip: 'bg-violet-100 text-violet-800',
-    bar: 'bg-violet-500',
-    border: 'border-violet-500',
+    chip: 'bg-pos-te-soft text-pos-te',
+    bar: 'bg-pos-te',
+    border: 'border-pos-te',
     label: 'TE',
   },
   K: {
-    chip: 'bg-gray-100 text-gray-700',
-    bar: 'bg-gray-400',
-    border: 'border-gray-400',
+    chip: 'bg-pos-none-soft text-pos-none',
+    bar: 'bg-pos-none',
+    border: 'border-pos-none',
     label: 'K',
   },
   DEF: {
-    chip: 'bg-gray-100 text-gray-700',
-    bar: 'bg-gray-400',
-    border: 'border-gray-400',
+    chip: 'bg-pos-none-soft text-pos-none',
+    bar: 'bg-pos-none',
+    border: 'border-pos-none',
     label: 'DEF',
   },
 };

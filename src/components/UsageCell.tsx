@@ -46,7 +46,7 @@ export function UsageCell({ usage }: { usage: Opportunity | undefined }) {
   if (!usage) {
     return (
       <span
-        className="hidden w-14 shrink-0 text-right tabular-nums text-gray-300 sm:inline-block"
+        className="hidden w-14 shrink-0 text-right tabular-nums text-subtle sm:inline-block"
         title="No usage data for this player"
       >
         —
@@ -66,13 +66,13 @@ export function UsageCell({ usage }: { usage: Opportunity | undefined }) {
       // target share is one hover away from his carry share.
       title={usage.metrics.map(line).join('. ') + '.'}
     >
-      <span className="text-gray-500">{format(headline.window.season, headline.kind)}</span>
+      <span className="text-subtle">{format(headline.window.season, headline.kind)}</span>
       {material && (
         // Never colour alone: the arrow carries the direction for anyone who
         // cannot separate the emerald from the red.
         <span
           className={`text-[10px] font-semibold ${
-            rising ? 'text-emerald-600' : 'text-fantasy-red'
+            rising ? 'text-positive' : 'text-fantasy-red'
           }`}
           aria-label={`${headline.label} ${rising ? 'up' : 'down'} in the last ${RECENT_WEEKS} weeks`}
         >

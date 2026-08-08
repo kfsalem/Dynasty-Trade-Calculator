@@ -47,13 +47,13 @@ export function RosterList({
 
   return (
     <div>
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-subtle">
         Ranked by the best lineup each roster can field — computed from the league's{' '}
         {league.settings.startingSlots.length} starting slots, not from whatever lineup was
         last set. Values come from FantasyCalc, matched to this league's format, then
         measured against what it costs to replace each position <em>in this league</em>.
       </p>
-      <p className="mt-2 text-sm text-gray-500">
+      <p className="mt-2 text-sm text-subtle">
         Two questions, two numbers. <strong>Win-now</strong> ranks the rosters and fills
         the lineups: what these players do for you this season. <strong>Dynasty</strong>{' '}
         prices the bench and every trade: what they are worth to hold. A 32-year-old
@@ -61,7 +61,7 @@ export function RosterList({
         snap is worse, so a single number was answering both questions with the wrong one.
         Expand a team to see each list in its own units.
       </p>
-      <p className="mt-2 text-sm text-gray-500">
+      <p className="mt-2 text-sm text-subtle">
         Players ruled out for the season — injured reserve, PUP, suspended, or not on an
         active NFL roster — are left out of these lineups, because a slot they cannot fill
         is a hole rather than a starter. Their asset value is untouched. A knock that is
@@ -70,7 +70,7 @@ export function RosterList({
       </p>
 
       {snapsMeta && (
-        <p className="mt-2 text-sm text-gray-400">
+        <p className="mt-2 text-sm text-subtle">
           Expand a team to see each player's offensive snap share
           {snapsMeta.throughWeek === null
             ? ` (${snapsMeta.season})`
@@ -91,7 +91,7 @@ export function RosterList({
       )}
 
       {unvalued > 0 && (
-        <p className="mt-2 text-sm text-gray-400">
+        <p className="mt-2 text-sm text-subtle">
           {unvalued} rostered skill {unvalued === 1 ? 'player is' : 'players are'} unranked
           by FantasyCalc and shown as ~0. Measured against DynastyProcess, these are worth
           under 0.1% of a roster each.
@@ -117,7 +117,7 @@ export function RosterList({
         ))}
       </div>
 
-      <p className="mt-8 text-center text-xs text-gray-400">
+      <p className="mt-8 text-center text-xs text-subtle">
         League total: {formatValue(summaries.reduce((sum, s) => sum + s.totalValue, 0))}{' '}
         across {summaries.length} rosters
       </p>
