@@ -1,11 +1,27 @@
 # Roadmap
 
-Ordered backlog. Each item below is written to be pasted straight into a GitHub
-issue — title, labels, body. Work top to bottom; the ordering is a dependency
-order, not a wish list.
+**Status lives in [#19](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/19), not here.**
+Every item below is now a GitHub issue, and the issues move on their own. This
+document duplicated their state as prose and drifted badly — it described three
+finished milestones as future work for over a week. Keeping the checkboxes in
+one place is the fix.
+
+What this document is for now:
+
+- **The research and rationale** behind the ordering — the durable part, and the
+  part that does not fit in an issue body.
+- **The specifications as written**, including the live-endpoint constraints
+  behind R1 that are still the reason the ingest pipeline exists.
+
+Each item carries its issue number and current state. Read it as the record of
+why the work was ordered this way, not as a queue.
 
 Research date: 2026-07-29. Data constraints in R1 were verified against live
 endpoints that day and should be re-checked if they look wrong.
+
+**As of 2026-08-08: R1–R10, R12 and R13 have shipped.** Milestones 1–3 are
+complete. What remains is R11, R14, all of Milestone 5, and the post-roadmap
+items at the end.
 
 ---
 
@@ -36,7 +52,11 @@ Specific valuation complaints worth knowing:
   they land.
 
 Both are already addressed here (`pickRealismFactor` + `projectedSlots`), which
-is worth saying out loud in the UI at some point.
+is worth saying out loud in the UI at some point. Still unsaid — tracked as
+[#49](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/49), where it
+turns out to be more than a missed boast: the realism curve prices a third-rounder
+well below KeepTradeCut's quote, and a correction the user cannot see reads as a
+bug.
 
 ### Competitive gaps
 
@@ -49,8 +69,13 @@ Genuine gaps we could own, in rough order of differentiation:
 
 1. **Weekly activity in the valuation** — nobody prices a player off his current
    role. This is R3–R7 and it is the most defensible thing on this list.
-2. Playoff odds tied to the trade you are considering.
-3. Real trade market data for calibration.
+   **Shipped.**
+2. Playoff odds tied to the trade you are considering. **Shipped** (R13).
+3. Real trade market data for calibration. **Open** —
+   [#48](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/48). The last
+   unclaimed item on this list, and the one whose feasibility is least certain:
+   it needs a bulk cross-league source available to a zero-backend static site,
+   and no such source has been confirmed to exist.
 
 ### Why activity data is the right bet
 
@@ -66,11 +91,16 @@ mispriced *right now*.
 
 ---
 
-# Milestone 1 — Data foundation
+# Milestone 1 — Data foundation ✅ Complete
 
-Nothing in Milestone 2 can start until these two land.
+Nothing in Milestone 2 could start until these two landed. Both have.
 
 ## R1 — Ingest nflverse at build time (CORS + size blocker)
+
+**Status:** Shipped — [#1](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/1).
+`scripts/ingest.ts`, `.github/workflows/ci-ingest.yml` and the scheduled
+`refresh-data.yml` are the result. The constraints below are why it works this
+way and are still worth reading before touching the pipeline.
 
 **Labels:** `enhancement`
 
@@ -133,6 +163,8 @@ fetch pattern) · `src/lib/csv.ts` · `src/lib/cache.ts`
 
 ## R2 — Player ID crosswalk: Sleeper ↔ gsis ↔ pfr
 
+**Status:** Shipped — [#2](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/2).
+
 **Labels:** `enhancement`
 
 ### Problem
@@ -172,11 +204,14 @@ from FantasyCalc; this extends the same idea rather than replacing it.
 
 ---
 
-# Milestone 2 — Activity-based value
+# Milestone 2 — Activity-based value ✅ Complete
 
-The core bet. R6 is the payoff; R3–R5 are its inputs.
+The core bet. R6 was the payoff; R3–R5 were its inputs. All five shipped between
+2026-07-30 and 2026-07-31.
 
 ## R3 — Snap share and role participation
+
+**Status:** Shipped — [#3](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/3).
 
 **Labels:** `enhancement`
 
@@ -204,6 +239,8 @@ delta between them. The delta is the signal — a back whose snap share went fro
 
 ## R4 — Opportunity metrics: target share, air yards, WOPR
 
+**Status:** Shipped — [#4](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/4).
+
 **Labels:** `enhancement`
 
 `stats_player_week_2025.csv` already carries `target_share`, `air_yards_share`
@@ -226,6 +263,8 @@ backs hold value in PPR that carry share alone misses).
 
 ## R5 — Depth chart role classification
 
+**Status:** Shipped — [#5](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/5).
+
 **Labels:** `enhancement`
 
 The 53 MB `depth_charts` file is the reason R1 exists. Reduce it at ingest to
@@ -246,6 +285,11 @@ buy-low signal.
 ---
 
 ## R6 — Activity-adjusted valuation
+
+**Status:** Shipped — [#6](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/6).
+`src/engine/activityFactor.ts`. The design constraints below were binding and
+still are — in particular the rule that the multiplier degrades to exactly 1.0
+with no data, which is what makes the app usable in the offseason.
 
 **Labels:** `enhancement`
 
@@ -297,6 +341,11 @@ one number destroys ordering, and ordering feeds back into the model through
 
 ## R7 — Role-trend detection: buy-low and sell-high
 
+**Status:** Shipped — [#7](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/7).
+`src/engine/roleTrend.ts`. Now also the engine behind the waiver recommender
+([#47](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/47)) — the same
+signal run against unrostered players instead of rostered ones.
+
 **Labels:** `enhancement`
 
 Where activity data actually earns its keep. The market reprices a role change
@@ -327,12 +376,17 @@ reason stated in the existing "why they say yes" format.
 
 ---
 
-# Milestone 3 — Known model gaps
+# Milestone 3 — Known model gaps ✅ Complete
 
-Found during the 2026-07-29 review. Independent of Milestones 1–2; can be picked
-up in parallel by anyone not touching the data pipeline.
+Found during the 2026-07-29 review. Independent of Milestones 1–2; picked up in
+parallel with the data pipeline, as intended.
 
 ## R8 — Separate win-now value from dynasty value
+
+**Status:** Shipped — [#8](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/8).
+The four-number model in `PlayerValue` (`value` / `marketValue` /
+`redraftValue` / `winNowValue`) is this issue's output, and its doc comment in
+`src/types/index.ts` is the authoritative explanation of the two scales.
 
 **Labels:** `enhancement`
 
@@ -378,6 +432,10 @@ the win-now one while trade fairness stays on dynasty market value.
 
 ## R9 — Injury status in valuation
 
+**Status:** Shipped — [#9](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/9).
+`src/engine/availability.ts`, and the expanded `InjuryStatus` union that
+distinguishes roster designations (`dnr`, `na`) from actual injuries.
+
 **Labels:** `enhancement`
 
 `Player.injury` is mapped from Sleeper (`InjuryStatus` in `src/types/index.ts`)
@@ -400,6 +458,14 @@ need the trade engine should be solving for.
 ---
 
 ## R10 — Unvalued positions: K, DEF, and the deep bench
+
+**Status:** Shipped — [#10](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/10).
+Resolved by excluding K/DEF from the maths while keeping them on the roster, with
+`UnvaluedCell` drawing the "no value published" / "worth nothing" distinction.
+
+That distinction gets its real test in
+[#46](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/46): on the free-agent
+board it applies to 662 of 893 players rather than 18 of 176.
 
 **Labels:** `enhancement`, `good first issue`
 
@@ -427,11 +493,20 @@ nominal flat value. Either is defensible; the current silent zero is not.
 
 ---
 
-# Milestone 4 — Reach and retention
+# Milestone 4 — Reach and retention ◐ R12 and R13 shipped
 
-Only worth doing once the valuation is something to be proud of.
+Only worth doing once the valuation is something to be proud of — which, after
+Milestones 2 and 3, it is. R11 and R14 remain.
 
 ## R11 — Multi-platform: MFL, Fleaflicker, ESPN
+
+**Status:** Open — [#11](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/11).
+
+Note that the `LeagueBundle` contract this depends on is being widened by
+[#46](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/46), which adds a
+free-agent set every provider will be expected to supply. Worth sequencing
+deliberately: doing #46 first means one more thing for each new provider to
+implement, doing R11 first means retrofitting each of them.
 
 **Labels:** `enhancement`
 
@@ -454,6 +529,10 @@ seven platforms; we support one.
 
 ## R12 — Shareable trade permalinks
 
+**Status:** Shipped — [#12](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/12).
+The OG image shipped with it: `scripts/og.ts` generates `public/og.png`, and
+`index.html` carries the full `og:` and `twitter:` card metadata.
+
 **Labels:** `enhancement`
 
 Encode a proposed trade in the URL so it can be pasted into a league chat. This
@@ -465,6 +544,9 @@ Pairs naturally with an OG image for link previews.
 ---
 
 ## R13 — Playoff odds for a proposed trade
+
+**Status:** Shipped — [#13](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/13).
+`src/engine/playoffOdds.ts`.
 
 **Labels:** `enhancement`
 
@@ -485,6 +567,9 @@ distribution per roster. `starterValue` is already the per-roster strength input
 
 ## R14 — Weekly start/sit optimizer
 
+**Status:** Open — [#14](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/14).
+Its precondition is met: R3–R4 activity data has shipped.
+
 **Labels:** `enhancement`
 
 `bestLineup` already computes the optimal legal lineup. With R3–R4 activity data
@@ -495,10 +580,18 @@ feature most likely to bring users back between trades.
 
 # Milestone 5 — The premium feel
 
-Deliberately last. Polish applied to a model you do not yet trust is wasted work,
-and every one of these touches surfaces that Milestones 2–3 will reshape.
+**The reason this was last no longer holds.** The original argument: *"Polish
+applied to a model you do not yet trust is wasted work, and every one of these
+touches surfaces that Milestones 2–3 will reshape."* Milestones 2 and 3 have
+shipped. The reshaping has happened, the surfaces are stable, and the model is
+one worth trusting — so the condition the deferral was waiting on is satisfied.
+
+Milestone 5 is now most of what remains. R15 was always the safe thing to pull
+forward; it is now simply next.
 
 ## R15 — Design system foundation
+
+**Status:** Open — [#15](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/15).
 
 **Labels:** `enhancement`
 
@@ -519,6 +612,8 @@ Currently styling is ad-hoc Tailwind utilities per component with a
 
 ## R16 — Data visualization overhaul
 
+**Status:** Open — [#16](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/16).
+
 **Labels:** `enhancement`
 
 The app's whole argument is quantitative and it currently renders as tables and
@@ -538,6 +633,8 @@ scatter of the league, with your team marked. It is currently a label.
 
 ## R17 — Motion, states, and onboarding
 
+**Status:** Open — [#17](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/17).
+
 **Labels:** `enhancement`
 
 What separates a competent tool from an expensive-feeling one:
@@ -554,6 +651,8 @@ What separates a competent tool from an expensive-feeling one:
 
 ## R18 — Mobile-first pass
 
+**Status:** Open — [#18](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/18).
+
 **Labels:** `enhancement`
 
 Trades get discussed on phones, in league group chats. The two-column
@@ -565,3 +664,45 @@ deliberate small-screen design rather than a reflow.
 - [ ] Every primary flow usable one-handed at 375 px
 - [ ] No horizontal page scroll at any breakpoint
 - [ ] Touch targets ≥ 44 px
+
+---
+
+# Post-roadmap
+
+Raised after the 2026-07-29 research and outside its ordering. Specs live in the
+issues rather than here — the lesson of this document is that a second copy of a
+plan drifts from the first.
+
+## Second source for player values
+
+**Status:** Open — [#43](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/43).
+
+A `ValueSource` seam with DynastyProcess behind it, so FantasyCalc is not the
+only answer. Raised when the risk register was found to be claiming a mitigation
+that did not exist. The hard part named there is normalisation: two markets must
+land on one scale before either can be compared, and the win-now split depends on
+that scale holding.
+
+## The waiver wire
+
+**Status:** Open — [#46](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/46)
+(free-agent board), then
+[#47](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/47) (pickup
+recommendations with FAAB bids).
+
+The app currently discards every unrostered player at import — 893 of them on the
+test league. #46 widens the provider seam to keep them and prices what can be
+priced; #47 points R7's role-trend engine at the result. Measured 2026-08-08:
+74% of free agents on an NFL team have no FantasyCalc value, so activity data,
+not market value, has to do the ranking.
+
+## Calibration and legibility
+
+- [#48](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/48) — real trade
+  market data for calibration. The third competitive gap above, and the one whose
+  feasibility is unproven.
+- [#49](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/49) — say the
+  pick-valuation edge out loud in the UI.
+- [#50](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/50) — mine Sleeper
+  transaction history. Closes out `DESIGN.md` §7 open question 4, and unblocks the
+  bid model in #47.
