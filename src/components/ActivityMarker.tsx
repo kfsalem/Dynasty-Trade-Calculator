@@ -28,7 +28,7 @@ export function ActivityMarker({ adjustment }: { adjustment?: ActivityAdjustment
   return (
     <span
       className={`hidden w-10 shrink-0 text-right text-[10px] font-semibold tabular-nums sm:inline-block ${
-        rising ? 'text-positive' : 'text-fantasy-red'
+        rising ? 'text-positive' : 'text-negative'
       }`}
       title={describeAdjustment(adjustment)}
       aria-label={`Current role ${rising ? 'lifts' : 'cuts'} this value ${Math.abs(percent)} percent`}

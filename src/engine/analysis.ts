@@ -226,6 +226,85 @@ const QUADRANTS: Record<Quadrant, { label: string; advice: string }> = {
   },
 };
 
+/**
+ * The median split, in one place.
+ *
+ * Extracted so the quadrant *label* and the quadrant *plot* cannot drift apart.
+ * A chart that put a team in the top-right while the banner above it said
+ * "Danger zone" would be the scarcity panel's old bug in a new costume — see
+ * `ScarcityPanel` — and two copies of a four-way conditional is exactly how
+ * that happens.
+ */
+function quadrantOf(strongNow: boolean, strongFuture: boolean): Quadrant {
+  return strongNow
+    ? strongFuture
+      ? 'juggernaut'
+      : 'win_now'
+    : strongFuture
+      ? 'rebuilding'
+      : 'danger';
+}
+
+/**
+ * The quadrant's y axis: future asset base per point of present lineup
+ * strength. Shared for the same reason `quadrantOf` is — see
+ * `contentionProfile` for why the axis is a ratio rather than the future score
+ * itself.
+ */
+const retainedShareOf = (now: number, future: number): number => future / (now || 1);
+
+/** One team's position on the two axes the quadrant is a median split of. */
+export interface ContentionPoint {
+  rosterId: number;
+  /** Win-now lineup strength — the x axis. */
+  nowScore: number;
+  /** Future asset base per point of present strength — the y axis. */
+  retainedShare: number;
+  quadrant: Quadrant;
+}
+
+export interface LeagueContention {
+  points: ContentionPoint[];
+  /** The two split lines. Everything at or above each is "strong". */
+  nowMedian: number;
+  retainedMedian: number;
+}
+
+/**
+ * Every team's position, computed once.
+ *
+ * `contentionProfile` answers "where is *this* team", and answering it for all
+ * of them means projecting every roster forward once per team — `futureScore`
+ * runs `bestLineup` over a decayed copy of the roster, so a ten-team league
+ * pays for a hundred lineup optimisations to draw ten points. This computes the
+ * league's scores once and derives all ten from them.
+ *
+ * It shares `quadrantOf` and the same two medians with `contentionProfile`, so
+ * a team's dot and a team's banner always agree.
+ */
+export function leagueContention(
+  all: RosterSummary[],
+  settings: LeagueSettings,
+): LeagueContention {
+  const nowScores = all.map((s) => s.starterValue);
+  const futureScores = all.map((s) => futureScore(s, settings));
+  const retainedShares = nowScores.map((now, i) => retainedShareOf(now, futureScores[i]));
+
+  const nowMedian = median(nowScores);
+  const retainedMedian = median(retainedShares);
+
+  return {
+    points: all.map((summary, i) => ({
+      rosterId: summary.rosterId,
+      nowScore: nowScores[i],
+      retainedShare: retainedShares[i],
+      quadrant: quadrantOf(nowScores[i] >= nowMedian, retainedShares[i] >= retainedMedian),
+    })),
+    nowMedian,
+    retainedMedian,
+  };
+}
+
 export function contentionProfile(
   summary: RosterSummary,
   all: RosterSummary[],
@@ -247,21 +326,11 @@ export function contentionProfile(
   // The ratio has no such problem. It is scale-free, so a weak young roster and
   // a strong young roster both read as young, which is the distinction the
   // quadrant exists to draw.
-  const retained = (n: number, f: number) => f / (n || 1);
-  const retainedShare = retained(now, future);
+  const retainedShare = retainedShareOf(now, future);
 
-  const retainedShares = nowScores.map((n, i) => retained(n, futureScores[i]));
+  const retainedShares = nowScores.map((n, i) => retainedShareOf(n, futureScores[i]));
 
-  const strongNow = now >= median(nowScores);
-  const strongFuture = retainedShare >= median(retainedShares);
-
-  const quadrant: Quadrant = strongNow
-    ? strongFuture
-      ? 'juggernaut'
-      : 'win_now'
-    : strongFuture
-      ? 'rebuilding'
-      : 'danger';
+  const quadrant = quadrantOf(now >= median(nowScores), retainedShare >= median(retainedShares));
 
   // Fraction of the league this team is at or above. A single team is its own
   // whole league and sits in the middle of it rather than at an extreme.

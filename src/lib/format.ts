@@ -63,43 +63,70 @@ export const formatAge = (age: number | null): string =>
  */
 export const POSITION_STYLES: Record<
   Position,
-  { chip: string; bar: string; border: string; label: string }
+  {
+    chip: string;
+    bar: string;
+    border: string;
+    label: string;
+    /** SVG counterparts of `bar` and `chip`, for the charts in `components/charts`. */
+    fill: string;
+    fillSoft: string;
+    stroke: string;
+  }
 > = {
   QB: {
     chip: 'bg-pos-qb-soft text-pos-qb',
     bar: 'bg-pos-qb',
     border: 'border-pos-qb',
     label: 'QB',
+    fill: 'fill-pos-qb',
+    fillSoft: 'fill-pos-qb-soft',
+    stroke: 'stroke-pos-qb',
   },
   RB: {
     chip: 'bg-pos-rb-soft text-pos-rb',
     bar: 'bg-pos-rb',
     border: 'border-pos-rb',
     label: 'RB',
+    fill: 'fill-pos-rb',
+    fillSoft: 'fill-pos-rb-soft',
+    stroke: 'stroke-pos-rb',
   },
   WR: {
     chip: 'bg-pos-wr-soft text-pos-wr',
     bar: 'bg-pos-wr',
     border: 'border-pos-wr',
     label: 'WR',
+    fill: 'fill-pos-wr',
+    fillSoft: 'fill-pos-wr-soft',
+    stroke: 'stroke-pos-wr',
   },
   TE: {
     chip: 'bg-pos-te-soft text-pos-te',
     bar: 'bg-pos-te',
     border: 'border-pos-te',
     label: 'TE',
+    fill: 'fill-pos-te',
+    fillSoft: 'fill-pos-te-soft',
+    stroke: 'stroke-pos-te',
   },
   K: {
     chip: 'bg-pos-none-soft text-pos-none',
     bar: 'bg-pos-none',
     border: 'border-pos-none',
     label: 'K',
+    fill: 'fill-pos-none',
+    fillSoft: 'fill-pos-none-soft',
+    stroke: 'stroke-pos-none',
   },
   DEF: {
     chip: 'bg-pos-none-soft text-pos-none',
     bar: 'bg-pos-none',
     border: 'border-pos-none',
     label: 'DEF',
+    fill: 'fill-pos-none',
+    fillSoft: 'fill-pos-none-soft',
+    stroke: 'stroke-pos-none',
   },
 };
 

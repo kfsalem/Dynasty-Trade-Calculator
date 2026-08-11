@@ -1,9 +1,12 @@
+import { useMemo } from 'react';
 import type { League, Position } from '../types';
 import type { RosterSummary } from '../engine/rosterValue';
-import { analyzeTeam, type PositionalStrength, type Quadrant } from '../engine/analysis';
-import { SKILL_POSITIONS } from '../engine/analysis';
+import { analyzeTeam, leagueContention, type Quadrant } from '../engine/analysis';
 import type { PositionScarcity } from '../engine/replacement';
 import { POSITION_STYLES, formatValue } from '../lib/format';
+import { ContentionScatter } from './charts/ContentionScatter';
+import { PositionalStrengthChart } from './charts/PositionalStrengthChart';
+import { ScarcityChart } from './charts/ScarcityChart';
 
 interface Props {
   league: League;
@@ -20,138 +23,6 @@ const QUADRANT_STYLE: Record<Quadrant, string> = {
   danger: 'bg-negative-soft border-negative text-negative',
 };
 
-/** Diverging bar: strengths grow right, weaknesses left, centred on the median. */
-function StrengthBar({ item }: { item: PositionalStrength }) {
-  const magnitude = Math.min(Math.abs(item.z), 2) / 2; // 0-1, clamped at 2σ
-  const width = magnitude * 50;
-  const strong = item.z > 0;
-  const style = POSITION_STYLES[item.position];
-
-  return (
-    <div className="flex items-center gap-3">
-      <span
-        className={`inline-flex w-11 shrink-0 justify-center rounded px-1.5 py-0.5 text-xs font-semibold ${style.chip}`}
-      >
-        {item.position}
-      </span>
-
-      <div className="relative h-6 flex-1 rounded bg-page">
-        <div className="absolute inset-y-0 left-1/2 w-px bg-line" aria-hidden="true" />
-        <div
-          className={`absolute inset-y-1 rounded ${
-            item.verdict === 'strength'
-              ? 'bg-positive'
-              : item.verdict === 'weakness'
-                ? 'bg-negative'
-                : 'bg-subtle'
-          }`}
-          style={
-            strong
-              ? { left: '50%', width: `${width}%` }
-              : { right: '50%', width: `${width}%` }
-          }
-        />
-      </div>
-
-      <span className="w-28 shrink-0 text-right text-sm tabular-nums text-subtle">
-        {formatValue(item.starterValue)}
-        <span className="text-subtle"> / {formatValue(item.leagueMedian)}</span>
-      </span>
-    </div>
-  );
-}
-
-/**
- * Why the app weights positions the way it does, shown rather than asserted.
- *
- * Plotted as the share of an elite player's value that *survives* replacement,
- * not as replacement level itself. A high replacement level means the position
- * is cheap to replace — so charting it directly would draw the longest bar for
- * quarterbacks in a shallow league and teach the exact opposite of the point.
- *
- * Both scales, since R8 gave the app two of them. Showing only the dynasty
- * column had this panel quoting a tight-end replacement of 1,548 while the
- * lineup a few inches up the page was scored against 253 — a panel disagreeing
- * with the engine, which is the exact failure it was fixed for once already.
- * The gap between the two bars is worth reading on its own: a position can be
- * expensive to replace as an asset and cheap to replace this Sunday.
- */
-function ScarcityPanel({
-  scarcity,
-  teamCount,
-}: {
-  scarcity: Partial<Record<Position, PositionScarcity>>;
-  teamCount: number;
-}) {
-  const rows = SKILL_POSITIONS.map((position) => scarcity[position])
-    .filter((row): row is PositionScarcity => row !== undefined && row.topMarket > 0)
-    .sort((a, b) => b.retained - a.retained);
-  if (rows.length === 0) return null;
-
-  return (
-    <section className="card mt-4">
-      <h3 className="font-semibold">What each position is really worth here</h3>
-      <p className="mt-1 text-sm text-subtle">
-        With {teamCount} teams and this lineup, a player is only worth what he adds over
-        the best man at his position who starts for nobody. The bars show how much of an
-        elite player's value survives that test — high means the position is scarce and
-        worth paying for, low means you can replace him off waivers. The solid bar is{' '}
-        <strong>dynasty</strong>, what he is worth to hold; the outlined one is{' '}
-        <strong>win-now</strong>, what he is worth this season. A position can be dear to
-        replace as an asset and cheap to replace on Sunday.
-      </p>
-      <div className="mt-4 space-y-3">
-        {rows.map((row) => (
-          <div key={row.position} className="flex items-center gap-3">
-            <span
-              className={`inline-flex w-11 shrink-0 justify-center rounded px-1.5 py-0.5 text-xs font-semibold ${
-                POSITION_STYLES[row.position].chip
-              }`}
-            >
-              {row.position}
-            </span>
-            {/* `min-w-0` so the bars yield space rather than pushing the row
-                wider than the card — this panel sits in a narrow column and the
-                fixed labels beside it already claim most of the width. */}
-            <div className="min-w-0 flex-1 space-y-1">
-              <div className="h-2 rounded bg-page">
-                <div
-                  className={`h-2 rounded ${POSITION_STYLES[row.position].bar}`}
-                  style={{ width: `${Math.round(row.retained * 100)}%` }}
-                  title={`Dynasty: an elite ${row.position} keeps ${Math.round(row.retained * 100)}% of his market value here.`}
-                />
-              </div>
-              <div className="h-2 rounded bg-page">
-                <div
-                  className={`h-2 rounded border ${POSITION_STYLES[row.position].border} bg-transparent`}
-                  style={{ width: `${Math.round(row.retainedWinNow * 100)}%` }}
-                  title={`Win-now: an elite ${row.position} keeps ${Math.round(row.retainedWinNow * 100)}% of his redraft value here.`}
-                />
-              </div>
-            </div>
-            <span
-              className="w-28 shrink-0 text-right tabular-nums"
-              title={`${row.startersNeeded} ${row.position}s hold a starting job somewhere in this league. Replacing one costs ${formatValue(row.value)} as an asset and ${formatValue(row.winNow)} for this season.`}
-            >
-              <span className="block text-sm">
-                <span className="font-semibold">{Math.round(row.retained * 100)}%</span>
-                <span className="text-subtle">
-                  {' '}
-                  · {Math.round(row.retainedWinNow * 100)}%
-                </span>
-              </span>
-              <span className="hidden text-[10px] leading-tight text-subtle sm:block">
-                {row.startersNeeded} start · {formatValue(row.value)}/
-                {formatValue(row.winNow)}
-              </span>
-            </span>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 export function TeamAnalysis({
   league,
   summaries,
@@ -161,6 +32,18 @@ export function TeamAnalysis({
 }: Props) {
   const analysis = analyzeTeam(myRosterId, summaries, league.settings);
   const roster = league.rosters.find((r) => r.rosterId === myRosterId);
+
+  // Projecting every roster three years forward runs `bestLineup` once per
+  // team, so this is the most expensive thing on the tab. Memoised above the
+  // early return, because a hook cannot hide behind a conditional.
+  const contentionPoints = useMemo(
+    () => leagueContention(summaries, league.settings),
+    [summaries, league.settings],
+  );
+  const teamNames = useMemo(
+    () => new Map(league.rosters.map((r) => [r.rosterId, r.teamName])),
+    [league.rosters],
+  );
 
   if (!analysis || !roster) {
     return (
@@ -212,20 +95,15 @@ export function TeamAnalysis({
         </div>
       </div>
 
-      <section className="card mt-4">
-        <h3 className="font-semibold">Strengths and weaknesses</h3>
-        <p className="mt-1 text-sm text-subtle">
-          Starting value at each position versus the league median. Flex slots count
-          toward the position of whoever fills them.
-        </p>
-        <div className="mt-4 space-y-2">
-          {positions.map((item) => (
-            <StrengthBar key={item.position} item={item} />
-          ))}
-        </div>
-      </section>
+      <ContentionScatter
+        contention={contentionPoints}
+        teamNames={teamNames}
+        myRosterId={myRosterId}
+      />
 
-      {scarcity && <ScarcityPanel scarcity={scarcity} teamCount={contention.teamCount} />}
+      <PositionalStrengthChart positions={positions} />
+
+      {scarcity && <ScarcityChart scarcity={scarcity} teamCount={contention.teamCount} />}
 
       <section className="card mt-4">
         <h3 className="font-semibold">Tradeable surplus</h3>

@@ -57,7 +57,7 @@ function Delta({ value }: { value: number }) {
   return (
     <span
       className={`font-semibold tabular-nums ${
-        value > 0 ? 'text-fantasy-green' : value < 0 ? 'text-fantasy-red' : 'text-subtle'
+        value > 0 ? 'text-positive' : value < 0 ? 'text-negative' : 'text-subtle'
       }`}
     >
       {value > 0 ? '+' : ''}

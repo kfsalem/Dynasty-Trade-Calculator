@@ -1,6 +1,7 @@
 import type { League } from '../types';
 import type { RoleTrend, RoleTrends } from '../engine/roleTrend';
 import { POSITION_STYLES, formatValue } from '../lib/format';
+import { RoleMoveDumbbell } from './charts/RoleMoveDumbbell';
 
 const pct = (share: number): string => `${Math.round(share * 100)}%`;
 
@@ -43,6 +44,7 @@ function TrendRow({
   rising: boolean;
 }) {
   const style = POSITION_STYLES[trend.player.position];
+  const lead = trend.reasons[0];
 
   return (
     <li className="flex items-baseline gap-2 py-1.5">
@@ -57,14 +59,25 @@ function TrendRow({
           {trend.player.name}
           <span className="ml-1.5 text-xs text-subtle">{teamName}</span>
         </div>
-        <div className="text-xs text-subtle">
-          {evidence(trend)}
-          {/* Never hidden, and never silently down-ranked into invisibility: a
-              three-game trend is worth reading with the caveat attached, and
-              worth nothing without it. */}
-          {trend.thin && (
-            <span className="ml-1 font-medium text-caution">· short window</span>
+        <div className="flex items-center gap-2 text-xs text-subtle">
+          {/* The sentence carries the numbers; the mark carries their scale.
+              See `RoleMoveDumbbell` for why this one is not a ChartFigure. */}
+          {lead && (
+            <RoleMoveDumbbell
+              from={lead.from}
+              to={lead.to}
+              position={trend.player.position}
+            />
           )}
+          <span>
+            {evidence(trend)}
+            {/* Never hidden, and never silently down-ranked into invisibility: a
+                three-game trend is worth reading with the caveat attached, and
+                worth nothing without it. */}
+            {trend.thin && (
+              <span className="ml-1 font-medium text-caution">· short window</span>
+            )}
+          </span>
         </div>
         {/* The reason the row cleared the gate, not decoration. Without it the
             list reads as "these players' usage moved", which is the claim that
@@ -75,7 +88,7 @@ function TrendRow({
 
       <span
         className={`shrink-0 tabular-nums text-sm font-semibold ${
-          rising ? 'text-positive' : 'text-fantasy-red'
+          rising ? 'text-positive' : 'text-negative'
         }`}
       >
         {rising ? '+' : '−'}
