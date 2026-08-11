@@ -19,9 +19,9 @@ why the work was ordered this way, not as a queue.
 Research date: 2026-07-29. Data constraints in R1 were verified against live
 endpoints that day and should be re-checked if they look wrong.
 
-**As of 2026-08-08: R1–R10, R12 and R13 have shipped.** Milestones 1–3 are
-complete. What remains is R11, R14, all of Milestone 5, and the post-roadmap
-items at the end.
+**As of 2026-08-11: R1–R10, R12, R13, R15 and R16 have shipped**, along with
+#53's design brief. Milestones 1–3 are complete. What remains is R11, R14, R17
+and R18, and the post-roadmap items at the end.
 
 ---
 
@@ -586,20 +586,18 @@ touches surfaces that Milestones 2–3 will reshape."* Milestones 2 and 3 have
 shipped. The reshaping has happened, the surfaces are stable, and the model is
 one worth trusting — so the condition the deferral was waiting on is satisfied.
 
-Milestone 5 is now most of what remains. R15 was always the safe thing to pull
-forward; it is now simply next.
+Milestone 5 is now most of what remains.
 
-**Start with [#53](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/53).**
-These four issues are execution, and there is no agreed direction underneath
-them — #53 produces the design brief they spend, and is cheap enough that
-deciding it first costs almost nothing next to four issues each guessing
-separately.
+**#53, R15 and R16 have shipped**, in that order — the design brief
+(`docs/DESIGN-SYSTEM.md`), the token layer it specified, and the charts that
+spend both. What is left of the milestone is R17 and R18, and they inherit a
+settled vocabulary rather than a blank page.
 
 ## R15 — Design system foundation
 
-**Status:** Open — [#15](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/15).
+**Status:** Shipped — [#15](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/15).
 Sequenced after [#53](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/53),
-which also corrects this item's premise: `POSITION_STYLES` is no longer the only
+which also corrected this item's premise: `POSITION_STYLES` is no longer the only
 shared token set. `src/index.css` carries a Tailwind 4 `@theme` block that is
 half-adopted — three of its declared tokens are dead while 51 distinct raw color
 utilities run alongside it. A partly-used vocabulary is a harder starting point
@@ -624,7 +622,7 @@ Currently styling is ad-hoc Tailwind utilities per component with a
 
 ## R16 — Data visualization overhaul
 
-**Status:** Open — [#16](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/16).
+**Status:** Shipped — [#16](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/16).
 
 **Labels:** `enhancement`
 
@@ -637,9 +635,43 @@ scatter of the league, with your team marked. It is currently a label.
 
 ### Acceptance
 
-- [ ] Consistent chart language — one palette, one axis treatment, one tooltip
-- [ ] Accessible: not color-alone, keyboard-reachable, screen-reader labelled
-- [ ] Responsive without horizontal page scroll
+- [x] Consistent chart language — one palette, one axis treatment, one tooltip
+- [x] Accessible: not color-alone, keyboard-reachable, screen-reader labelled
+- [x] Responsive without horizontal page scroll
+
+### What it turned out to be
+
+`src/components/charts/` — plain SVG, no charting dependency. The design brief
+had already settled every colour question (§4.4), so the work was form and
+mechanism rather than palette.
+
+**`ChartFigure` is the chart language, and it enforces rather than documents.**
+Its `table` prop is required, not optional, so a chart cannot be added to this
+app without its WCAG-clean twin; `markProps` returns hover and focus handlers
+together, so a mark that responds to a pointer responds to the keyboard by
+construction. Neither can be forgotten because neither can be omitted.
+
+Two decisions worth keeping:
+
+- **The scatter is an emphasis chart, not four coloured quadrants.** Colouring
+  the dots by verdict would have spent the reserved status palette on identity
+  and seated a fourth categorical hue in an all-pairs form, which caps at three.
+  Your team is the accent dot; the league is recessive grey; the quadrant is
+  carried by position against the median crosshair, which is what a quadrant has
+  always meant.
+- **`leagueContention` shares `quadrantOf` and both medians with
+  `contentionProfile`.** A dot in the top-right under a banner reading "Danger
+  zone" would be the scarcity panel's old bug in a new costume, so the agreement
+  is a unit test rather than a convention.
+
+The diverging bar was also **encoding its verdict in colour alone** — a green or
+red bar and nothing else on the row saying which. It now carries the signed
+delta at the bar's tip.
+
+Rendering it caught three things no validator could: a corner label colliding
+with the team name in the exact quadrant a rebuilding team occupies, a missing
+y-axis caption, and a full-extent bar printing its own value straight through
+the position chip.
 
 ---
 
@@ -751,11 +783,11 @@ on real arithmetic, and it should not pretend to predict anything.
 
 ## Frontend design direction
 
-**Status:** Open — [#53](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/53).
+**Status:** Shipped — [#53](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/53).
 Sequenced before R15 — see Milestone 5 above.
 
-The design brief that Milestone 5 currently lacks: register, density, typography,
-a semantic color layer, light and dark, and the accessibility bar. Also the place
-where the repo's first `.claude/skills/` entry gets written, so the decisions
-apply to everyone working in the codebase rather than living in one person's
-head.
+The design brief Milestone 5 lacked: register, density, typography, a semantic
+color layer, light and dark, and the accessibility bar. Delivered as
+`docs/DESIGN-SYSTEM.md`, plus the repo's first `.claude/skills/` entries, so the
+decisions apply to everyone working in the codebase rather than living in one
+person's head.

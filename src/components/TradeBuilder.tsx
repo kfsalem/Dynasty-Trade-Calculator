@@ -80,7 +80,7 @@ function VorsBadge({ delta }: { delta: number }) {
   return (
     <span
       className={`font-semibold tabular-nums ${
-        neutral ? 'text-subtle' : positive ? 'text-fantasy-green' : 'text-fantasy-red'
+        neutral ? 'text-subtle' : positive ? 'text-positive' : 'text-negative'
       }`}
     >
       {positive ? '+' : ''}
@@ -204,9 +204,9 @@ function PlayoffOdds({
             <span
               className={`font-semibold ${
                 points > 0
-                  ? 'text-fantasy-green'
+                  ? 'text-positive'
                   : points < 0
-                    ? 'text-fantasy-red'
+                    ? 'text-negative'
                     : ''
               }`}
             >
@@ -215,7 +215,7 @@ function PlayoffOdds({
             {points !== 0 && (
               <span
                 className={`ml-1 text-xs ${
-                  points > 0 ? 'text-fantasy-green' : 'text-fantasy-red'
+                  points > 0 ? 'text-positive' : 'text-negative'
                 }`}
               >
                 ({points > 0 ? '+' : ''}
@@ -261,9 +261,9 @@ function SideSummary({
           <dd
             className={`font-semibold tabular-nums ${
               side.netValue > 0
-                ? 'text-fantasy-green'
+                ? 'text-positive'
                 : side.netValue < 0
-                  ? 'text-fantasy-red'
+                  ? 'text-negative'
                   : ''
             }`}
           >

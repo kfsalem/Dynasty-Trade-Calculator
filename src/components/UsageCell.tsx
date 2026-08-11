@@ -72,7 +72,7 @@ export function UsageCell({ usage }: { usage: Opportunity | undefined }) {
         // cannot separate the emerald from the red.
         <span
           className={`text-[10px] font-semibold ${
-            rising ? 'text-positive' : 'text-fantasy-red'
+            rising ? 'text-positive' : 'text-negative'
           }`}
           aria-label={`${headline.label} ${rising ? 'up' : 'down'} in the last ${RECENT_WEEKS} weeks`}
         >

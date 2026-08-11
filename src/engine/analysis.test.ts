@@ -3,6 +3,7 @@ import {
   analyzeTeam,
   contentionProfile,
   futureScore,
+  leagueContention,
   positionalStarterValue,
   retention,
 } from './analysis';
@@ -332,6 +333,82 @@ describe('contentionProfile', () => {
     expect(profile.teamCount).toBe(4);
     expect(profile.nowRank).toBe(4);
     expect(profile.futureRank).toBe(4);
+  });
+});
+
+describe('leagueContention', () => {
+  it('agrees with contentionProfile for every team', () => {
+    /**
+     * The point of the whole exercise. R16 plots the league on the two axes the
+     * quadrant is a median split of, and a dot in the top-right under a banner
+     * reading "Danger zone" is the scarcity panel's old bug wearing a new
+     * costume — a display disagreeing with the engine it is supposed to be
+     * showing. The two share `quadrantOf` and the two medians so that they
+     * cannot; this is the test that says so.
+     */
+    const { summaries } = world();
+    const league = leagueContention(summaries, settings);
+
+    expect(league.points).toHaveLength(summaries.length);
+
+    for (const summary of summaries) {
+      const profile = contentionProfile(summary, summaries, settings);
+      const point = league.points.find((p) => p.rosterId === summary.rosterId);
+
+      expect(point).toBeDefined();
+      expect(point?.quadrant).toBe(profile.quadrant);
+      expect(point?.nowScore).toBe(profile.nowScore);
+      expect(point?.retainedShare).toBeCloseTo(profile.retainedShare, 10);
+    }
+  });
+
+  it('reports the two split lines the quadrants are drawn on', () => {
+    // The scatter draws these as the crosshair that divides the plot, so they
+    // have to be the same medians the verdict was decided by rather than
+    // anything the chart recomputes for itself.
+    const { summaries } = world();
+    const { points, nowMedian, retainedMedian } = leagueContention(summaries, settings);
+
+    for (const point of points) {
+      const strongNow = point.nowScore >= nowMedian;
+      const strongFuture = point.retainedShare >= retainedMedian;
+      const expected =
+        strongNow && strongFuture
+          ? 'juggernaut'
+          : strongNow
+            ? 'win_now'
+            : strongFuture
+              ? 'rebuilding'
+              : 'danger';
+
+      expect(point.quadrant).toBe(expected);
+    }
+  });
+
+  it('survives a one-team league', () => {
+    const { summaries } = world();
+    const league = leagueContention([summaries[0]], settings);
+
+    expect(league.points).toHaveLength(1);
+    // Its own median, so it is trivially at or above both splits.
+    expect(league.points[0].quadrant).toBe('juggernaut');
+    expect(Number.isFinite(league.retainedMedian)).toBe(true);
+  });
+
+  it('does not divide by zero on a roster that starts nobody', () => {
+    // An empty roster scores 0 now, which is the denominator of the y axis.
+    const empty = summarizeRoster(
+      makeRoster(99, []),
+      new Map<string, Player>(),
+      new Map<string, PlayerValue>(),
+      settings,
+    );
+    const { summaries } = world();
+    const league = leagueContention([...summaries, empty], settings);
+
+    for (const point of league.points) {
+      expect(Number.isFinite(point.retainedShare)).toBe(true);
+    }
   });
 });
 

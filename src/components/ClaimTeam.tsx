@@ -63,7 +63,7 @@ export function ClaimTeam({ league, onClaim }: Props) {
       </form>
 
       {error && (
-        <p role="alert" className="mt-2 text-sm text-fantasy-red">
+        <p role="alert" className="mt-2 text-sm text-negative">
           {error}
         </p>
       )}

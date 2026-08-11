@@ -49,7 +49,7 @@ export function LeagueImport({ onSubmit, busy }: Props) {
       </div>
 
       {error ? (
-        <p id="league-input-error" role="alert" className="mt-2 text-sm text-fantasy-red">
+        <p id="league-input-error" role="alert" className="mt-2 text-sm text-negative">
           {error}
         </p>
       ) : (

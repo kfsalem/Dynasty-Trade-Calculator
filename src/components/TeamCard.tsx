@@ -92,7 +92,7 @@ function PlayerLine({
         {entry.player.injury ? (
           <span
             className={`ml-1.5 text-xs font-semibold ${
-              entry.available ? 'text-caution' : 'text-fantasy-red'
+              entry.available ? 'text-caution' : 'text-negative'
             }`}
             title={injuryNote(entry.player.injury)}
           >
