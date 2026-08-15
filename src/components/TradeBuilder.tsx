@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { DraftPick, League, Player, PlayerValue, Position, TradeSideResult } from '../types';
+import type {
+  DraftPick,
+  League,
+  Player,
+  PlayerValue,
+  Position,
+  TradeAnalysis,
+  TradeSideResult,
+} from '../types';
 import { evaluateTrade, FAIRNESS_LABEL, type TradeContext } from '../engine/trade';
 import { AssetPicker } from './AssetPicker';
+import { EmptyState } from './EmptyState';
+import { useChanged } from '../hooks/useChanged';
 import type { SnapShare } from '../engine/snapShare';
 import type { Opportunity } from '../engine/opportunity';
 import type { PlayerRole } from '../engine/role';
@@ -168,6 +178,31 @@ function PlayoffOdds({
   pending: boolean;
   model: ScoringModel | undefined;
 }) {
+  const settled = after !== undefined && !pending;
+
+  /**
+   * The one figure on this panel that arrives after the user has stopped
+   * looking for it.
+   *
+   * Ten thousand simulated seasons run off the main thread, so the row shows
+   * "34% …" for a beat and then quietly becomes "34% → 51%". Quietly is the
+   * problem: it is the most consequential number here and it is the only one
+   * that can change without the user having touched anything.
+   *
+   * `after` itself, deliberately, and not `settled ? after : undefined`. The
+   * hook keeps the previous answer on screen while a new one runs, so `after`
+   * moves exactly once per simulation — at the moment the answer lands. Feeding
+   * it the gated value instead made the pending dip to `undefined` count as a
+   * change of its own, so the highlight lit up the "…" state a beat *before*
+   * the number it was meant to be pointing at. It also earns a second
+   * property: a re-run that returns the same odds does not flash, so the mark
+   * means "this moved", not merely "this recomputed".
+   *
+   * Above the early return because it is a hook, and a league with no schedule
+   * renders this component with `before` undefined on every edit.
+   */
+  const landed = useChanged(after);
+
   if (before === undefined) return null;
 
   /**
@@ -183,7 +218,6 @@ function PlayoffOdds({
       ? `Tuned to ${model.weeks} completed ${model.weeks === 1 ? 'week' : 'weeks'} of this league's own scoring, blended with typical values while the sample is thin.`
       : 'This league has not played enough weeks to measure its own scoring, so typical values are assumed.';
 
-  const settled = after !== undefined && !pending;
   const points = settled ? Math.round(after * 100) - Math.round(before * 100) : 0;
 
   return (
@@ -194,7 +228,7 @@ function PlayoffOdds({
       >
         Playoff odds
       </dt>
-      <dd className="tabular-nums">
+      <dd className={`-mx-1 px-1 tabular-nums ${landed ? 'flash-change' : ''}`}>
         {settled ? (
           <>
             <span className="text-subtle">{pct(before)}</span>
@@ -306,6 +340,83 @@ function SideSummary({
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/**
+ * The answer, once there is a trade to answer about.
+ *
+ * Its own component so that mounting it *is* the event. The card is rendered
+ * only while something is selected, so React inserts it the moment the first
+ * asset is ticked and `.rise-in` plays exactly then, for free — no "has this
+ * appeared before" flag to keep in sync with the selection.
+ *
+ * That framing also fixes the flash below at no cost: `useChanged` never fires
+ * on its own first render, so the fairness chip stays still while the card is
+ * arriving and only lights up when a later edit moves the verdict. Two
+ * animations on the same element in the same 250ms was the alternative, and it
+ * reads as a stutter rather than as two facts.
+ */
+function Verdict({
+  analysis,
+  before,
+  after,
+  oddsPending,
+  oddsModel,
+}: {
+  analysis: TradeAnalysis;
+  before: Map<number, number> | null;
+  after: Map<number, number> | null;
+  oddsPending: boolean;
+  oddsModel: ScoringModel | undefined;
+}) {
+  /**
+   * Only when the *rating* moves — not when the numbers behind it do.
+   *
+   * Ticking one more mid-round pick nudges every figure on this panel, so a
+   * flash on any of them would fire on every click and mean nothing. Crossing
+   * from "Fair" to "Lopsided" happens rarely and is the moment the user is
+   * actually hunting for, which is what makes it worth marking.
+   */
+  const verdictMoved = useChanged(analysis.fairnessRating);
+
+  return (
+    <div className="card rise-in mt-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <span
+          className={`rounded-full px-3 py-1 text-sm font-semibold ${
+            verdictMoved ? 'flash-change' : ''
+          } ${
+            analysis.fairnessRating === 'very_fair' || analysis.fairnessRating === 'fair'
+              ? 'bg-positive-soft text-positive'
+              : analysis.fairnessRating === 'slightly_unfair'
+                ? 'bg-caution-soft text-caution'
+                : 'bg-negative-soft text-negative'
+          }`}
+        >
+          {FAIRNESS_LABEL[analysis.fairnessRating]}
+        </span>
+        <span className="text-sm text-subtle tabular-nums">
+          {formatValue(analysis.valueDifference)} apart (
+          {Math.round(analysis.valueDifferencePct * 100)}%)
+        </span>
+      </div>
+
+      <p className="mt-3 text-muted">{analysis.summary}</p>
+
+      <div className="mt-5 grid gap-6 border-t border-line pt-5 sm:grid-cols-2">
+        {analysis.sides.map((side) => (
+          <SideSummary
+            key={side.rosterId}
+            side={side}
+            oddsBefore={before?.get(side.rosterId)}
+            oddsAfter={after?.get(side.rosterId)}
+            oddsPending={oddsPending}
+            oddsModel={oddsModel}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -550,44 +661,29 @@ export function TradeBuilder({
       </div>
 
       {analysis ? (
-        <div className="card mt-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <span
-              className={`rounded-full px-3 py-1 text-sm font-semibold ${
-                analysis.fairnessRating === 'very_fair' || analysis.fairnessRating === 'fair'
-                  ? 'bg-positive-soft text-positive'
-                  : analysis.fairnessRating === 'slightly_unfair'
-                    ? 'bg-caution-soft text-caution'
-                    : 'bg-negative-soft text-negative'
-              }`}
-            >
-              {FAIRNESS_LABEL[analysis.fairnessRating]}
-            </span>
-            <span className="text-sm text-subtle tabular-nums">
-              {formatValue(analysis.valueDifference)} apart (
-              {Math.round(analysis.valueDifferencePct * 100)}%)
-            </span>
-          </div>
-
-          <p className="mt-3 text-muted">{analysis.summary}</p>
-
-          <div className="mt-5 grid gap-6 border-t border-line pt-5 sm:grid-cols-2">
-            {analysis.sides.map((side) => (
-              <SideSummary
-                key={side.rosterId}
-                side={side}
-                oddsBefore={before.odds?.get(side.rosterId)}
-                oddsAfter={after.odds?.get(side.rosterId)}
-                oddsPending={after.pending}
-                oddsModel={odds?.model}
-              />
-            ))}
-          </div>
-        </div>
+        <Verdict
+          analysis={analysis}
+          before={before.odds}
+          after={after.odds}
+          oddsPending={after.pending}
+          oddsModel={odds?.model}
+        />
       ) : (
-        <p className="mt-6 text-center text-sm text-subtle">
-          Select at least one asset to evaluate a trade.
-        </p>
+        /*
+          The state a shared link lands on when its assets have all gone, and
+          the state every first-time user starts in. It used to be one grey
+          sentence, which spent the only moment anyone reads this tab saying
+          nothing — so it now says what the two columns are for and what the
+          second number in them means, which is the same idea the first-run
+          screen opens on.
+        */
+        <div className="mt-6">
+          <EmptyState title="Nothing on the table yet">
+            Tick what each team would send. Every asset is priced twice: what the
+            market pays for it, and what it adds to that team's starting lineup in
+            this league — the second is the one worth trading on.
+          </EmptyState>
+        </div>
       )}
     </div>
   );

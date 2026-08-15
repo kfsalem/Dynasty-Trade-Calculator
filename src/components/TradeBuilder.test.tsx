@@ -137,6 +137,68 @@ describe('TradeBuilder — the shared-link notice', () => {
   });
 });
 
+describe('TradeBuilder — the state before there is a trade', () => {
+  /**
+   * Where a first-time user starts, and where a shared link whose assets have
+   * all moved on lands. It was one grey sentence — "Select at least one asset
+   * to evaluate a trade" — which spent the only moment anyone reads this tab
+   * restating the obvious instead of explaining the two columns of numbers
+   * sitting above it.
+   */
+  it('says what the tab is for, not just what to press', async () => {
+    const user = userEvent.setup();
+    renderBuilder(0);
+
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(screen.getByText('Nothing on the table yet')).toBeInTheDocument();
+    expect(screen.getByText(/priced twice/)).toBeInTheDocument();
+  });
+
+  it('shows the verdict again as soon as something is selected', async () => {
+    const user = userEvent.setup();
+    renderBuilder(0);
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+    await user.click(screen.getByRole('checkbox', { name: /Player p1/ }));
+
+    expect(screen.queryByText('Nothing on the table yet')).not.toBeInTheDocument();
+  });
+});
+
+describe('TradeBuilder — motion that explains', () => {
+  /**
+   * The running total sits pinned above a list that scrolls inside a 24rem
+   * box, so on a real roster the checkbox and the number it moves can be a
+   * screen apart. This asserts the wiring only — whether the highlight is
+   * *drawn* is `.flash-change`'s business, and whether it is drawn at all is
+   * `prefers-reduced-motion`'s.
+   */
+  it('marks the running total that a tick just moved', async () => {
+    const user = userEvent.setup();
+    renderBuilder(0);
+
+    const total = screen.getAllByText(/Sending away/)[0].querySelector('span')!;
+    expect(total.className).not.toContain('flash-change');
+
+    await user.click(screen.getByRole('checkbox', { name: /Player p2/ }));
+
+    expect(total.className).toContain('flash-change');
+  });
+
+  /**
+   * The rule that keeps the flash meaningful: it marks a change, never an
+   * arrival. Every figure on a freshly mounted panel is "new", and lighting
+   * them all up on mount is how a highlight stops being read.
+   */
+  it('does not flash the totals that were there when the panel mounted', () => {
+    renderBuilder(0);
+
+    const total = screen.getAllByText(/Sending away/)[0].querySelector('span')!;
+    expect(total.className).not.toContain('flash-change');
+  });
+});
+
 describe('TradeBuilder — playoff odds', () => {
   it('shows each side its odds before and after the trade', async () => {
     renderBuilder(0, oddsContext);

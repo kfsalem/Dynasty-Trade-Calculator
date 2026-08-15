@@ -47,6 +47,7 @@ Never write `text-gray-500`, `bg-white`, `border-gray-200`, or any raw
 | `--color-control` | input/select/checkbox boundary (3:1 — darker than it looks like it should be) |
 | `--color-accent` | interactive: links, focus, selected tab |
 | `--color-positive` / `-negative` / `-caution` | status only |
+| `--color-skeleton` / `-sheen` | loading placeholders; the sheen is the lighter of the two in both themes |
 
 Status colours are **reserved**: never a category, never a series, never
 decoration.
@@ -98,6 +99,30 @@ the manual toggle.
 
 Surfaces: light page `#f9fafb` / surface `#ffffff`; dark page `#0f1115` /
 surface `#16181d`.
+
+## Motion
+
+Three animations exist, defined in `src/index.css`. **Do not add a fourth
+without deleting one, and do not add a motion library.**
+
+| class | use it for |
+|---|---|
+| `.skeleton` | content that has not arrived — never a spinner |
+| `.rise-in` | a panel appearing because the user did something |
+| `.flash-change` | a figure that moved while the user was looking at it |
+
+- Drive `.flash-change` with `useChanged` (`src/hooks/useChanged.ts`). It never
+  fires on first render — an arrival is not a change, and a panel that lights up
+  end to end on mount teaches people to ignore the highlight.
+- Flash the thing that **crosses a boundary**, not everything that recomputes.
+  One tick moves every number on the verdict panel; the fairness *rating* moving
+  is the event.
+- The wash is `accent-soft`. Never a status colour — the figure carries its own
+  sign, and status is reserved.
+- Add `-mx-1 px-1` to a flashed element so the wash has room and the text does
+  not shift.
+- Every animation must degrade correctly under `prefers-reduced-motion`, which
+  the base layer switches off globally. Never re-enable it locally.
 
 ## Charts
 

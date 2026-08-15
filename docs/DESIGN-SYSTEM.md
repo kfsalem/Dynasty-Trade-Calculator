@@ -174,6 +174,32 @@ localStorage — the same place the league id and claimed team already live, per
 The app currently contains **zero** `dark:` variants, and `.card` hardcodes
 `bg-white`. There is nothing to retrofit; there is everything to add.
 
+## 5b. Motion
+
+**Three animations, defined once in `src/index.css`, and no library.** Motion is
+part of the vocabulary rather than a component's private business, and keeping
+it beside the tokens is what puts it under the one `prefers-reduced-motion` rule
+in the base layer.
+
+| class | marks | degrades to |
+|---|---|---|
+| `.skeleton` | what is coming, and how much of it | a static block |
+| `.rise-in` | a panel appearing in response to an action | the panel, visible |
+| `.flash-change` | a figure that moved while you were looking at it | no highlight |
+
+**Every animation must survive being switched off.** Each of the three above
+degrades to something still correct, which is the test for whether motion is
+carrying meaning that belongs somewhere else.
+
+**A flash marks an event, never a value.** Ticking one player moves every figure
+on the verdict panel at once, so a highlight on all of them fires constantly and
+is quickly ignored. `useChanged` never fires on its own first render, so a
+freshly mounted panel does not light up end to end — an arrival is not a change.
+
+The wash is `accent-soft`, never a status colour: it means "look here", not
+"this is good news", and the figure already carries its own sign. Give a flashed
+element `-mx-1 px-1` so the wash has room without the text shifting.
+
 ## 6. Accessibility
 
 WCAG AA in both themes, and this is a realistic bar rather than an aspiration —
@@ -186,7 +212,8 @@ behaviour is ahead of the colour.
   sign or an arrow, not just green/red. Status carries a word.
 - Visible focus ring on every interactive element, in both themes.
 - Touch targets ≥ 44px (#18).
-- Respect `prefers-reduced-motion` — the transitions #17 adds must be opt-out.
+- Respect `prefers-reduced-motion`. One rule in the base layer covers every
+  animation in §5b; anything that would break when it fires does not belong.
 
 ## 7. Claude skills
 

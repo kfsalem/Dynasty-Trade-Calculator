@@ -46,6 +46,8 @@ vi.mock('./hooks/useLeagueData', () => ({
       // "Loading…" and goes disabled if this lies.
       isLoading: Boolean(leagueId),
       error: null,
+      retry: () => {},
+      retrying: false,
     },
 }));
 
@@ -86,6 +88,8 @@ function ready(league: League, rosterIds: number[], picks: DraftPick[] = []) {
     trends: undefined,
     isLoading: false,
     error: null,
+    retry: () => {},
+    retrying: false,
   };
 }
 
@@ -108,6 +112,8 @@ function stillLoading() {
     trends: undefined,
     isLoading: true,
     error: null,
+    retry: () => {},
+    retrying: false,
   };
 }
 
@@ -168,6 +174,84 @@ describe('App — a link that is still loading', () => {
     await openAt('/?l=111111&a=99&b=2&ap=p1');
 
     await waitFor(() => expect(window.location.search).toBe(''));
+  });
+});
+
+/**
+ * The three states that are not "it worked": still loading, failed, and never
+ * started. Each one used to be a default — a spinner, a red box, and a form —
+ * and each is now the surface someone actually judges the app on, because two
+ * of the three are where a first-time user spends their first ten seconds.
+ */
+describe('App — the states that are not success', () => {
+  it('explains what is slow instead of spinning at the user', async () => {
+    mocks.states['111111'] = stillLoading();
+
+    // A whole trade in the link, because a bare `l=` is not one — `decodeTrade`
+    // rejects it and the app falls back to the remembered league, which these
+    // tests clear.
+    await openAt('/?l=111111&a=1&b=2&ap=p1');
+
+    // The load is three requests deep and holds the screen for seconds. An
+    // unexplained wait is how a slow league becomes a suspected broken one.
+    const loading = await screen.findByLabelText('Loading league');
+    expect(loading).toHaveTextContent(/pricing every player/i);
+  });
+
+  /**
+   * A failure with no way out except the address bar is worse here than
+   * anywhere else in the app: on a shared link a reload is *also* the scariest
+   * button on screen, which is why the effect above works so hard to keep the
+   * trade in the URL. A retry is the cheap fix.
+   */
+  it('offers a retry when the league fails, rather than only a reload', async () => {
+    const retry = vi.fn();
+    mocks.states['111111'] = {
+      ...stillLoading(),
+      isLoading: false,
+      error: new Error('Sleeper is down'),
+      retry,
+    };
+
+    await openAt('/?l=111111&a=1&b=2&ap=p1');
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Try again' }));
+
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it('teaches replacement level before anyone has loaded a league', async () => {
+    await openAt('/');
+
+    // The one idea the app is built on, and the reason its numbers differ from
+    // every other calculator's. A user who has not read it reads a low value
+    // as a bug.
+    expect(
+      await screen.findByRole('heading', { name: /worth less here than on KTC/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/What he adds to your lineup/i)).toBeInTheDocument();
+  });
+
+  /**
+   * The explainer is for a first run, not for every run. Someone staring at a
+   * failed load needs the error and the retry, and burying those under a
+   * lecture about replacement level is how a designed state becomes a worse
+   * one than the default it replaced.
+   */
+  it('does not lecture about replacement level over a failed load', async () => {
+    mocks.states['111111'] = {
+      ...stillLoading(),
+      isLoading: false,
+      error: new Error('nope'),
+    };
+
+    await openAt('/?l=111111&a=1&b=2&ap=p1');
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: /worth less here than on KTC/i }),
+    ).not.toBeInTheDocument();
   });
 });
 
