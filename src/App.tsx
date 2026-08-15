@@ -7,6 +7,9 @@ import { TradeSuggestions } from './components/TradeSuggestions';
 import { TeamAnalysis } from './components/TeamAnalysis';
 import { ClaimTeam } from './components/ClaimTeam';
 import { ThemeToggle } from './components/ThemeToggle';
+import { LeagueSkeleton } from './components/LeagueSkeleton';
+import { LeagueError } from './components/LeagueError';
+import { ReplacementLevel } from './components/ReplacementLevel';
 import { useLeagueSummaries } from './hooks/useLeagueData';
 import { useMyRoster } from './hooks/useMyRoster';
 import { decodeTrade, encodeTrade, resolveShare } from './lib/share';
@@ -116,6 +119,8 @@ function App() {
     trends,
     isLoading,
     error,
+    retry,
+    retrying,
   } = useLeagueSummaries(leagueId);
 
   useEffect(() => {
@@ -196,6 +201,13 @@ function App() {
 
   const showImport = !leagueId || Boolean(error);
   const ready = league && players && values && !isLoading && !error;
+  /**
+   * Nobody has picked a league yet — as opposed to having picked one that
+   * failed. Both show the import form; only the first is a first run, and
+   * stacking the explainer under an error message would bury the one thing on
+   * screen the user needs to read.
+   */
+  const firstRun = !leagueId;
 
   return (
     <main className="min-h-screen bg-page text-ink">
@@ -227,29 +239,16 @@ function App() {
             </div>
 
             {error && (
-              <div
-                role="alert"
-                className="mt-4 rounded-lg border border-negative bg-negative-soft p-4 text-sm text-negative"
-              >
-                <p className="font-semibold">Couldn't load that league.</p>
-                <p className="mt-1">{(error as Error).message}</p>
-              </div>
+              <LeagueError error={error as Error} onRetry={retry} retrying={retrying} />
             )}
+
+            {firstRun && <ReplacementLevel />}
           </div>
         )}
 
-        {leagueId && isLoading && !error && (
-          <div className="py-20 text-center">
-            <div
-              className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-line border-t-accent"
-              role="status"
-              aria-label="Loading league"
-            />
-            <p className="mt-4 text-sm text-subtle">
-              Loading rosters and dynasty values…
-            </p>
-          </div>
-        )}
+        {/* No wrapper: the skeleton starts where `LeagueHeader` will, so the
+            page does not shift when the league lands. */}
+        {leagueId && isLoading && !error && <LeagueSkeleton />}
 
         {ready && (
           <>

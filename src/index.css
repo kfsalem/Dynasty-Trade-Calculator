@@ -83,6 +83,17 @@
   --color-negative-soft: #fef2f2;
   --color-caution-soft: #fffbeb;
 
+  /* ---- Loading ----
+   * The block a skeleton draws, and the sheen that sweeps across it. Both are
+   * decorative surfaces that never carry text, so neither has a contrast
+   * requirement — but the sheen must be *lighter* than the block in both
+   * themes or the sweep reads as a shadow crossing the card. Dark is picked
+   * against #16181d, not lifted from light; `--color-line` is too dim there to
+   * read as a shape at all.
+   */
+  --color-skeleton: #e5e7eb;
+  --color-skeleton-sheen: #f3f4f6;
+
   --font-sans: Inter, system-ui, sans-serif;
 }
 
@@ -131,6 +142,10 @@
     --color-pos-wr-soft: #2e1f08;
     --color-pos-te-soft: #221a3d;
     --color-pos-none-soft: #21252c;
+
+    /* A step above `raised`, so a skeleton sits on the card rather than in it. */
+    --color-skeleton: #272c34;
+    --color-skeleton-sheen: #333a45;
   }
 }
 
@@ -189,5 +204,87 @@
    */
   .card {
     @apply bg-surface border border-line rounded-xl p-5;
+  }
+
+  /* ---- Motion -------------------------------------------------------------
+   * Three animations, and no more. Each one answers a question the user is
+   * actually asking; anything that only answers "does this feel expensive" is
+   * decoration and does not belong here.
+   *
+   * All three are switched off by the `prefers-reduced-motion` rule in the base
+   * layer, which is why each degrades to something still correct rather than to
+   * nothing: the skeleton keeps its blocks, the entering panel ends up visible,
+   * and the flash simply does not happen.
+   */
+
+  /*
+   * "What is coming, and how much of it" — the shape of the content that has
+   * not arrived. A spinner cannot answer that, and the league load is a 5 MB
+   * player blob behind two more requests, so it is on screen for seconds.
+   *
+   * The sheen sweeps rather than the whole block pulsing: a pulse reads as a
+   * warning light, a sweep reads as one surface catching light.
+   */
+  .skeleton {
+    @apply rounded-md;
+    background-color: var(--color-skeleton);
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--color-skeleton-sheen) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    animation: skeleton-sweep 1600ms ease-in-out infinite;
+  }
+
+  @keyframes skeleton-sweep {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+
+  /*
+   * "This is new" — for a panel that appears in response to something the user
+   * did, so the verdict does not simply blink into existence under the cursor.
+   * Short and small: 6px and a quarter second is enough to be noticed and not
+   * enough to be waited on.
+   */
+  .rise-in {
+    animation: rise-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+
+  /*
+   * "This number moved" — the one that earns its place. Ticking a player
+   * changes several figures at once across two columns, and which ones moved is
+   * the entire question; without this the user has to diff the panel by eye.
+   *
+   * The wash is `accent-soft` rather than positive or negative because it means
+   * "look here", not "this is good news" — the number itself already carries
+   * the sign, and the status colours are reserved.
+   */
+  .flash-change {
+    @apply rounded;
+    animation: flash-change 1100ms ease-out;
+  }
+
+  @keyframes flash-change {
+    from {
+      background-color: var(--color-accent-soft);
+    }
+    to {
+      background-color: transparent;
+    }
   }
 }

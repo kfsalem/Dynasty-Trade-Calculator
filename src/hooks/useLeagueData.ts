@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { sleeperProvider } from '../platforms/sleeper';
 import { fetchFantasyCalcValues } from '../values/fantasycalc';
 import { fetchPickValues } from '../values/dynastyprocess';
@@ -296,6 +296,23 @@ export function useLeagueSummaries(leagueId: string | null) {
     [valuesQuery.data],
   );
 
+  /**
+   * Ask again for whatever failed — and only for that.
+   *
+   * Deliberately not a blanket "refetch everything". `refetch` in react-query
+   * v5 ignores `enabled`, so calling it on the values query while the league is
+   * the thing that broke would run `fetchFantasyCalcValues` with undefined
+   * settings, turning a retryable network error into a thrown one. Retrying the
+   * league is enough on its own: the values query is keyed on settings that
+   * arrive with it, so it starts by itself the moment the league lands.
+   */
+  const leagueRefetch = leagueQuery.refetch;
+  const valuesRefetch = valuesQuery.refetch;
+  const retry = useCallback(() => {
+    if (leagueQuery.isError) void leagueRefetch();
+    else if (valuesQuery.isError) void valuesRefetch();
+  }, [leagueQuery.isError, valuesQuery.isError, leagueRefetch, valuesRefetch]);
+
   return {
     league: leagueQuery.data?.league,
     players: leagueQuery.data?.players,
@@ -344,5 +361,9 @@ export function useLeagueSummaries(leagueId: string | null) {
     // so the league loads and renders whether or not it arrives.
     isLoading: leagueQuery.isLoading || valuesQuery.isLoading,
     error: leagueQuery.error ?? valuesQuery.error,
+    /** Re-run the failed query, so a failure has a way out short of a reload. */
+    retry,
+    /** True while that retry is in flight. */
+    retrying: leagueQuery.isFetching || valuesQuery.isFetching,
   };
 }

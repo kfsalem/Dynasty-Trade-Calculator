@@ -19,8 +19,8 @@ why the work was ordered this way, not as a queue.
 Research date: 2026-07-29. Data constraints in R1 were verified against live
 endpoints that day and should be re-checked if they look wrong.
 
-**As of 2026-08-11: R1–R10, R12, R13, R15 and R16 have shipped**, along with
-#53's design brief. Milestones 1–3 are complete. What remains is R11, R14, R17
+**As of 2026-08-15: R1–R10, R12, R13, R15, R16 and R17 have shipped**, along
+with #53's design brief. Milestones 1–3 are complete. What remains is R11, R14
 and R18, and the post-roadmap items at the end.
 
 ---
@@ -588,10 +588,10 @@ one worth trusting — so the condition the deferral was waiting on is satisfied
 
 Milestone 5 is now most of what remains.
 
-**#53, R15 and R16 have shipped**, in that order — the design brief
-(`docs/DESIGN-SYSTEM.md`), the token layer it specified, and the charts that
-spend both. What is left of the milestone is R17 and R18, and they inherit a
-settled vocabulary rather than a blank page.
+**#53, R15, R16 and R17 have shipped**, in that order — the design brief
+(`docs/DESIGN-SYSTEM.md`), the token layer it specified, the charts that spend
+both, and the motion and states layered over them. What is left of the milestone
+is R18, and it inherits a settled vocabulary rather than a blank page.
 
 ## R15 — Design system foundation
 
@@ -677,7 +677,7 @@ the position chip.
 
 ## R17 — Motion, states, and onboarding
 
-**Status:** Open — [#17](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/17).
+**Status:** Shipped — [#17](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/17).
 
 **Labels:** `enhancement`
 
@@ -690,6 +690,56 @@ What separates a competent tool from an expensive-feeling one:
 - Empty, error, and first-run states designed rather than defaulted
 - An onboarding pass that teaches replacement level in one screen, because the
   core idea is non-obvious and is the reason to use this over KTC
+
+### What it turned out to be
+
+Three CSS animations and no library. They live in `src/index.css` beside the
+tokens, because motion is part of the vocabulary rather than a component's
+private business — and because the `prefers-reduced-motion` rule already sitting
+in the base layer then switches all three off for free.
+
+**The hard part was deciding what *not* to animate.** Ticking one player moves
+every figure on the verdict panel at once, so a flash on any of them fires on
+every click and quickly means nothing. `useChanged` therefore drives exactly
+three marks, each on a different event:
+
+- the running "Sending away" total, which answers the tick you just made and can
+  be a scrolled screen away from the checkbox that moved it;
+- the fairness chip, but **only when the rating itself crosses a boundary** —
+  the numbers behind it move constantly and the verdict rarely does;
+- the playoff odds, which arrive late from a worker and are the one figure that
+  can change while nobody is looking at it.
+
+Two rules keep those honest. `useChanged` never fires on its own first render,
+so a freshly mounted panel does not light up end to end; and the verdict is its
+own component, so mounting it *is* the appearance event and `.rise-in` plays
+without a flag to keep in sync.
+
+The odds mark was wrong on the first attempt in a way only the rendered page
+showed: fed the *gated* value, the pending dip to `undefined` counted as a
+change of its own and lit up the "…" placeholder a beat before the number it was
+pointing at. Feeding it the raw value fixed that and bought a second property —
+a re-run returning the same odds no longer flashes at all, so the mark means
+"this moved" rather than "this recomputed".
+
+**The skeleton is deliberately vague about counts.** It mirrors the header,
+tablist and card stack closely enough that nothing jumps on arrival, but it does
+not draw twelve roster rows: guessing twelve and rendering ten is a worse lie
+than implying no number. It also says what is slow, since an unexplained wait is
+how a slow league becomes a suspected broken one.
+
+The failed load gained a retry — and `useLeagueSummaries` re-runs only the query
+that actually failed, because `refetch` in react-query v5 ignores `enabled` and
+retrying the values query while the *league* is broken would call
+`fetchFantasyCalcValues` with undefined settings, turning a retryable network
+error into a thrown one.
+
+The onboarding is set in type rather than drawn as a chart: a three-row
+subtraction in large tabular figures, market minus replacement, is the whole
+idea, and bars would have added a legend and an axis to one arithmetic
+operation. It shows only on a true first run — stacking it under a failed load
+would bury the error and the retry, which is the one thing on that screen anyone
+needs.
 
 ---
 

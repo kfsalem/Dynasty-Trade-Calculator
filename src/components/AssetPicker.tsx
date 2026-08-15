@@ -11,6 +11,7 @@ import { UsageCell } from './UsageCell';
 import { RoleMarker } from './RoleMarker';
 import { ActivityMarker } from './ActivityMarker';
 import { UnvaluedCell } from './UnvaluedCell';
+import { useChanged } from '../hooks/useChanged';
 
 interface Props {
   league: League;
@@ -87,6 +88,17 @@ export function AssetPicker({
     .filter((p) => p.ownerRosterId === rosterId)
     .sort((a, b) => a.season.localeCompare(b.season) || a.round - b.round);
 
+  /**
+   * The tick you just made, answered where you can see it.
+   *
+   * This list scrolls inside a 24rem box and the running total sits pinned
+   * above it, so on a long roster the checkbox and the number it moves are far
+   * enough apart that the change is easy to miss entirely. This is the shortest
+   * distance in the app between an action and its consequence, which makes it
+   * the one place motion is doing work rather than decoration.
+   */
+  const totalMoved = useChanged(outgoingValue);
+
   return (
     <div className="card !p-0 flex min-w-0 flex-col overflow-hidden">
       <div className="border-b border-line p-4">
@@ -107,7 +119,16 @@ export function AssetPicker({
         </select>
         <p className="mt-2 text-sm text-subtle">
           Sending away:{' '}
-          <span className="font-semibold tabular-nums text-ink">
+          {/*
+            `-mx-1 px-1` so the wash has room to sit around the digits without
+            the number shifting a pixel when it lands — a highlight that nudges
+            the text it is highlighting reads as a glitch.
+          */}
+          <span
+            className={`-mx-1 px-1 font-semibold tabular-nums text-ink ${
+              totalMoved ? 'flash-change' : ''
+            }`}
+          >
             {formatValue(outgoingValue)}
           </span>
         </p>
