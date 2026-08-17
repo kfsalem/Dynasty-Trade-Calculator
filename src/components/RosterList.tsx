@@ -6,6 +6,7 @@ import type { PlayerRole } from '../engine/role';
 import type { ActivityAdjustment } from '../engine/activityFactor';
 import { TeamCard } from './TeamCard';
 import { formatValue } from '../lib/format';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 
 interface Props {
   league: League;
@@ -32,6 +33,9 @@ export function RosterList({
   adjustments,
   priced,
 }: Props) {
+  // `md`, matching the Tailwind breakpoint the summary is hidden at, so the
+  // control and the thing it controls agree about where the layout changes.
+  const wide = useMediaQuery('(min-width: 768px)');
   const topStarterValue = summaries[0]?.starterValue ?? 0;
 
   // Kickers and defenses have no dynasty market, so their absence is expected.
@@ -47,6 +51,42 @@ export function RosterList({
 
   return (
     <div>
+      {/*
+        The explanation, folded away on a phone and open on a desktop.
+
+        Five paragraphs is the right amount of writing — every one answers a
+        question the standings genuinely raise — but at 375px they measured
+        about a screen and a half between the tab bar and the first roster.
+        Someone opening this tab wants the table; someone wondering why a
+        32-year-old receiver outranks a rookie wants the prose, and will go
+        looking for it.
+
+        `<details>` because it is keyboard- and screen-reader-complete with no
+        help, and because folding is exactly what this is. `open` is an
+        attribute with no CSS equivalent, which is the one thing here that has
+        to reach JavaScript — hence `useMediaQuery` rather than a `md:` variant.
+        The summary is hidden above `md`, where the paragraphs are simply there
+        as before.
+      */}
+      <details className="group" open={wide}>
+        <summary className="-mx-2 cursor-pointer list-none rounded-lg px-2 py-3 text-sm font-medium text-muted hover:bg-surface md:hidden [&::-webkit-details-marker]:hidden">
+          <span className="inline-flex items-center gap-2">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180"
+            >
+              <path
+                fillRule="evenodd"
+                d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                clipRule="evenodd"
+              />
+            </svg>
+            How these rankings are built
+          </span>
+        </summary>
+
       <p className="text-sm text-subtle">
         Ranked by the best lineup each roster can field — computed from the league's{' '}
         {league.settings.startingSlots.length} starting slots, not from whatever lineup was
@@ -97,6 +137,7 @@ export function RosterList({
           under 0.1% of a roster each.
         </p>
       )}
+      </details>
 
       <div className="mt-6 space-y-3">
         {summaries.map((summary, i) => (

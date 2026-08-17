@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   DraftPick,
   League,
@@ -358,6 +358,98 @@ function SideSummary({
  * animations on the same element in the same 250ms was the alternative, and it
  * reads as a stutter rather than as two facts.
  */
+/** The chip's colour, shared by the verdict card and the sticky phone bar. */
+function fairnessChip(rating: TradeAnalysis['fairnessRating']): string {
+  if (rating === 'very_fair' || rating === 'fair') return 'bg-positive-soft text-positive';
+  if (rating === 'slightly_unfair') return 'bg-caution-soft text-caution';
+  return 'bg-negative-soft text-negative';
+}
+
+/**
+ * The verdict, pinned to the bottom of a phone while a trade is being built.
+ *
+ * On a desktop the two pickers sit side by side and the verdict is a short
+ * scroll below them. On a phone the picker runs its full length — a 40-player
+ * roster is several screens — so the answer to "what did that do" was a long
+ * way from the checkbox that changed it, in a place the user had to remember to
+ * go and look. Pinning the two facts that matter keeps the consequence in view
+ * while the cause is still under the thumb, and the bar is a button so the full
+ * reasoning is one tap away rather than hidden.
+ */
+function StickyVerdict({
+  analysis,
+  myRosterId,
+  onJump,
+}: {
+  analysis: TradeAnalysis;
+  myRosterId: number | null;
+  onJump: () => void;
+}) {
+  // Your side if you are in this trade, otherwise the left one — the same
+  // perspective the builder anchors to.
+  const side =
+    analysis.sides.find((s) => s.rosterId === myRosterId) ?? analysis.sides[0];
+  const label = FAIRNESS_LABEL[analysis.fairnessRating];
+  const net = `${side.netValue > 0 ? '+' : ''}${formatValue(side.netValue)}`;
+
+  return (
+    <div
+      /*
+        `env(safe-area-inset-bottom)` so the bar clears the home indicator on a
+        modern iPhone rather than sitting under it.
+      */
+      className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:hidden"
+    >
+      <button
+        type="button"
+        onClick={onJump}
+        // The visible content is three fragments that only read as a sentence
+        // if you can see them laid out, so the button carries its own.
+        aria-label={`${label}. ${side.teamName} nets ${net}. Jump to the full verdict.`}
+        // `min-h-11`: the chip and the figure are both short, so the row came
+        // out 28px — a bar pinned within thumb reach that is too small to hit
+        // with a thumb.
+        className="flex min-h-11 w-full items-center gap-3"
+      >
+        <span
+          aria-hidden="true"
+          className={`shrink-0 rounded-full px-3 py-1 text-sm font-semibold ${fairnessChip(
+            analysis.fairnessRating,
+          )}`}
+        >
+          {label}
+        </span>
+        <span aria-hidden="true" className="min-w-0 flex-1 truncate text-right text-sm">
+          <span className="text-subtle">{side.teamName} </span>
+          <span
+            className={`font-semibold tabular ${
+              side.netValue > 0
+                ? 'text-positive'
+                : side.netValue < 0
+                  ? 'text-negative'
+                  : ''
+            }`}
+          >
+            {net}
+          </span>
+        </span>
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          className="h-5 w-5 shrink-0 text-subtle"
+        >
+          <path
+            fillRule="evenodd"
+            d="M14.77 12.79a.75.75 0 01-1.06-.02L10 8.83l-3.71 3.94a.75.75 0 11-1.08-1.04l4.25-4.5a.75.75 0 011.08 0l4.25 4.5a.75.75 0 01-.02 1.06z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 function Verdict({
   analysis,
   before,
@@ -387,13 +479,7 @@ function Verdict({
         <span
           className={`rounded-full px-3 py-1 text-sm font-semibold ${
             verdictMoved ? 'flash-change' : ''
-          } ${
-            analysis.fairnessRating === 'very_fair' || analysis.fairnessRating === 'fair'
-              ? 'bg-positive-soft text-positive'
-              : analysis.fairnessRating === 'slightly_unfair'
-                ? 'bg-caution-soft text-caution'
-                : 'bg-negative-soft text-negative'
-          }`}
+          } ${fairnessChip(analysis.fairnessRating)}`}
         >
           {FAIRNESS_LABEL[analysis.fairnessRating]}
         </span>
@@ -583,8 +669,41 @@ export function TradeBuilder({
     setGivesB({ playerIds: new Set(), pickIds: new Set() });
   }
 
+  const outA = sumValue(givesA.playerIds, givesA.pickIds);
+  const outB = sumValue(givesB.playerIds, givesB.pickIds);
+  const nameOf = (rosterId: number) =>
+    league.rosters.find((r) => r.rosterId === rosterId)?.teamName ?? 'Team';
+
+  /**
+   * Which side the phone is showing. Ignored from `md` up, where both render.
+   *
+   * The two pickers are ~900px apart once the inner scroll is gone, so stacking
+   * them made the second team a scroll journey rather than a choice. One at a
+   * time, switched by a control that keeps both running totals visible, is the
+   * small-screen design this replaced the reflow with.
+   */
+  const [mobileSide, setMobileSide] = useState<'a' | 'b'>('a');
+  const verdictRef = useRef<HTMLDivElement>(null);
+
+  const jumpToVerdict = () => {
+    // Honour the same preference the CSS animations do; a smooth scroll is
+    // motion, and this one moves the whole page.
+    const reduce =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    verdictRef.current?.scrollIntoView({
+      behavior: reduce ? 'auto' : 'smooth',
+      block: 'start',
+    });
+  };
+
   return (
-    <div>
+    /*
+      Room at the foot of the page for the pinned bar, which is `fixed` and so
+      would otherwise sit on top of the last thing the user scrolled to — which
+      is the verdict it is a summary of.
+    */
+    <div className={analysis ? 'pb-24 md:pb-0' : undefined}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold tracking-tight">Trade calculator</h2>
@@ -617,57 +736,108 @@ export function TradeBuilder({
         </p>
       )}
 
-      <div className="mt-5 grid gap-4 md:grid-cols-2">
-        <AssetPicker
-          league={league}
-          rosterId={teamA}
-          onRosterChange={(id) => changeTeam('a', id)}
-          excludeRosterId={teamB}
-          players={players}
-          values={values}
-          picks={picks}
-          selectedPlayerIds={givesA.playerIds}
-          selectedPickIds={givesA.pickIds}
-          onTogglePlayer={(id) => togglePlayer('a', id)}
-          onTogglePick={(id) => togglePick('a', id)}
-          outgoingValue={sumValue(givesA.playerIds, givesA.pickIds)}
-          snaps={snaps}
-          usage={usage}
-          roles={roles}
-          chartSeason={chartSeason}
-          adjustments={adjustments}
-          priced={priced}
-        />
-        <AssetPicker
-          league={league}
-          rosterId={teamB}
-          onRosterChange={(id) => changeTeam('b', id)}
-          excludeRosterId={teamA}
-          players={players}
-          values={values}
-          picks={picks}
-          selectedPlayerIds={givesB.playerIds}
-          selectedPickIds={givesB.pickIds}
-          onTogglePlayer={(id) => togglePlayer('b', id)}
-          onTogglePick={(id) => togglePick('b', id)}
-          outgoingValue={sumValue(givesB.playerIds, givesB.pickIds)}
-          snaps={snaps}
-          usage={usage}
-          roles={roles}
-          chartSeason={chartSeason}
-          adjustments={adjustments}
-          priced={priced}
-        />
+      {/*
+        The side switch, phones only.
+
+        Plain buttons with `aria-pressed`, not a tablist: this shows one of two
+        panels, so `role="tab"` is the tempting label — but declaring it
+        promises arrow-key navigation between the tabs, and the app already has
+        one real tablist honouring that contract. A second, fake one would teach
+        a screen reader user a keyboard behaviour that does not exist here.
+
+        Both totals stay on the control, so switching sides is a choice made
+        with the other side's number in hand rather than from memory.
+      */}
+      <div className="mt-5 grid grid-cols-2 gap-1 rounded-xl border border-line p-1 md:hidden">
+        {([
+          ['a', teamA, outA],
+          ['b', teamB, outB],
+        ] as const).map(([side, rosterId, out]) => {
+          const active = mobileSide === side;
+          return (
+            <button
+              key={side}
+              type="button"
+              onClick={() => setMobileSide(side)}
+              aria-pressed={active}
+              className={`min-w-0 rounded-lg px-3 py-2 text-left transition-colors ${
+                active ? 'bg-accent-soft' : 'hover:bg-page'
+              }`}
+            >
+              <span
+                className={`block truncate text-sm font-semibold ${
+                  active ? 'text-accent' : 'text-muted'
+                }`}
+              >
+                {nameOf(rosterId)}
+              </span>
+              <span className="tabular block truncate text-xs text-subtle">
+                sends {formatValue(out)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 grid gap-4 md:mt-5 md:grid-cols-2">
+        {/* `contents` so the wrapper leaves no box of its own and the picker is
+            still a direct child of the two-column grid on a desktop. */}
+        <div className={mobileSide === 'a' ? 'contents' : 'hidden md:contents'}>
+          <AssetPicker
+            league={league}
+            rosterId={teamA}
+            onRosterChange={(id) => changeTeam('a', id)}
+            excludeRosterId={teamB}
+            players={players}
+            values={values}
+            picks={picks}
+            selectedPlayerIds={givesA.playerIds}
+            selectedPickIds={givesA.pickIds}
+            onTogglePlayer={(id) => togglePlayer('a', id)}
+            onTogglePick={(id) => togglePick('a', id)}
+            outgoingValue={outA}
+            snaps={snaps}
+            usage={usage}
+            roles={roles}
+            chartSeason={chartSeason}
+            adjustments={adjustments}
+            priced={priced}
+          />
+        </div>
+        <div className={mobileSide === 'b' ? 'contents' : 'hidden md:contents'}>
+          <AssetPicker
+            league={league}
+            rosterId={teamB}
+            onRosterChange={(id) => changeTeam('b', id)}
+            excludeRosterId={teamA}
+            players={players}
+            values={values}
+            picks={picks}
+            selectedPlayerIds={givesB.playerIds}
+            selectedPickIds={givesB.pickIds}
+            onTogglePlayer={(id) => togglePlayer('b', id)}
+            onTogglePick={(id) => togglePick('b', id)}
+            outgoingValue={outB}
+            snaps={snaps}
+            usage={usage}
+            roles={roles}
+            chartSeason={chartSeason}
+            adjustments={adjustments}
+            priced={priced}
+          />
+        </div>
       </div>
 
       {analysis ? (
-        <Verdict
-          analysis={analysis}
-          before={before.odds}
-          after={after.odds}
-          oddsPending={after.pending}
-          oddsModel={odds?.model}
-        />
+        <div ref={verdictRef}>
+          <Verdict
+            analysis={analysis}
+            before={before.odds}
+            after={after.odds}
+            oddsPending={after.pending}
+            oddsModel={odds?.model}
+          />
+        </div>
       ) : (
         /*
           The state a shared link lands on when its assets have all gone, and
@@ -684,6 +854,14 @@ export function TradeBuilder({
             this league — the second is the one worth trading on.
           </EmptyState>
         </div>
+      )}
+
+      {analysis && (
+        <StickyVerdict
+          analysis={analysis}
+          myRosterId={myRosterId}
+          onJump={jumpToVerdict}
+        />
       )}
     </div>
   );

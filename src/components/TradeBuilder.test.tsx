@@ -166,6 +166,74 @@ describe('TradeBuilder — the state before there is a trade', () => {
   });
 });
 
+/**
+ * The phone layout (#18). Only one side's picker is laid out below `md`, so the
+ * switch is the only way to reach the other team — which makes it part of the
+ * flow rather than decoration, and worth holding still.
+ *
+ * These assert wiring, not visibility: jsdom applies no Tailwind, so `hidden`
+ * is a class and not a computed style, and a test claiming the other picker is
+ * invisible here would be claiming something it cannot see.
+ */
+describe('TradeBuilder — the phone side switch', () => {
+  it('offers both teams with what each is sending', () => {
+    renderBuilder(0);
+
+    const [a, b] = screen.getAllByRole('button', { name: /sends/ });
+    expect(a).toHaveTextContent('Team 1');
+    expect(b).toHaveTextContent('Team 2');
+    // Both totals stay on the control, so switching is a choice made with the
+    // other side's number in hand rather than from memory.
+    expect(a).toHaveTextContent(/sends\s*900/);
+  });
+
+  it('starts on the left side and moves on a press', async () => {
+    const user = userEvent.setup();
+    renderBuilder(0);
+
+    const [a, b] = screen.getAllByRole('button', { name: /sends/ });
+    expect(a).toHaveAttribute('aria-pressed', 'true');
+    expect(b).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(b);
+
+    expect(a).toHaveAttribute('aria-pressed', 'false');
+    expect(b).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  /**
+   * `aria-pressed` on plain buttons rather than a tablist: declaring `role="tab"`
+   * promises arrow-key navigation, and the app already has one real tablist that
+   * honours that contract. A second, fake one would teach a keyboard behaviour
+   * that does not exist here.
+   */
+  it('does not claim to be a second tablist', () => {
+    renderBuilder(0);
+    // The only tablist in the app is the one in `App`, which is not rendered here.
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+  });
+});
+
+describe('TradeBuilder — the pinned verdict', () => {
+  it('says the verdict and your side of it in one label', () => {
+    renderBuilder(0);
+
+    // Roster 1 is the claimed team, so the bar reports from its perspective.
+    const bar = screen.getByRole('button', { name: /Jump to the full verdict/ });
+    expect(bar).toHaveAccessibleName(/Team 1 nets/);
+  });
+
+  it('is not there when there is no trade to summarise', async () => {
+    const user = userEvent.setup();
+    renderBuilder(0);
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(
+      screen.queryByRole('button', { name: /Jump to the full verdict/ }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe('TradeBuilder — motion that explains', () => {
   /**
    * The running total sits pinned above a list that scrolls inside a 24rem

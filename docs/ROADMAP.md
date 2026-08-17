@@ -19,9 +19,9 @@ why the work was ordered this way, not as a queue.
 Research date: 2026-07-29. Data constraints in R1 were verified against live
 endpoints that day and should be re-checked if they look wrong.
 
-**As of 2026-08-15: R1–R10, R12, R13, R15, R16 and R17 have shipped**, along
-with #53's design brief. Milestones 1–3 are complete. What remains is R11, R14
-and R18, and the post-roadmap items at the end.
+**As of 2026-08-16: R1–R10 and R12–R18 have shipped**, along
+with #53's design brief. Milestones 1–3 and 5 are complete. What remains is R11
+and R14, and the post-roadmap items at the end.
 
 ---
 
@@ -578,7 +578,7 @@ feature most likely to bring users back between trades.
 
 ---
 
-# Milestone 5 — The premium feel
+# Milestone 5 — The premium feel ✅ Complete
 
 **The reason this was last no longer holds.** The original argument: *"Polish
 applied to a model you do not yet trust is wasted work, and every one of these
@@ -588,10 +588,11 @@ one worth trusting — so the condition the deferral was waiting on is satisfied
 
 Milestone 5 is now most of what remains.
 
-**#53, R15, R16 and R17 have shipped**, in that order — the design brief
-(`docs/DESIGN-SYSTEM.md`), the token layer it specified, the charts that spend
-both, and the motion and states layered over them. What is left of the milestone
-is R18, and it inherits a settled vocabulary rather than a blank page.
+**Milestone 5 is complete.** #53, R15, R16, R17 and R18 shipped in that order —
+the design brief (`docs/DESIGN-SYSTEM.md`), the token layer it specified, the
+charts that spend both, the motion and states layered over them, and finally the
+small-screen pass over all of it. The order mattered: R18 laid out surfaces that
+were finished, rather than guessing at ones still being reshaped.
 
 ## R15 — Design system foundation
 
@@ -745,7 +746,7 @@ needs.
 
 ## R18 — Mobile-first pass
 
-**Status:** Open — [#18](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/18).
+**Status:** Shipped — [#18](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/18).
 
 **Labels:** `enhancement`
 
@@ -755,9 +756,56 @@ deliberate small-screen design rather than a reflow.
 
 ### Acceptance
 
-- [ ] Every primary flow usable one-handed at 375 px
-- [ ] No horizontal page scroll at any breakpoint
-- [ ] Touch targets ≥ 44 px
+- [x] Every primary flow usable one-handed at 375 px
+- [x] No horizontal page scroll at any breakpoint
+- [x] Touch targets ≥ 44 px
+
+### What it turned out to be
+
+**Measured first, and the measuring is most of the value.** A Playwright pass at
+375px reported page overflow, the elements causing it, and every interactive
+target under 44px, per tab. It found three things that reading the CSS would
+not have: the standings rendered every team name as a single letter — "S…",
+"Ic…", "P…" — because a 150px value block left 45px for the name; the tradeable
+surplus did the same to players; and the trade calculator stacked two pickers
+that each kept their own 24rem inner scroll, so a thumb drag landed in whichever
+of three scrollers it started over and the second team was ~900px away.
+
+**Density is keyed to the pointer, not the width.** This is the decision worth
+keeping. "A 17-row roster should fit" (§2) and "44px touch targets" are in
+direct conflict and both are right — one is about scanning with a pointer, the
+other about hitting with a thumb. `sm:` was the tempting resolution and it is
+wrong for the device that needs it most: a landscape tablet is 1024px wide and
+thumb-operated. A `fine:` custom variant on `(pointer: fine)` asks the question
+that was actually meant, and writing it as `fine:` rather than `coarse:` makes
+the comfortable size the default that new controls inherit.
+
+**The calculator is one side at a time.** A segmented switch carrying both
+running totals, one picker in the layout, no inner scroll, and the verdict
+pinned to the foot of the screen — so an edit's consequence stays in view while
+its cause is still under the thumb, and the full reasoning is one tap away. The
+switch is plain `aria-pressed` buttons rather than a second tablist: declaring
+`role="tab"` promises arrow-key navigation, and a fake tablist beside the real
+one teaches a keyboard behaviour that does not exist.
+
+Every horizontal-scroll bug had the same cause: a grid or flex child at its
+default `min-width: auto`, refusing to go below its widest row's min-content and
+pushing the page sideways instead. `min-w-0` on the column, every time.
+
+**Two exceptions, both deliberate.** Chart marks stay at `MARK.HIT` 24px — a
+ten-team scatter at 375px cannot give every dot 44px without the hit areas
+overlapping, and a target that selects the wrong team is worse than a small one;
+the required table twin is the path that does not depend on hitting anything. And
+the tab strip scrolls below ~360px rather than wrapping, because a tablist in two
+rows reads as two groups of tabs.
+
+The audit harness needed fixing before its numbers could be trusted, which is
+worth recording: a `fullPage` screenshot resizes the viewport, and the restore
+afterwards drops Chrome's touch emulation — so every tab measured after the
+first screenshot silently reported `pointer: fine`, measured the desktop
+density, and called every compact row a failed target. Measurement and
+photography are now separate passes, and the harness asserts `pointer: coarse`
+before it believes anything.
 
 ---
 

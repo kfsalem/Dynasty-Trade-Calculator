@@ -19,7 +19,12 @@ export function ThemeToggle() {
       aria-pressed={dark}
       aria-label="Dark mode"
       title={dark ? 'Switch to light' : 'Switch to dark'}
-      className="rounded-lg border border-line p-2 text-muted transition-colors hover:bg-page hover:text-ink"
+      /*
+        A 16px icon in `p-2` is a 34px target — under the 44px floor (#18), and
+        this is a corner control reached with a thumb. The icon stays 16px; the
+        padding grows to meet the hand and shrinks back on a pointer.
+      */
+      className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-line text-muted transition-colors hover:bg-page hover:text-ink fine:h-9 fine:w-9"
     >
       {dark ? (
         // Sun — clicking returns to light.

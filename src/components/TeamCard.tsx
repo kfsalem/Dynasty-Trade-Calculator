@@ -180,7 +180,19 @@ export function TeamCard({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-4 p-4 text-left transition-colors hover:bg-page sm:p-5"
+        /*
+          Wraps below `sm`, and the value block is what wraps.
+
+          At 375px this row was rank + avatar + name + a 150px value block +
+          chevron inside 343px of card, which left the team name 45px and
+          rendered the whole standings table as "S…", "Ic…", "P…" — ten rosters
+          nobody could tell apart. Sending the value to its own line gives the
+          name ~223px, which fits every team name in the test league.
+
+          `order-last` rather than DOM reordering, so the desktop row keeps
+          value-then-chevron and the markup stays in reading order.
+        */
+        className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 p-4 text-left transition-colors hover:bg-page sm:flex-nowrap sm:gap-x-4 sm:p-5"
       >
         <span className="w-6 shrink-0 text-lg font-bold tabular-nums text-subtle">
           {rank}
@@ -212,7 +224,13 @@ export function TeamCard({
           </span>
         </span>
 
-        <span className="shrink-0 text-right">
+        {/*
+          One line of its own on a phone, laid out as figure-then-caption rather
+          than stacked: a right-aligned two-line block under the name wastes the
+          width it just took, and the caption reads as a footnote to the number
+          when it sits beside it.
+        */}
+        <span className="order-last flex w-full items-baseline justify-between gap-2 pl-9 sm:order-none sm:block sm:w-auto sm:shrink-0 sm:pl-0 sm:text-right">
           <span className="block text-lg font-bold tabular-nums">
             {formatValue(summary.starterValue)}
           </span>
