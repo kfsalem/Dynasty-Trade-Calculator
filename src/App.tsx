@@ -18,11 +18,21 @@ const STORAGE_KEY = 'dynasty:leagueId';
 
 type Tab = 'analysis' | 'ideas' | 'rosters' | 'trade';
 
-const TABS: [Tab, string][] = [
-  ['analysis', 'My team'],
-  ['ideas', 'Trade ideas'],
-  ['rosters', 'Rosters'],
-  ['trade', 'Trade calculator'],
+/**
+ * Value, name, and the name to show when space is short.
+ *
+ * The four full labels measure ~367px against the 343px a 375px phone actually
+ * offers once the page gutters are taken out, so the strip scrolled and the
+ * last tab was cut mid-word. Only one label is long enough to matter, and
+ * "Calculator" loses nothing next to "Trade ideas" — the row is already about
+ * trades. The full name stays as the accessible name, so what a screen reader
+ * announces does not depend on the viewport.
+ */
+const TABS: [Tab, string, string][] = [
+  ['analysis', 'My team', 'My team'],
+  ['ideas', 'Trade ideas', 'Trade ideas'],
+  ['rosters', 'Rosters', 'Rosters'],
+  ['trade', 'Trade calculator', 'Calculator'],
 ];
 
 /**
@@ -267,7 +277,20 @@ function App() {
             <div
               role="tablist"
               aria-label="League views"
-              className="mt-6 flex gap-1 border-b border-line"
+              /*
+                Scrolls sideways rather than wrapping, once it has to.
+
+                Four labels plus padding measure ~367px, so 375px fits and
+                320px does not — and a tablist in two rows reads as two groups
+                of tabs. A strip that slides is the standard answer and, unlike
+                shortening the labels, it holds for any label and any locale.
+
+                It costs one thing: `overflow-x: auto` makes this a scroll
+                container in both axes, which would clip the 2px focus ring the
+                base layer draws *outside* each tab. The tabs therefore draw
+                theirs inside — see the button below.
+              */
+              className="mt-6 flex gap-1 overflow-x-auto border-b border-line [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               onKeyDown={(e) => {
                 const step =
                   e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
@@ -284,24 +307,46 @@ function App() {
                 document.getElementById(`tab-${TABS[next][0]}`)?.focus();
               }}
             >
-              {TABS.map(([value, label]) => (
+              {TABS.map(([value, label, short]) => (
                 <button
                   key={value}
                   id={`tab-${value}`}
                   role="tab"
                   aria-selected={tab === value}
                   aria-controls="tabpanel"
+                  // Pinned, so the announced name is the full one in both
+                  // layouts — and in jsdom, where no CSS decides which span
+                  // would have been visible.
+                  aria-label={label}
                   // Roving: only the selected tab is in the page's tab order,
                   // so Tab moves past the bar rather than through every view.
                   tabIndex={tab === value ? 0 : -1}
                   onClick={() => setTab(value)}
-                  className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                  /*
+                    Tighter horizontally and taller vertically on a touch
+                    device: the four labels at the pointer padding measure
+                    ~426px against a 375px phone, and `py-3` is what makes each
+                    tab a 44px target (#18).
+
+                    `whitespace-nowrap` because a tab that wraps *internally*
+                    ("Trade / calculator") is the same failure one level down,
+                    and the focus ring is inset because the scrolling strip
+                    above would clip an outset one.
+                  */
+                  className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-2 py-3 text-sm font-medium transition-colors focus-visible:[outline-offset:-2px] fine:px-4 fine:py-2 ${
                     tab === value
                       ? 'border-accent text-accent'
                       : 'border-transparent text-subtle hover:text-ink'
                   }`}
                 >
-                  {label}
+                  {short === label ? (
+                    label
+                  ) : (
+                    <>
+                      <span className="fine:hidden">{short}</span>
+                      <span className="hidden fine:inline">{label}</span>
+                    </>
+                  )}
                 </button>
               ))}
             </div>

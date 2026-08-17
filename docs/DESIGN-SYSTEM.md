@@ -35,7 +35,7 @@ ambiguity is not.
 | Container | `max-w-6xl` (1152px) | up from `max-w-4xl` (896px) |
 | Body/data text | 13px (`text-sm`) | already the dominant scale — 56 uses |
 | Meta/secondary | 12px (`text-xs`) | 27 uses |
-| Row padding | 8px vertical | tight; a 17-row roster should fit |
+| Row padding | 8px vertical (pointer) / 12px (touch) | see below |
 
 **Why the container changes.** At a 1440px viewport the app renders 896px of
 content and leaves 544px empty — and inside that 896px the trade calculator
@@ -45,6 +45,27 @@ labels *in full*, because it drops the SNAPS/USAGE columns and stacks to one
 column. The desktop view is currently the degraded one.
 
 The density is right. The width is the defect.
+
+**Why density has two values.** "A 17-row roster should fit" and "touch targets
+≥ 44px" (§6) are in direct conflict, and both are correct — they are answers to
+different questions. The first is about *scanning* a table, which is a pointer
+activity; the second is about *hitting* a row, which is a thumb activity. So
+density is keyed to the input device, not to the window:
+
+```
+py-3            /* the default: comfortable, 44px */
+fine:py-1.5     /* @media (pointer: fine): compact */
+```
+
+`fine:` is a custom variant declared at the top of `src/index.css`. **Do not
+substitute `sm:`** — the tempting shortcut, and wrong for the device that needs
+this most: a tablet in landscape is 1024px wide and still operated with a thumb,
+so a width-keyed rule hands it the pointer layout. `pointer: fine` asks the
+question that was meant.
+
+Written `fine:` rather than `coarse:` so the touch size is the unprefixed
+default and the compact one is the enhancement. Anything that has to be tapped
+gets the comfortable size for free, including whatever is added next.
 
 ## 3. Type
 
@@ -211,7 +232,12 @@ behaviour is ahead of the colour.
 - **Never colour alone.** Position is a chip with letters. Gain/loss carries a
   sign or an arrow, not just green/red. Status carries a word.
 - Visible focus ring on every interactive element, in both themes.
-- Touch targets ≥ 44px (#18).
+- Touch targets ≥ 44px on a coarse pointer — see the density rule in §2, which
+  is how this is delivered. The one exception is chart marks: `MARK.HIT` is
+  24px, because a ten-team scatter at 375px cannot give every dot a 44px hit
+  area without the areas overlapping, and a target that selects the wrong team
+  is worse than a small one. Every chart carries a required table twin, which is
+  the path that does not depend on hitting anything.
 - Respect `prefers-reduced-motion`. One rule in the base layer covers every
   animation in §5b; anything that would break when it fires does not belong.
 

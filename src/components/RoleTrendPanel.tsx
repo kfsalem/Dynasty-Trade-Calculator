@@ -59,7 +59,17 @@ function TrendRow({
           {trend.player.name}
           <span className="ml-1.5 text-xs text-subtle">{teamName}</span>
         </div>
-        <div className="flex items-center gap-2 text-xs text-subtle">
+        {/*
+          Wraps, and the text can shrink.
+
+          The dumbbell is a fixed 104px and this row's text had `min-width:
+          auto` from being a flex item, so at 320px the pair could not fit and
+          pushed the whole page 44px wide — the one horizontal scroll left in
+          the app. The mark keeps its width because a rescaled track would draw
+          every move the same length (see `RoleMoveDumbbell`); the sentence
+          beside it is what gives way.
+        */}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-subtle">
           {/* The sentence carries the numbers; the mark carries their scale.
               See `RoleMoveDumbbell` for why this one is not a ChartFigure. */}
           {lead && (
@@ -69,7 +79,7 @@ function TrendRow({
               position={trend.player.position}
             />
           )}
-          <span>
+          <span className="min-w-0">
             {evidence(trend)}
             {/* Never hidden, and never silently down-ranked into invisibility: a
                 three-game trend is worth reading with the caveat attached, and
@@ -109,7 +119,10 @@ function TrendList({
   empty: string;
 }) {
   return (
-    <div>
+    // `min-w-0`: a grid item defaults to `min-width: auto`, so this column
+    // refused to go below its widest row's min-content (327px) and pushed the
+    // page sideways at 320px instead of letting the rows inside it wrap.
+    <div className="min-w-0">
       <h4 className="text-xs font-semibold uppercase tracking-wide text-subtle">{title}</h4>
       <p className="mt-1 text-sm text-subtle">{blurb}</p>
       {trends.length === 0 ? (

@@ -77,7 +77,7 @@ export function ClaimTeam({ league, onClaim }: Props) {
           id="claim-select"
           defaultValue=""
           onChange={(e) => e.target.value && onClaim(Number(e.target.value))}
-          className="mt-2 w-full rounded-lg border border-control bg-surface px-3 py-2 outline-none focus:border-accent focus:ring-2 focus:ring-accent"
+          className="mt-2 w-full rounded-lg border border-control bg-surface px-3 py-2.5 outline-none focus:border-accent focus:ring-2 focus:ring-accent fine:py-2"
         >
           <option value="" disabled>
             Select a team…

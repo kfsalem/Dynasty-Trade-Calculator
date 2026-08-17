@@ -117,9 +117,20 @@ export function TeamAnalysis({
             your lineup.
           </p>
         ) : (
+          /*
+            Four columns is one too many for 375px: the chip, the two
+            right-hand figures and the gaps left the name 81px, so the list that
+            names your tradeable players rendered them "Christ…", "Rhamo…". The
+            two figures move to a second line below `sm`, indented under the
+            name so the chip still reads as the row's marker rather than as a
+            bullet for two rows.
+          */
           <ul className="mt-4 space-y-2">
             {surpluses.map((surplus) => (
-              <li key={surplus.player.id} className="flex items-center gap-3 text-sm">
+              <li
+                key={surplus.player.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm"
+              >
                 <span
                   className={`inline-flex w-11 shrink-0 justify-center rounded px-1.5 py-0.5 text-xs font-semibold ${
                     POSITION_STYLES[surplus.player.position].chip
@@ -130,12 +141,14 @@ export function TeamAnalysis({
                 <span className="min-w-0 flex-1 truncate font-medium">
                   {surplus.player.name}
                 </span>
-                <span className="shrink-0 text-subtle">
-                  starts on {surplus.wouldStartOn}{' '}
-                  {surplus.wouldStartOn === 1 ? 'team' : 'teams'}
-                </span>
-                <span className="w-16 shrink-0 text-right tabular-nums text-subtle">
-                  {formatValue(surplus.value)}
+                <span className="order-last flex w-full items-baseline justify-between gap-3 pl-14 text-subtle sm:order-none sm:w-auto sm:justify-end sm:pl-0">
+                  <span className="shrink-0">
+                    starts on {surplus.wouldStartOn}{' '}
+                    {surplus.wouldStartOn === 1 ? 'team' : 'teams'}
+                  </span>
+                  <span className="w-16 shrink-0 text-right tabular-nums">
+                    {formatValue(surplus.value)}
+                  </span>
                 </span>
               </li>
             ))}

@@ -22,6 +22,22 @@
  * without re-running it.
  */
 
+/*
+ * Density is a question about the *input*, not about the window.
+ *
+ * The obvious implementation of "44px touch targets" (#18) is `sm:`, and it is
+ * wrong in one ordinary case: a tablet in landscape is 1024px wide and is still
+ * operated with a thumb, so a width-keyed rule hands the most touch-dependent
+ * device the compact pointer layout. `pointer: fine` asks the question that was
+ * actually meant — is there a precise pointing device — and a phone, a tablet
+ * and a touchscreen laptop all answer no.
+ *
+ * Written as `fine:` rather than a `coarse:` so the *touch* size is the
+ * unprefixed default. This is a mobile-first pass; the comfortable target is
+ * the base case and the compact one is the enhancement.
+ */
+@custom-variant fine (@media (pointer: fine));
+
 @theme {
   /* ---- Position scale -----------------------------------------------------
    * Categorical: identity, not magnitude. Fixed order QB -> RB -> WR -> TE,
@@ -189,12 +205,21 @@
 }
 
 @layer components {
+  /*
+   * `py-3` down to `fine:py-2` — the density rule and the touch rule
+   * disagreeing, and both being right.
+   *
+   * Compact rows are deliberate (§2) and they are a rule about *scanning* a
+   * table with a pointer. 44px targets are a rule about *hitting* one with a
+   * thumb. Neither is a claim about window width, so neither is keyed to it.
+   * See docs/DESIGN-SYSTEM.md §2.
+   */
   .btn-primary {
-    @apply bg-accent text-on-accent font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+    @apply bg-accent text-on-accent font-medium py-3 px-4 rounded-lg transition-colors duration-200 fine:py-2;
   }
 
   .btn-secondary {
-    @apply bg-page text-ink border border-line font-medium py-2 px-4 rounded-lg transition-colors duration-200 hover:bg-raised;
+    @apply bg-page text-ink border border-line font-medium py-3 px-4 rounded-lg transition-colors duration-200 hover:bg-raised fine:py-2;
   }
 
   /*

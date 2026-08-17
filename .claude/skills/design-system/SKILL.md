@@ -86,8 +86,14 @@ The palette passes validation *conditionally*. These are the conditions.
 
 - Container `max-w-6xl` (1152px). Not `max-w-4xl` — it truncates player names on
   a 1440px screen.
-- Data text 13px, meta 12px, row padding 8px vertical. Compact is deliberate: a
-  17-row roster should fit.
+- Data text 13px, meta 12px.
+- **Density is keyed to the pointer, never to the width.** Row padding is
+  `py-3` by default and `fine:py-1.5` on a precise pointer. `fine:` is a custom
+  variant in `src/index.css`. Do not write `sm:` for this — a landscape tablet
+  is 1024px wide and still thumb-operated, so a width rule gives the device that
+  most needs 44px targets the compact layout.
+- Anything tappable inherits the comfortable size by default. Check a new
+  control at 375px before assuming it does.
 - **Tabular figures** on every column of numbers: add the `tabular` class,
   defined once in `src/index.css`.
 
@@ -143,8 +149,14 @@ temptation — they are two bars or two charts, never two y-scales on one plot.
 - WCAG AA both themes: text ≥ 4.5:1, large text and UI ≥ 3:1.
 - **Never colour alone.** Gain/loss carries a sign or arrow. Status carries a
   word. Position carries its letters.
-- Visible focus ring on every interactive element, both themes.
-- Touch targets ≥ 44px.
+- Visible focus ring on every interactive element, both themes. A scrolling
+  strip (`overflow-x-auto`) clips an outset ring — inset it there instead.
+- Touch targets ≥ 44px on a coarse pointer; see the density rule above. Chart
+  marks are the documented exception at `MARK.HIT` 24px, because a dense scatter
+  cannot give every dot 44px without the hit areas overlapping.
+- Grid and flex children default to `min-width: auto` and will push the page
+  sideways rather than let their contents wrap. `min-w-0` on the column is the
+  fix, and the cause of every horizontal-scroll bug found in #18.
 - Respect `prefers-reduced-motion`.
 
 The app already has a real tablist with roving `tabIndex` and arrow-key

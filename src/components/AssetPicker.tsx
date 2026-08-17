@@ -109,7 +109,9 @@ export function AssetPicker({
           id={`team-${rosterId}`}
           value={rosterId}
           onChange={(e) => onRosterChange(Number(e.target.value))}
-          className="w-full rounded-lg border border-control bg-surface px-3 py-2 font-semibold outline-none focus:border-accent focus:ring-2 focus:ring-accent"
+          /* 41px at `py-2`, which is under the floor by three pixels — and this
+             is the control that picks which roster you are trading with. */
+          className="w-full rounded-lg border border-control bg-surface px-3 py-2.5 font-semibold outline-none focus:border-accent focus:ring-2 focus:ring-accent fine:py-2"
         >
           {league.rosters.map((r) => (
             <option key={r.rosterId} value={r.rosterId} disabled={r.rosterId === excludeRosterId}>
@@ -152,7 +154,18 @@ export function AssetPicker({
         <span className="w-12 text-right text-accent">Yours</span>
       </div>
 
-      <div className="max-h-96 overflow-y-auto p-2">
+      {/*
+        No inner scroll on a phone.
+
+        The 24rem box is right on a desktop, where it keeps two pickers side by
+        side and the verdict below the fold. On a phone it produced three nested
+        scrollers — the page, and a list inside each card — so a thumb drag
+        landed in whichever one it happened to start over. Below `md` the list
+        runs its full length and the page is the only thing that scrolls; the
+        segmented switch in `TradeBuilder` is what keeps that from being one
+        endless column.
+      */}
+      <div className="p-2 md:max-h-96 md:overflow-y-auto">
         {ownedPicks.length > 0 && (
           <>
             <p className="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-subtle">
@@ -161,13 +174,13 @@ export function AssetPicker({
             {ownedPicks.map((pick) => (
               <label
                 key={pick.id}
-                className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-page"
+                className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-3 text-sm hover:bg-page fine:py-1.5"
               >
                 <input
                   type="checkbox"
                   checked={selectedPickIds.has(pick.id)}
                   onChange={() => onTogglePick(pick.id)}
-                  className="h-4 w-4 shrink-0 rounded border-control text-accent focus:ring-accent"
+                  className="h-5 w-5 shrink-0 rounded border-control text-accent focus:ring-accent fine:h-4 fine:w-4"
                 />
                 <span className="min-w-0 flex-1 truncate">{pick.label}</span>
                 {/* A pick has no activity; hold the columns so the grid lines up. */}
@@ -187,13 +200,14 @@ export function AssetPicker({
           return (
             <label
               key={entry.player.id}
-              className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-page"
+              /* 44px on a thumb, 32px under a pointer. See `.btn-primary`. */
+              className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-3 text-sm hover:bg-page fine:py-1.5"
             >
               <input
                 type="checkbox"
                 checked={selectedPlayerIds.has(entry.player.id)}
                 onChange={() => onTogglePlayer(entry.player.id)}
-                className="h-4 w-4 shrink-0 rounded border-control text-accent focus:ring-accent"
+                className="h-5 w-5 shrink-0 rounded border-control text-accent focus:ring-accent fine:h-4 fine:w-4"
               />
               <span
                 className={`inline-flex w-10 shrink-0 justify-center rounded px-1 py-0.5 text-xs font-semibold ${style.chip}`}
