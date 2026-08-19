@@ -123,7 +123,16 @@ interface ValueSource {
 | **ESPN** | Unofficial; private leagues need `SWID` + `espn_s2` cookies | ★★★ Hard | Cookie handling is hostile in a static app; likely needs a proxy |
 | **Yahoo** | Official, OAuth2 | ★★★ Hard | **Requires a backend** for the OAuth secret |
 
-Sequence: **Sleeper → MFL → Fleaflicker → (ESPN/Yahoo only if demand justifies a backend).**
+Sequence: ~~**Sleeper → MFL → Fleaflicker → (ESPN/Yahoo only if demand justifies a backend).**~~
+
+**This sequence is wrong, and the difficulty column above is upside down.**
+Measured against live endpoints on 2026-08-19: Fleaflicker sends no
+`Access-Control-Allow-Origin` header at all, and MyFantasyLeague sends a fixed
+one naming its own domain. Neither can be called from a browser, with or without
+JSONP. ESPN — rated hardest here and deferred — is the only one of the three
+that answers a cross-origin request correctly. The two platforms chosen for
+their dynasty userbase are exactly the two a zero-backend app cannot reach. Full
+table and the consequences in `docs/ROADMAP.md` under R11.
 
 ---
 
@@ -131,7 +140,14 @@ Sequence: **Sleeper → MFL → Fleaflicker → (ESPN/Yahoo only if demand justi
 
 ### 3.1 The headline decision: no backend for v1
 
-Every data source is keyless, public, and CORS-enabled. **The entire v1 runs as a static client-side app.**
+Every data source *this app actually uses* is keyless, public, and CORS-enabled.
+**The entire v1 runs as a static client-side app.**
+
+The qualifier was added on 2026-08-19 and is not pedantry: the unqualified claim
+was read as a property of fantasy platforms in general, and it is not one. Two
+of the three platforms in §2.5 fail it, which is what blocks R11. A source is
+CORS-enabled only once somebody has sent it an `Origin` header and looked at
+what came back.
 
 Consequences:
 - Deploy free to Vercel / Netlify / GitHub Pages

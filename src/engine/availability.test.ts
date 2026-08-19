@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { availability, canStart, injuryNote } from './availability';
+import { availability, canPlayThisWeek, canStart, injuryNote } from './availability';
 import type { InjuryStatus, Player } from '../types';
 import { makePlayer } from './testFixtures';
 
@@ -57,5 +57,33 @@ describe('injuryNote', () => {
     expect(injuryNote({ status: 'unknown', description: 'Reserve/Whatever' })).toContain(
       '"Reserve/Whatever"',
     );
+  });
+});
+
+describe('canPlayThisWeek', () => {
+  it('holds out a player who is out for the next game', () => {
+    // The one that separates a weekly lineup from a season-long valuation:
+    // `canStart` deliberately keeps him, because "Out" is about one Sunday.
+    expect(canStart(withStatus('out'))).toBe(true);
+    expect(canPlayThisWeek(withStatus('out'))).toBe(false);
+  });
+
+  it('holds out a doubtful player, whose odds of playing are about one in four', () => {
+    expect(canPlayThisWeek(withStatus('doubtful'))).toBe(false);
+  });
+
+  it('still starts a questionable player', () => {
+    // Most of them play, and the tag flips twice a week. `startSit` flags him.
+    expect(canPlayThisWeek(withStatus('questionable'))).toBe(true);
+  });
+
+  it('excludes everyone the season-long rule excludes', () => {
+    for (const status of ['ir', 'pup', 'sus', 'dnr', 'na'] as const) {
+      expect(canPlayThisWeek(withStatus(status))).toBe(false);
+    }
+  });
+
+  it('starts a healthy player', () => {
+    expect(canPlayThisWeek(makePlayer('p1', 'WR'))).toBe(true);
   });
 });

@@ -124,6 +124,8 @@ function App() {
     usage,
     roles,
     snapsMeta,
+    seasonPhase,
+    currentWeek,
     adjustments,
     priced,
     trends,
@@ -367,6 +369,8 @@ function App() {
                     summaries={summaries}
                     myRosterId={myRosterId}
                     scarcity={scarcity}
+                    seasonPhase={seasonPhase}
+                    currentWeek={currentWeek}
                     onChangeTeam={() => setMyRoster(null)}
                   />
                 ))}

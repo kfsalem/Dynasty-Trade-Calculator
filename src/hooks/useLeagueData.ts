@@ -5,6 +5,7 @@ import { fetchFantasyCalcValues } from '../values/fantasycalc';
 import { fetchPickValues } from '../values/dynastyprocess';
 import type { RosterSummary } from '../engine/rosterValue';
 import { buildDraftPicks, tradeableSeasons } from '../engine/picks';
+import { regularSeasonWeek } from '../engine/season';
 import { pricedPositions, valueLeague, type LeagueActivity } from '../engine/replacement';
 import { snapShares } from '../engine/snapShare';
 import { opportunities } from '../engine/opportunity';
@@ -232,13 +233,18 @@ export function useLeagueSummaries(leagueId: string | null) {
     if (!bundle || !schedule || !adjusted || summaries.length === 0) return undefined;
 
     const teams = teamStates(bundle.league, summaries);
+    const playoffWeekStart = bundle.league.settings.playoffWeekStart;
 
     return {
       teams,
       remaining: remainingFixtures(
         schedule,
-        bundle.currentWeek,
-        bundle.league.settings.playoffWeekStart,
+        // The week as a regular-season position, not as the platform's raw
+        // counter. Through August that counter reads 1 or 2 and means
+        // *preseason* — taken at face value it retired the first fortnight of a
+        // season nobody had played. See `engine/season`.
+        regularSeasonWeek(bundle.currentWeek, bundle.seasonPhase, playoffWeekStart - 1),
+        playoffWeekStart,
       ),
       playoffTeams: bundle.league.settings.playoffTeams,
       // Measured from this league's completed weeks where there are enough of
@@ -316,6 +322,9 @@ export function useLeagueSummaries(leagueId: string | null) {
   return {
     league: leagueQuery.data?.league,
     players: leagueQuery.data?.players,
+    /** Where the NFL calendar stands, so a week number can be read correctly. */
+    seasonPhase: leagueQuery.data?.seasonPhase,
+    currentWeek: leagueQuery.data?.currentWeek ?? null,
     values: adjusted?.values,
     scarcity: adjusted?.scarcity,
     /** Positions with a published market, for telling "~0" from "no market". */

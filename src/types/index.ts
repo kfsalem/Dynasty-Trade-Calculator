@@ -8,6 +8,21 @@
 
 export type Position = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF';
 
+/**
+ * Where the NFL calendar currently stands.
+ *
+ * Carried because a week number on its own does not say what it counts.
+ * Sleeper's `/state/nfl` reports week 2 in the middle of August, meaning the
+ * second week of *preseason* — and read as a regular-season week that quietly
+ * deleted the first two weeks of the schedule from the playoff simulation. A
+ * week is only a week once the phase says which season it belongs to.
+ *
+ * `unknown` is for a platform that does not publish a phase, and is treated
+ * everywhere as "take the week at face value", which is what this app did
+ * before the field existed.
+ */
+export type SeasonPhase = 'pre' | 'regular' | 'post' | 'off' | 'unknown';
+
 /** A slot in a starting lineup. Superset of Position — includes the flexes. */
 export type LineupSlot =
   | Position
@@ -227,8 +242,21 @@ export interface Roster {
   pointsFor: number;
   /** Every player on the roster, including taxi and IR. */
   playerIds: string[];
-  /** Ordered to match `LeagueSettings.startingSlots`. Empty slots are omitted. */
-  starterIds: string[];
+  /**
+   * The lineup the manager has actually set, one entry per starting slot and
+   * aligned to `LeagueSettings.startingSlots`. `null` is a slot left empty.
+   *
+   * Positional, and that is the point. This was a plain id list with the empty
+   * slots stripped out, which is the same data minus the only thing that makes
+   * it answerable: *which* slot a man is in. "You have nobody at TE" and "your
+   * flex is empty" are different sentences, and a compacted list cannot tell
+   * them apart — nor can it say which slot to put a benched starter into.
+   *
+   * Distinct from `RosterSummary.starterIds`, which is the lineup this app
+   * would field. This one is what the platform reports, mistakes and all; the
+   * gap between them is what `engine/startSit` reports.
+   */
+  setLineup: (string | null)[];
   taxiIds: string[];
   reserveIds: string[];
 }

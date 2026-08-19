@@ -1,4 +1,4 @@
-import type { Matchup, Player } from '../../types';
+import type { Matchup, Player, SeasonPhase } from '../../types';
 import type { LeagueBundle, LeagueProvider } from '../types';
 import type { KnownDraftOrder, TradedPickRef } from '../../engine/picks';
 import {
@@ -14,6 +14,27 @@ import {
   parseLeagueId,
 } from './client';
 import { mapLeague, mapMatchups, mapPlayer } from './mapper';
+
+/**
+ * Sleeper's `season_type`, canonicalised.
+ *
+ * The four words it publishes map one-to-one, so this is only guarding the
+ * fifth case: a phase this app has not seen. That falls to `unknown` rather
+ * than to a guess, because every consumer of the phase already treats unknown
+ * as "trust the week number", which is precisely what the app did before it
+ * asked the question at all.
+ */
+function mapSeasonPhase(seasonType: string | undefined): SeasonPhase {
+  switch (seasonType) {
+    case 'pre':
+    case 'regular':
+    case 'post':
+    case 'off':
+      return seasonType;
+    default:
+      return 'unknown';
+  }
+}
 
 export const sleeperProvider: LeagueProvider = {
   id: 'sleeper',
@@ -66,6 +87,7 @@ export const sleeperProvider: LeagueProvider = {
       // Fall back to the league's own season if /state is unavailable.
       currentSeason: state?.season ?? league.season,
       currentWeek: state?.week ?? null,
+      seasonPhase: mapSeasonPhase(state?.season_type),
       draftOrders,
     };
   },

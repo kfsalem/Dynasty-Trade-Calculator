@@ -54,8 +54,9 @@ describe('mapLeague', () => {
     {
       roster_id: 1,
       owner_id: 'u1',
-      // "0" is Sleeper's placeholder for an unfilled starting slot.
-      starters: ['p1', '0', 'p2'],
+      // One entry per starting slot, in slot order. "0" is Sleeper's
+      // placeholder for a slot the manager left empty.
+      starters: ['p1', '0', 'p2', 'p4', 'p5', 'p6', 'p7', 'p8'],
       players: ['p1', 'p2', 'p3'],
       taxi: null,
       reserve: null,
@@ -76,9 +77,28 @@ describe('mapLeague', () => {
     { user_id: 'u1', display_name: 'Kevin', avatar: 'abc', metadata: { team_name: 'Dynasty Co' } },
   ];
 
-  it('strips the "0" placeholder out of starters', () => {
+  it('keeps the set lineup aligned to the slots, empty slots included', () => {
     const league = mapLeague(baseLeague, rosters, users);
-    expect(league.rosters[0].starterIds).toEqual(['p1', 'p2']);
+    // The RB slot is empty; p2 is in the *second* RB slot, not shifted up into
+    // the first. Compacting this list is what made "your RB2 is empty" and
+    // "your RB1 is empty" indistinguishable.
+    expect(league.rosters[0].setLineup).toEqual([
+      'p1',
+      null,
+      'p2',
+      'p4',
+      'p5',
+      'p6',
+      'p7',
+      'p8',
+    ]);
+  });
+
+  it('reports no set lineup when the array does not line up with the slots', () => {
+    const league = mapLeague(baseLeague, [{ ...rosters[0], starters: ['p1', 'p2'] }], users);
+    // Two ids against eight slots says nothing about which slots they are in,
+    // and a guess would invent lineup mistakes the manager never made.
+    expect(league.rosters[0].setLineup).toEqual([]);
   });
 
   it('prefers a custom team name over the display name', () => {
