@@ -96,7 +96,7 @@ export function makeRoster(rosterId: number, playerIds: string[]): Roster {
     ties: 0,
     pointsFor: 0,
     playerIds,
-    starterIds: [],
+    setLineup: [],
     taxiIds: [],
     reserveIds: [],
   };

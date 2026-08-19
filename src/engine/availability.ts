@@ -106,3 +106,36 @@ export function injuryNote(injury: InjuryStatus): string {
       return label;
   }
 }
+
+/**
+ * Statuses that keep a player out of *this week's* lineup, on top of the
+ * season-ending ones.
+ *
+ * `out` is the whole reason this list exists. Sleeper's "Out" means out for the
+ * next game, and `classify` deliberately files it under week-to-week because a
+ * season-length valuation must not reprice a roster every Friday — the comment
+ * above says so in as many words. That reasoning is exactly right for the
+ * question `bestLineup` asks and exactly wrong for the question a manager asks
+ * on Sunday morning, where a player who is out is worth nothing at all.
+ *
+ * `doubtful` joins it. Roughly one in four doubtful players suits up, so
+ * starting one is a bet at odds no lineup should take when a healthy body is on
+ * the bench. `questionable` deliberately does not: most of them play, the tag
+ * flips twice a week, and benching on it would empty half a lineup for nothing.
+ * He starts, and `startSit` flags him instead.
+ */
+const OUT_THIS_WEEK = new Set<InjuryStatus['status']>(['out', 'doubtful']);
+
+/**
+ * Can this player fill a slot in the lineup being set right now?
+ *
+ * The weekly counterpart of `canStart`, and strictly the narrower of the two:
+ * everyone this excludes, that one excludes too. Two functions rather than a
+ * parameter because they answer questions with different lifespans — one about
+ * a season, one about a Sunday — and a caller has to choose deliberately which
+ * it is asking.
+ */
+export const canPlayThisWeek = (player: Player): boolean => {
+  const status = player.injury?.status;
+  return canStart(player) && !(status && OUT_THIS_WEEK.has(status));
+};

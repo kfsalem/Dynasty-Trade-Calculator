@@ -15,8 +15,17 @@ platforms are not yet.
 - [x] **Trade calculator** — league-aware values, players and draft picks
 - [x] **Team analysis** — strengths, weaknesses, contention window, surplus
 - [x] **Trade suggestions** — ranked offers, and why the other manager accepts
+- [x] **Weekly lineup** — the lineup you have set against the one you could field
 
 Live: **https://kfsalem.github.io/Dynasty-Trade-Calculator/**
+
+The lineup panel is the one part of this that has a deadline. It reads the
+lineup your platform has on file, rebuilds the best legal one from the same
+roster, and reports only the slots where the two disagree — an empty slot, a
+starter who is out this week, a man on your bench who is simply better. It is
+ranked on win-now value corrected for role, not on weekly projections: there are
+no matchups in it, and no bye weeks, and it says so rather than implying a
+precision it does not have.
 
 The trade calculator reports two numbers per side. **Net value** is what every
 other calculator shows. **Starting lineup** is the change in the best lineup

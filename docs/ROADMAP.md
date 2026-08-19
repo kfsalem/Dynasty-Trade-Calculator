@@ -19,9 +19,10 @@ why the work was ordered this way, not as a queue.
 Research date: 2026-07-29. Data constraints in R1 were verified against live
 endpoints that day and should be re-checked if they look wrong.
 
-**As of 2026-08-16: R1–R10 and R12–R18 have shipped**, along
+**As of 2026-08-19: R1–R10 and R12–R18 have shipped**, along
 with #53's design brief. Milestones 1–3 and 5 are complete. What remains is R11
-and R14, and the post-roadmap items at the end.
+— **blocked**, see the CORS table under it — and the post-roadmap items at the
+end.
 
 ---
 
@@ -493,14 +494,15 @@ nominal flat value. Either is defensible; the current silent zero is not.
 
 ---
 
-# Milestone 4 — Reach and retention ◐ R12 and R13 shipped
+# Milestone 4 — Reach and retention ◐ R12, R13 and R14 shipped
 
 Only worth doing once the valuation is something to be proud of — which, after
-Milestones 2 and 3, it is. R11 and R14 remain.
+Milestones 2 and 3, it is. R11 remains, and is blocked on something no adapter
+code can move — see below.
 
 ## R11 — Multi-platform: MFL, Fleaflicker, ESPN
 
-**Status:** Open — [#11](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/11).
+**Status:** Blocked — [#11](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/11).
 
 Note that the `LeagueBundle` contract this depends on is being widened by
 [#46](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/46), which adds a
@@ -518,12 +520,37 @@ free, and R2 adds more.
 Largest single addressable-audience win on this list. Dynasty Daddy supports
 seven platforms; we support one.
 
+### Blocked: two of the three cannot be reached from a browser at all
+
+Probed live on 2026-08-19, sending `Origin: https://kfsalem.github.io`:
+
+| Platform | Response | Usable from a static site |
+|---|---|---|
+| **Fleaflicker** | `200`, and **no `Access-Control-Allow-Origin` header on any response**. `OPTIONS` preflight answers `405`. | No |
+| **MyFantasyLeague** | `200` with `Access-Control-Allow-Origin: https://www42.myfantasyleague.com` — a fixed value, not an echo of the caller. `&CALLBACK=` does not produce a JSONP wrapper either. | No |
+| **ESPN** | CORS headers correctly echo the caller's origin and allow credentials. | Yes, in principle |
+
+This invalidates §3.1 of `docs/DESIGN.md` — *"Every data source is keyless,
+public, and CORS-enabled"* — and the **Sleeper → MFL → Fleaflicker** sequence in
+§2.5. The two platforms picked for their dynasty userbase are exactly the two a
+zero-backend app cannot call, and the one that answers is the one that table
+rated hardest and deferred.
+
+ESPN is not a free win either. A sweep of league ids returned only `404` (no
+such league) and `401` (exists, private) — public ESPN leagues are rare enough
+that there was no league to develop or verify against, and ESPN does not support
+trading future draft picks at all, which is half of what this app values.
+
+**So R11 needs a decision, not an implementation:** ship ESPN against remembered
+API shapes, or put a proxy in front of MFL and Fleaflicker and give up the
+no-backend property in §3.1. Until one of those is chosen this is blocked on a
+constraint no amount of adapter code moves.
+
 ### Acceptance
 
 - [ ] At least one additional provider behind the existing `LeagueProvider` interface
 - [ ] No engine or UI code learns which platform a league came from
-- [ ] Provider-specific quirks documented (MFL's API is materially stranger than
-      Sleeper's)
+- [x] Provider-specific quirks documented — see the CORS table above
 
 ---
 
@@ -567,14 +594,49 @@ distribution per roster. `starterValue` is already the per-roster strength input
 
 ## R14 — Weekly start/sit optimizer
 
-**Status:** Open — [#14](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/14).
-Its precondition is met: R3–R4 activity data has shipped.
+**Status:** Shipped — [#14](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/14).
+`engine/startSit.ts`, surfaced as the lineup panel at the top of **My team**.
 
 **Labels:** `enhancement`
 
 `bestLineup` already computes the optimal legal lineup. With R3–R4 activity data
 it becomes a genuine weekly tool rather than a valuation internal, and it is the
 feature most likely to bring users back between trades.
+
+### What the build turned on
+
+**The season question and the Sunday question are not the same question, and the
+difference is one line of `engine/availability`.** A player designated *Out* is
+out for the next game, so R9 deliberately left him in the pool: a season-length
+valuation that repriced every roster each Friday would be noise. A lineup for
+Sunday inverts that exactly, and `canPlayThisWeek` is that inversion. Without it
+this feature is a rename of `summarizeRoster`; with it, it is the thing that
+catches the most expensive mistake a manager makes.
+
+**The platform's own lineup had been discarded.** `Roster.starterIds` stripped
+Sleeper's `"0"` placeholders, which compacted the array and shifted every player
+after an empty slot into somebody else's position — so the one input this
+feature compares against could not say which slot anybody was in. It is now
+`Roster.setLineup`, aligned to `startingSlots`, `null` for an empty slot.
+
+**Two legal lineups over the same players are the same lineup.** Diffing slot by
+slot against the greedy arrangement invented corrections that cancelled out, so
+the recommendation is rearranged to agree with the manager's own wherever that
+is legal (`arrangeLike`). Rows that remain are rows that matter.
+
+**What it does not know, said out loud.** Values are season-long win-now prices
+corrected for role and availability — not weekly projections. There are no
+matchups, and no feed this app reads publishes bye weeks, so a confident-looking
+list would be over-claiming. The panel says so in its own subtitle.
+
+### A live bug this found
+
+Sleeper reports `week: 2` in the middle of August and means the *preseason*.
+`remainingFixtures` read that as a regular-season week and filtered the schedule
+to weeks 2 and later — deleting the first fortnight of a season nobody had
+played from every playoff simulation, silently, with every number still
+rendering. `LeagueBundle.seasonPhase` and `engine/season.regularSeasonWeek` fix
+it: a week number is only a week once the phase says which season it counts.
 
 ---
 

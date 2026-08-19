@@ -152,12 +152,38 @@ export function mapMatchups(week: number, rows: SleeperMatchup[]): Matchup[] {
   return fixtures.sort((x, y) => x.rosterIds[0] - y.rosterIds[0]);
 }
 
+/**
+ * Sleeper's `starters` array, kept in slot order.
+ *
+ * The array is positional: entry *i* is whoever the manager put in starting
+ * slot *i*, and `"0"` is Sleeper's placeholder for a slot left empty. Both
+ * facts used to be discarded here — the placeholders were filtered out, which
+ * compacted the array and silently shifted every player after an empty slot
+ * into somebody else's position.
+ *
+ * A length that does not match the league's starting slots means the two are
+ * not describing the same thing, and there is no honest way to guess which
+ * slots the ids belong to. That returns an empty lineup, which reads downstream
+ * as "this manager has set no lineup" — the same as a brand-new roster, and the
+ * safe direction to be wrong in: `startSit` then recommends a lineup instead of
+ * claiming a mistake nobody made.
+ */
+function mapSetLineup(
+  starters: string[] | null | undefined,
+  slotCount: number,
+): (string | null)[] {
+  if (!starters || starters.length !== slotCount) return [];
+  return starters.map((id) => (isRealPlayerId(id) ? id : null));
+}
+
 export function mapLeague(
   league: SleeperLeague,
   rosters: SleeperRoster[],
   users: SleeperUser[],
 ): League {
   const usersById = new Map(users.map((u) => [u.user_id, u]));
+  const settings = mapSettings(league);
+  const { startingSlots } = settings;
 
   const mapped: Roster[] = rosters.map((r) => {
     const user = r.owner_id ? usersById.get(r.owner_id) : undefined;
@@ -176,7 +202,7 @@ export function mapLeague(
       ties: r.settings?.ties ?? 0,
       pointsFor: fpts,
       playerIds: (r.players ?? []).filter(isRealPlayerId),
-      starterIds: (r.starters ?? []).filter(isRealPlayerId),
+      setLineup: mapSetLineup(r.starters, startingSlots.length),
       taxiIds: (r.taxi ?? []).filter(isRealPlayerId),
       reserveIds: (r.reserve ?? []).filter(isRealPlayerId),
     };
@@ -189,7 +215,7 @@ export function mapLeague(
     season: league.season,
     status: league.status,
     avatar: avatarUrl(league.avatar),
-    settings: mapSettings(league),
+    settings,
     rosters: mapped.sort((a, b) => a.rosterId - b.rosterId),
   };
 }

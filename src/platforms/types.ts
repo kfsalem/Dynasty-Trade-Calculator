@@ -1,4 +1,4 @@
-import type { League, Matchup, Player } from '../types';
+import type { League, Matchup, Player, SeasonPhase } from '../types';
 import type { KnownDraftOrder, TradedPickRef } from '../engine/picks';
 
 /**
@@ -23,6 +23,15 @@ export interface LeagueBundle {
    * than simulate a season that has already happened.
    */
   currentWeek: number | null;
+  /**
+   * Which part of the calendar `currentWeek` is counting.
+   *
+   * Without it the number is ambiguous in the one direction that costs
+   * something: preseason weeks count from 1 exactly like regular-season ones,
+   * so August looks like September. `unknown` from a platform that does not
+   * say. See `SeasonPhase`.
+   */
+  seasonPhase: SeasonPhase;
   /**
    * Draft orders the platform publishes, which beat any projection. Empty when
    * no draft has been set up yet, which is the normal state for seasons past

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { League, Position } from '../types';
+import type { League, Position, SeasonPhase } from '../types';
 import type { RosterSummary } from '../engine/rosterValue';
 import { analyzeTeam, leagueContention, type Quadrant } from '../engine/analysis';
 import type { PositionScarcity } from '../engine/replacement';
@@ -7,12 +7,16 @@ import { POSITION_STYLES, formatValue } from '../lib/format';
 import { ContentionScatter } from './charts/ContentionScatter';
 import { PositionalStrengthChart } from './charts/PositionalStrengthChart';
 import { ScarcityChart } from './charts/ScarcityChart';
+import { WeeklyLineup } from './WeeklyLineup';
 
 interface Props {
   league: League;
   summaries: RosterSummary[];
   myRosterId: number;
   scarcity: Partial<Record<Position, PositionScarcity>> | undefined;
+  /** Where the NFL calendar stands, for the lineup panel's register. */
+  seasonPhase: SeasonPhase | undefined;
+  currentWeek: number | null;
   onChangeTeam: () => void;
 }
 
@@ -28,6 +32,8 @@ export function TeamAnalysis({
   summaries,
   myRosterId,
   scarcity,
+  seasonPhase,
+  currentWeek,
   onChangeTeam,
 }: Props) {
   const analysis = analyzeTeam(myRosterId, summaries, league.settings);
@@ -57,6 +63,7 @@ export function TeamAnalysis({
   }
 
   const { contention, positions, surpluses, focus } = analysis;
+  const summary = summaries.find((s) => s.rosterId === myRosterId);
 
   return (
     <div>
@@ -71,6 +78,24 @@ export function TeamAnalysis({
           Not my team
         </button>
       </div>
+
+      {/*
+        Above the contention window, which is the deliberate part. The window is
+        the more interesting number and it moves twice a season; the lineup has
+        a deadline this Sunday. A returning manager should land on the thing he
+        can still do something about.
+      */}
+      {summary && (
+        <div className="mt-5">
+          <WeeklyLineup
+            roster={roster}
+            summary={summary}
+            settings={league.settings}
+            seasonPhase={seasonPhase}
+            currentWeek={currentWeek}
+          />
+        </div>
+      )}
 
       <div className={`mt-5 rounded-xl border p-5 ${QUADRANT_STYLE[contention.quadrant]}`}>
         <p className="text-xs font-semibold uppercase tracking-wide opacity-70">

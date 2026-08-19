@@ -91,6 +91,35 @@ export interface LineupAssignment {
   entry: ValuedPlayer | null;
 }
 
+/**
+ * Which positions may fill a slot. A dedicated slot takes its own position.
+ *
+ * Exported because filling a lineup is no longer the only thing that needs it —
+ * `startSit` rearranges an already-chosen lineup and has to know the same rule.
+ * Two copies of "what can go here" is the kind of duplicate that stays correct
+ * right up until a league invents a new flex.
+ */
+export const slotEligibility = (slot: LineupSlot): Position[] =>
+  FLEX_ELIGIBILITY[slot] ?? [slot as Position];
+
+/**
+ * Slots in fill order: most restrictive first, ties broken by the league's own
+ * order so the result never depends on `sort` stability.
+ *
+ * Narrow slots claim their players before wide ones can spend them, which is
+ * what keeps a FLEX from swallowing the only tight end while the TE slot sits
+ * empty.
+ */
+export const byRestrictiveness = (
+  startingSlots: LineupSlot[],
+): { slot: LineupSlot; index: number }[] =>
+  startingSlots
+    .map((slot, index) => ({ slot, index }))
+    .sort(
+      (a, b) =>
+        slotEligibility(a.slot).length - slotEligibility(b.slot).length || a.index - b.index,
+    );
+
 export interface LineupOptions {
   /** Order to fill slots in. Defaults to `byWinNow` — who plays on Sunday. */
   compare?: (a: ValuedPlayer, b: ValuedPlayer) => number;
@@ -228,18 +257,12 @@ export function bestLineup(
     return null;
   };
 
-  const restrictiveness = (slot: LineupSlot): number =>
-    FLEX_ELIGIBILITY[slot] ? FLEX_ELIGIBILITY[slot].length : 1;
-
   // Fill in restrictiveness order, but report in the league's own slot order.
-  const order = startingSlots
-    .map((slot, index) => ({ slot, index }))
-    .sort((a, b) => restrictiveness(a.slot) - restrictiveness(b.slot) || a.index - b.index);
+  const order = byRestrictiveness(startingSlots);
 
   const filled = new Map<number, ValuedPlayer | null>();
   for (const { slot, index } of order) {
-    const eligible = FLEX_ELIGIBILITY[slot] ?? [slot as Position];
-    filled.set(index, pick(eligible));
+    filled.set(index, pick(slotEligibility(slot)));
   }
 
   return startingSlots.map((slot, index) => ({ slot, entry: filled.get(index) ?? null }));
