@@ -6,6 +6,7 @@ import { fetchPickValues } from '../values/dynastyprocess';
 import type { RosterSummary } from '../engine/rosterValue';
 import { buildDraftPicks, tradeableSeasons } from '../engine/picks';
 import { regularSeasonWeek } from '../engine/season';
+import { freeAgentBoard, type FreeAgentBoard } from '../engine/freeAgents';
 import { pricedPositions, valueLeague, type LeagueActivity } from '../engine/replacement';
 import { snapShares } from '../engine/snapShare';
 import { opportunities } from '../engine/opportunity';
@@ -192,6 +193,33 @@ export function useLeagueSummaries(leagueId: string | null) {
     );
   }, [leagueQuery.data, valuesQuery.data, activity]);
 
+  /**
+   * The waiver wire, priced against the levels the rostered pool produced.
+   *
+   * Computed after `adjusted` and from its output, never alongside it. The
+   * levels are an answer about *this league's rosters*, and the ~900 players
+   * nobody rosters must not get a vote in them — see `LeagueBundle.freeAgents`.
+   *
+   * Fed the *ungated* activity maps for the same reason `trends` is: the season
+   * gate is a rule about pricing, not a claim that nothing happened. Which
+   * season the shares describe is `snapsMeta`'s job to say, and the board says
+   * it on screen.
+   */
+  const freeAgents = useMemo<FreeAgentBoard | undefined>(() => {
+    const bundle = leagueQuery.data;
+    const market = valuesQuery.data?.bySleeperId;
+    if (!bundle || !market || !adjusted) return undefined;
+
+    return freeAgentBoard({
+      freeAgents: bundle.freeAgents,
+      market,
+      levels: adjusted.levels,
+      snaps,
+      usage,
+      current: activity?.current ?? false,
+    });
+  }, [leagueQuery.data, valuesQuery.data, adjusted, snaps, usage, activity]);
+
   const summaries = useMemo<RosterSummary[]>(
     () => [...(adjusted?.summaries ?? [])].sort((a, b) => b.starterValue - a.starterValue),
     [adjusted],
@@ -329,6 +357,17 @@ export function useLeagueSummaries(leagueId: string | null) {
     scarcity: adjusted?.scarcity,
     /** Positions with a published market, for telling "~0" from "no market". */
     priced,
+    /** Every player nobody rosters, priced where anyone prices him. */
+    freeAgents,
+    /**
+     * Whether the activity data describes the season being played.
+     *
+     * Exposed because the free-agent board *orders* on activity, which makes
+     * the answer part of the reading rather than a footnote: last season's snap
+     * shares are the best evidence there is out of season, and presenting them
+     * as current would be the app lying about which year it is describing.
+     */
+    activityCurrent: activity?.current ?? false,
     summaries,
     picks,
     picksUnavailable: pickValuesQuery.isError,

@@ -47,6 +47,7 @@ const players = new Map<string, Player>([
 const bundle: LeagueBundle = {
   league,
   players,
+  freeAgents: new Map(),
   tradedPicks: [],
   currentSeason: '2026',
   currentWeek: null,

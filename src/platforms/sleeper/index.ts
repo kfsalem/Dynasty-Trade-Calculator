@@ -13,7 +13,7 @@ import {
   getUsers,
   parseLeagueId,
 } from './client';
-import { mapLeague, mapMatchups, mapPlayer } from './mapper';
+import { mapFreeAgents, mapLeague, mapMatchups, mapPlayer } from './mapper';
 
 /**
  * Sleeper's `season_type`, canonicalised.
@@ -73,6 +73,10 @@ export const sleeperProvider: LeagueProvider = {
       }
     }
 
+    // The waiver wire, out of the index this already holds — no extra request
+    // and no extra bytes. See `mapFreeAgents`.
+    const freeAgents = mapFreeAgents(playerIndex, players);
+
     const tradedPicks: TradedPickRef[] = rawTradedPicks.map((p) => ({
       season: p.season,
       round: p.round,
@@ -83,6 +87,7 @@ export const sleeperProvider: LeagueProvider = {
     return {
       league,
       players,
+      freeAgents,
       tradedPicks,
       // Fall back to the league's own season if /state is unavailable.
       currentSeason: state?.season ?? league.season,

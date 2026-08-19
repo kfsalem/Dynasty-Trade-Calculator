@@ -11,6 +11,22 @@ import type { KnownDraftOrder, TradedPickRef } from '../engine/picks';
 export interface LeagueBundle {
   league: League;
   players: Map<string, Player>;
+  /**
+   * Everyone on an NFL team that nobody in this league rosters.
+   *
+   * A separate field rather than a widening of `players`, and the separation is
+   * load-bearing. Replacement level is derived from the rostered universe —
+   * `bestLineup` over `players`, then `startersByPosition` — and it sets every
+   * value in the app. A free agent leaking into `players` would move it
+   * silently, in the same quiet way the clamp bug did (`docs/DESIGN.md`), and
+   * the model is most sensitive to exactly this: a change in *who is being
+   * ranked*. Two fields make that leak impossible rather than merely unlikely.
+   *
+   * Filtered to players on an actual NFL team. The slimmed index carries
+   * several thousand more who are retired or unsigned, and nobody picks those
+   * up.
+   */
+  freeAgents: Map<string, Player>;
   /** Picks that have changed hands. Untraded picks stay with their original roster. */
   tradedPicks: TradedPickRef[];
   /** Current real-world season, for deciding which draft classes are tradeable. */

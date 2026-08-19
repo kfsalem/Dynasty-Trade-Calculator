@@ -16,6 +16,7 @@ platforms are not yet.
 - [x] **Team analysis** — strengths, weaknesses, contention window, surplus
 - [x] **Trade suggestions** — ranked offers, and why the other manager accepts
 - [x] **Weekly lineup** — the lineup you have set against the one you could field
+- [x] **Free agents** — every unrostered player, priced against your league
 
 Live: **https://kfsalem.github.io/Dynasty-Trade-Calculator/**
 
