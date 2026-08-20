@@ -889,16 +889,45 @@ that scale holding.
 
 ## The waiver wire
 
-**Status:** Open — [#46](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/46)
-(free-agent board), then
+**Status:** [#46](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/46)
+(free-agent board) **shipped**; then
 [#47](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/47) (pickup
-recommendations with FAAB bids).
+recommendations with FAAB bids), still open.
 
-The app currently discards every unrostered player at import — 893 of them on the
-test league. #46 widens the provider seam to keep them and prices what can be
+The app used to discard every unrostered player at import — 893 of them on the
+test league. #46 widened the provider seam to keep them and prices what can be
 priced; #47 points R7's role-trend engine at the result. Measured 2026-08-08:
 74% of free agents on an NFL team have no FantasyCalc value, so activity data,
 not market value, has to do the ranking.
+
+### What #46 settled
+
+**Two blocks, not one ranked list.** FantasyCalc's universe is about one
+league's worth of players, so it prices roughly a quarter of the wire and has
+never heard of the rest. Ranking them together means inventing a number for
+two-thirds of the list, and #10's rule is that a missing value is not a zero. So
+the priced block is ordered by league-adjusted value and the unpriced block by
+snap share, and the two are never summed.
+
+**`LeagueBundle.freeAgents` is a separate field, not a widening of `players`.**
+Replacement level is derived from the rostered universe, and it sets every value
+in the app; a free agent leaking into `players` would move it silently. Two
+fields make the leak impossible rather than merely unlikely, and a test pins the
+property.
+
+**Ordering on a bare snap share was wrong, and the real data showed it.** The
+first version put a quarterback who started five games in October above a
+receiver who played all seventeen weeks — because `SnapShare.season` is the mean
+over the games a player *appeared in*, which is right, and which `activity.ts`
+chose deliberately so a missed week is not a zero. The fix is not to re-weight
+by availability, which would contradict that; it is that "98% lately" and "98%
+back then" are different claims. The unpriced block ranks in three evidence
+tiers — playing recently, played at some point, never seen — each ordered by the
+one metric, with no arithmetic crossing a tier.
+
+**Prior-season activity is labelled before it is read, not after.** The board is
+*ordered* by activity, so through the offseason a reader who assumes it is
+current is misled by the ranking itself rather than by a column he could check.
 
 ## Calibration and legibility
 

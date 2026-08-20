@@ -76,6 +76,40 @@ export function mapPlayer(p: SlimPlayer): Player | null {
   };
 }
 
+/**
+ * Everyone in the index that nobody in this league rosters.
+ *
+ * The players were already in memory and every build before this one threw them
+ * away: `loadLeague` walked the rosters, kept what they referenced, and dropped
+ * the rest on the floor. On the test league that was 893 players — against 176
+ * rostered — about whom the app could not answer a single question.
+ *
+ * Two filters, and both matter.
+ *
+ * **Rostered players are excluded**, so the two maps are disjoint by
+ * construction. That is what `LeagueBundle` promises and what keeps a free agent
+ * out of `bestLineup`, and therefore out of every replacement level in the app.
+ *
+ * **A player with no NFL team is excluded.** The slimmed index carries roughly
+ * four thousand players at these positions and only about a thousand are on a
+ * roster somewhere in the league; the rest are retired or unsigned. A board
+ * listing them is a directory, not a waiver wire.
+ */
+export function mapFreeAgents(
+  index: Record<string, SlimPlayer>,
+  rostered: Map<string, Player>,
+): Map<string, Player> {
+  const freeAgents = new Map<string, Player>();
+
+  for (const [id, slim] of Object.entries(index)) {
+    if (rostered.has(id) || !slim.team) continue;
+    const player = mapPlayer(slim);
+    if (player) freeAgents.set(id, player);
+  }
+
+  return freeAgents;
+}
+
 export function mapSettings(league: SleeperLeague): LeagueSettings {
   const allSlots = league.roster_positions as LineupSlot[];
   const startingSlots = allSlots.filter((s) => !BENCH.has(s));

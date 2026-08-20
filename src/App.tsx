@@ -10,13 +10,15 @@ import { ThemeToggle } from './components/ThemeToggle';
 import { LeagueSkeleton } from './components/LeagueSkeleton';
 import { LeagueError } from './components/LeagueError';
 import { ReplacementLevel } from './components/ReplacementLevel';
+import { FreeAgentBoard } from './components/FreeAgentBoard';
+import { EmptyState } from './components/EmptyState';
 import { useLeagueSummaries } from './hooks/useLeagueData';
 import { useMyRoster } from './hooks/useMyRoster';
 import { decodeTrade, encodeTrade, resolveShare } from './lib/share';
 
 const STORAGE_KEY = 'dynasty:leagueId';
 
-type Tab = 'analysis' | 'ideas' | 'rosters' | 'trade';
+type Tab = 'analysis' | 'ideas' | 'rosters' | 'agents' | 'trade';
 
 /**
  * Value, name, and the name to show when space is short.
@@ -32,6 +34,7 @@ const TABS: [Tab, string, string][] = [
   ['analysis', 'My team', 'My team'],
   ['ideas', 'Trade ideas', 'Trade ideas'],
   ['rosters', 'Rosters', 'Rosters'],
+  ['agents', 'Free agents', 'Free agents'],
   ['trade', 'Trade calculator', 'Calculator'],
 ];
 
@@ -126,6 +129,8 @@ function App() {
     snapsMeta,
     seasonPhase,
     currentWeek,
+    freeAgents,
+    activityCurrent,
     adjustments,
     priced,
     trends,
@@ -408,6 +413,22 @@ function App() {
                   priced={priced}
                 />
               )}
+
+              {tab === 'agents' &&
+                (freeAgents ? (
+                  <FreeAgentBoard
+                    board={freeAgents}
+                    roles={roles}
+                    snapsMeta={snapsMeta}
+                    activityCurrent={activityCurrent}
+                    priced={priced}
+                  />
+                ) : (
+                  <EmptyState title="The wire is still loading">
+                    Free agents are priced against this league's replacement levels, so
+                    the board waits for the values every roster is measured on.
+                  </EmptyState>
+                ))}
 
               {tab === 'trade' && (
                 <TradeBuilder

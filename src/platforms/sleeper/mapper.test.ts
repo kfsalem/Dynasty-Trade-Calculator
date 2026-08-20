@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapLeague, mapMatchups, mapPlayer, mapSettings } from './mapper';
+import { mapFreeAgents, mapLeague, mapMatchups, mapPlayer, mapSettings } from './mapper';
 import { parseLeagueId, type SlimPlayer } from './client';
 import type {
   SleeperLeague,
@@ -292,5 +292,42 @@ describe('mapMatchups', () => {
     const one = mapMatchups(1, [row(3, 2), row(1, 1), row(4, 2), row(2, 1)]);
     const two = mapMatchups(1, [row(1, 1), row(2, 1), row(3, 2), row(4, 2)]);
     expect(one).toEqual(two);
+  });
+});
+
+describe('mapFreeAgents', () => {
+  const slim = (id: string, team: string | null, position = 'WR'): SlimPlayer => ({
+    id,
+    name: `Player ${id}`,
+    position,
+    team,
+    age: 25,
+    yearsExp: 3,
+    injuryStatus: null,
+  });
+
+  const index: Record<string, SlimPlayer> = {
+    rostered: slim('rostered', 'KC'),
+    onATeam: slim('onATeam', 'BUF'),
+    unsigned: slim('unsigned', null),
+    defense: slim('defense', 'MIN', 'DEF'),
+  };
+
+  const rostered = new Map([
+    ['rostered', mapPlayer(index.rostered) as NonNullable<ReturnType<typeof mapPlayer>>],
+  ]);
+
+  it('keeps everyone on an NFL team that nobody rosters', () => {
+    const free = mapFreeAgents(index, rostered);
+    expect([...free.keys()].sort()).toEqual(['defense', 'onATeam']);
+  });
+
+  it('is disjoint from the rostered map, which is what protects replacement level', () => {
+    const free = mapFreeAgents(index, rostered);
+    for (const id of rostered.keys()) expect(free.has(id)).toBe(false);
+  });
+
+  it('drops players with no NFL team — retired and unsigned are not pickups', () => {
+    expect(mapFreeAgents(index, rostered).has('unsigned')).toBe(false);
   });
 });
