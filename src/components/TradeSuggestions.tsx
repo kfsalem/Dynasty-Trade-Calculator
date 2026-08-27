@@ -3,6 +3,7 @@ import type { DraftPick, League, Player, PlayerValue } from '../types';
 import type { RosterSummary } from '../engine/rosterValue';
 import { suggestTrades, type SuggestContext, type SuggestedTrade, type TradeAsset } from '../engine/suggest';
 import type { RoleTrends } from '../engine/roleTrend';
+import type { SeasonOdds } from '../engine/analysis';
 import { RoleTrendPanel } from './RoleTrendPanel';
 import { FAIRNESS_LABEL } from '../engine/trade';
 import { POSITION_STYLES, formatValue } from '../lib/format';
@@ -18,6 +19,11 @@ interface Props {
   onOpenInCalculator: (trade: PendingTrade) => void;
   /** Role trends, so the engine can propose and explain mispriced roles. */
   trends?: RoleTrends;
+  /**
+   * Live playoff odds, so a team whose season is gone is not offered a trade
+   * that only helps it win this year. Reaches every partner, not just yours.
+   */
+  odds?: SeasonOdds;
   /** Season the activity data covers, for labelling an offseason preview. */
   season?: number;
 }
@@ -194,12 +200,21 @@ export function TradeSuggestions({
   myRosterId,
   onOpenInCalculator,
   trends,
+  odds,
   season,
 }: Props) {
   const result = useMemo(() => {
-    const ctx: SuggestContext = { league, players, values, picks, summaries, trends };
+    const ctx: SuggestContext = {
+      league,
+      players,
+      values,
+      picks,
+      summaries,
+      trends,
+      season: odds,
+    };
     return suggestTrades(myRosterId, ctx);
-  }, [league, players, values, picks, summaries, myRosterId, trends]);
+  }, [league, players, values, picks, summaries, myRosterId, trends, odds]);
 
   return (
     <div>

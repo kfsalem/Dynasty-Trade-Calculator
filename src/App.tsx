@@ -123,6 +123,7 @@ function App() {
     picksUnavailable,
     picksSettled,
     oddsContext,
+    season,
     snaps,
     usage,
     roles,
@@ -378,6 +379,7 @@ function App() {
                     seasonPhase={seasonPhase}
                     currentWeek={currentWeek}
                     byeTeams={byeTeams}
+                    season={season}
                     onChangeTeam={() => setMyRoster(null)}
                   />
                 ))}
@@ -394,6 +396,7 @@ function App() {
                     summaries={summaries}
                     myRosterId={myRosterId}
                     trends={trends}
+                    odds={season}
                     season={snapsMeta?.season}
                     onOpenInCalculator={(trade) => {
                       seedTrade(trade);

@@ -13,6 +13,8 @@ import { opportunities } from '../engine/opportunity';
 import { playerRoles } from '../engine/role';
 import { byeTeams as teamsOnBye } from '../engine/byes';
 import { roleTrends } from '../engine/roleTrend';
+import type { SeasonOdds } from '../engine/analysis';
+import { usePlayoffOdds } from './usePlayoffOdds';
 import {
   fetchByeWeeks,
   fetchDepthCharts,
@@ -334,6 +336,47 @@ export function useLeagueSummaries(leagueId: string | null) {
     };
   }, [leagueQuery.data, scheduleQuery.data, adjusted, summaries]);
 
+  /**
+   * The league as it stands, simulated — no trade, just the season.
+   *
+   * A third simulation alongside the trade builder's before/after pair, and
+   * worth the worker: this is the one the *team* page and the suggestion engine
+   * read, and both need it whether or not anyone has opened the calculator.
+   * `usePlayoffOdds` returns null until an answer exists, so nothing here waits
+   * on it.
+   */
+  const baselineOdds = usePlayoffOdds(oddsContext ?? null);
+
+  /**
+   * Playoff odds paired with how much season is behind them.
+   *
+   * Gated on `regular`, and the gate is doing real work rather than tidying.
+   * Out of season `remainingFixtures` is empty, so the simulation reports the
+   * standings of a season already finished as though they were a forecast —
+   * "100% to make the playoffs" about last year, which would then drive this
+   * year's advice. The preseason is excluded for the opposite reason: nothing
+   * has been played, so the odds are a restatement of `starterValue` and
+   * blending them in would be the roster projection counted twice. `weight`
+   * would be zero there anyway; this makes it explicit rather than incidental.
+   */
+  const season = useMemo<SeasonOdds | undefined>(() => {
+    const bundle = leagueQuery.data;
+    if (!bundle || bundle.seasonPhase !== 'regular' || !baselineOdds.odds) return undefined;
+
+    const weeksTotal = bundle.league.settings.playoffWeekStart - 1;
+    const week = regularSeasonWeek(bundle.currentWeek, bundle.seasonPhase, weeksTotal);
+    if (week === null || weeksTotal <= 0) return undefined;
+
+    // The week being played is not yet behind us — `remainingFixtures` counts
+    // it as remaining for the same reason, since a trade agreed on Tuesday is
+    // in the lineup on Sunday.
+    return {
+      odds: baselineOdds.odds,
+      weeksPlayed: Math.min(Math.max(week - 1, 0), weeksTotal),
+      weeksTotal,
+    };
+  }, [leagueQuery.data, baselineOdds.odds]);
+
   const roles = useMemo(() => {
     const snapFile = snapsQuery.data;
     const depthFile = depthQuery.data;
@@ -443,6 +486,13 @@ export function useLeagueSummaries(leagueId: string | null) {
     picksSettled: (pickValuesQuery.isSuccess && adjusted !== undefined) || pickValuesQuery.isError,
     /** Standings, remaining fixtures and the playoff cut. Undefined = cannot simulate. */
     oddsContext,
+    /**
+     * Live playoff odds and the season behind them, for advice and suggestions.
+     *
+     * Undefined out of season, which is what makes both fall back to the
+     * roster verdict alone.
+     */
+    season,
     snaps,
     usage,
     roles,
