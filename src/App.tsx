@@ -126,6 +126,7 @@ function App() {
     snaps,
     usage,
     roles,
+    byeTeams,
     snapsMeta,
     seasonPhase,
     currentWeek,
@@ -376,6 +377,7 @@ function App() {
                     scarcity={scarcity}
                     seasonPhase={seasonPhase}
                     currentWeek={currentWeek}
+                    byeTeams={byeTeams}
                     onChangeTeam={() => setMyRoster(null)}
                   />
                 ))}

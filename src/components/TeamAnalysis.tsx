@@ -17,6 +17,8 @@ interface Props {
   /** Where the NFL calendar stands, for the lineup panel's register. */
   seasonPhase: SeasonPhase | undefined;
   currentWeek: number | null;
+  /** Teams with no game this week. Null when unknown or out of season. */
+  byeTeams: ReadonlySet<string> | null;
   onChangeTeam: () => void;
 }
 
@@ -34,6 +36,7 @@ export function TeamAnalysis({
   scarcity,
   seasonPhase,
   currentWeek,
+  byeTeams,
   onChangeTeam,
 }: Props) {
   const analysis = analyzeTeam(myRosterId, summaries, league.settings);
@@ -93,6 +96,7 @@ export function TeamAnalysis({
             settings={league.settings}
             seasonPhase={seasonPhase}
             currentWeek={currentWeek}
+            byeTeams={byeTeams}
           />
         </div>
       )}

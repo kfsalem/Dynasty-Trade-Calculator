@@ -23,10 +23,14 @@ Live: **https://kfsalem.github.io/Dynasty-Trade-Calculator/**
 The lineup panel is the one part of this that has a deadline. It reads the
 lineup your platform has on file, rebuilds the best legal one from the same
 roster, and reports only the slots where the two disagree — an empty slot, a
-starter who is out this week, a man on your bench who is simply better. It is
-ranked on win-now value corrected for role, not on weekly projections: there are
-no matchups in it, and no bye weeks, and it says so rather than implying a
-precision it does not have.
+starter who is out this week, a starter whose team is on bye, a man on your
+bench who is simply better. It is ranked on win-now value corrected for role,
+not on weekly projections: there are no matchups in it, and it says so rather
+than implying a precision it does not have.
+
+Byes are in it because a bye is not a projection. A team that is off scores
+nothing with certainty, which puts it in the same class as an empty slot rather
+than in the class of matchup nuance the panel declines to model.
 
 The trade calculator reports two numbers per side. **Net value** is what every
 other calculator shows. **Starting lineup** is the change in the best lineup
@@ -109,7 +113,7 @@ No backend, no accounts, no API keys. Every data source is public, so the whole 
 | [Sleeper API](https://docs.sleeper.com/) | Leagues, rosters, settings, traded picks, transactions | In the browser |
 | [FantasyCalc](https://fantasycalc.com/) | Player values, parameterized by dynasty/superflex/PPR/team count | In the browser |
 | [DynastyProcess](https://github.com/dynastyprocess/data) | Draft pick values (FantasyCalc has none), player ID crosswalk | Browser / build |
-| [nflverse](https://github.com/nflverse/nflverse-data) | Weekly snaps, target share, air yards, WOPR, depth charts | Build |
+| [nflverse](https://github.com/nflverse/nflverse-data) | Weekly snaps, target share, air yards, WOPR, depth charts, bye weeks | Build |
 
 FantasyCalc also supplies cross-platform player IDs (`sleeperId`, `mflId`, `espnId`, `fleaflickerId`), which is what makes supporting platforms beyond Sleeper tractable.
 

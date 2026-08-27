@@ -3,6 +3,7 @@ import {
   DATA_FILES,
   OPPORTUNITY_COLUMNS,
   SNAP_COLUMNS,
+  type ByeWeeksFile,
   type DepthChartsFile,
   type OpportunityFile,
   type SnapCountsFile,
@@ -16,3 +17,10 @@ export const fetchOpportunity = (): Promise<OpportunityFile | null> =>
 
 export const fetchDepthCharts = (): Promise<DepthChartsFile | null> =>
   fetchDataFile<DepthChartsFile>(DATA_FILES.depth);
+
+/**
+ * Keyed by team rather than by player, hence the third argument — the shared
+ * validator otherwise rejects the file for having no `players`.
+ */
+export const fetchByeWeeks = (): Promise<ByeWeeksFile | null> =>
+  fetchDataFile<ByeWeeksFile>(DATA_FILES.byes, undefined, 'teams');

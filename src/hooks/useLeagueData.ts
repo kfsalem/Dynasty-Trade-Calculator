@@ -5,14 +5,20 @@ import { fetchFantasyCalcValues } from '../values/fantasycalc';
 import { fetchPickValues } from '../values/dynastyprocess';
 import type { RosterSummary } from '../engine/rosterValue';
 import { buildDraftPicks, tradeableSeasons } from '../engine/picks';
-import { regularSeasonWeek } from '../engine/season';
+import { isGameWeek, regularSeasonWeek } from '../engine/season';
 import { freeAgentBoard, type FreeAgentBoard } from '../engine/freeAgents';
 import { pricedPositions, valueLeague, type LeagueActivity } from '../engine/replacement';
 import { snapShares } from '../engine/snapShare';
 import { opportunities } from '../engine/opportunity';
 import { playerRoles } from '../engine/role';
+import { byeTeams as teamsOnBye } from '../engine/byes';
 import { roleTrends } from '../engine/roleTrend';
-import { fetchDepthCharts, fetchOpportunity, fetchSnapCounts } from '../data/activity';
+import {
+  fetchByeWeeks,
+  fetchDepthCharts,
+  fetchOpportunity,
+  fetchSnapCounts,
+} from '../data/activity';
 import {
   calibrate,
   playedFixtures,
@@ -117,6 +123,16 @@ export function useOpportunity() {
   });
 }
 
+/** When each team is off, for the lineup panel. */
+export function useByeWeeks() {
+  return useQuery({
+    queryKey: ['byeWeeks'],
+    queryFn: fetchByeWeeks,
+    staleTime: Infinity,
+    retry: 1,
+  });
+}
+
 export function useLeagueSummaries(leagueId: string | null) {
   const leagueQuery = useLeague(leagueId);
   const settings = leagueQuery.data?.league.settings;
@@ -126,6 +142,7 @@ export function useLeagueSummaries(leagueId: string | null) {
   const snapsQuery = useSnapShares();
   const opportunityQuery = useOpportunity();
   const depthQuery = useDepthCharts();
+  const byesQuery = useByeWeeks();
 
   const snaps = useMemo(
     () => (snapsQuery.data ? snapShares(snapsQuery.data) : undefined),
@@ -166,6 +183,42 @@ export function useLeagueSummaries(leagueId: string | null) {
       current: snapsLive || usageLive,
     };
   }, [leagueQuery.data, snapsQuery.data, opportunityQuery.data, snaps, usage]);
+
+  /**
+   * Teams with no game this week.
+   *
+   * Gated on `isGameWeek`, the same test the lineup panel uses to decide
+   * whether it is correcting a lineup or merely describing one. The two must
+   * agree: the panel only speaks about byes in its game-week register, so any
+   * phase this admits that the panel does not is a claim nobody reads, and any
+   * phase the panel admits that this does not is a claim it cannot support.
+   *
+   * That rules out the preseason, which is the phase that actually matters
+   * here. Sleeper reuses the week counter — week 2 in August and week 2 in
+   * September are both "week 2", which `engine/season` exists to disambiguate —
+   * so an ungated read would answer a September question with an August number.
+   * Byes start in week 4 at the earliest, so the collision is harmless today
+   * and would be silent the year it stops being.
+   *
+   * The NFL postseason is deliberately *in*. Its weeks run past 18, where no
+   * team has a bye, so the honest answer is an empty set — "nobody is off" —
+   * rather than the null that would have the panel report data it has as data
+   * it could not load.
+   *
+   * Everything else the answer depends on — a missing file, a season that does
+   * not match, an unknown week — is `engine/byes`' job, and it returns null for
+   * all of them. Null is the pre-bye behaviour exactly, and it is deliberately
+   * not the same value as the empty set a week with no byes produces.
+   */
+  const byeTeams = useMemo(() => {
+    const bundle = leagueQuery.data;
+    if (!isGameWeek(bundle?.seasonPhase ?? 'unknown')) return null;
+    return teamsOnBye(
+      byesQuery.data,
+      bundle?.currentSeason ? Number(bundle.currentSeason) : null,
+      bundle?.currentWeek ?? null,
+    );
+  }, [byesQuery.data, leagueQuery.data]);
 
   /**
    * Market values feed one pass of lineups, which reveals how many of each
@@ -393,6 +446,8 @@ export function useLeagueSummaries(leagueId: string | null) {
     snaps,
     usage,
     roles,
+    /** Teams off this week, so the lineup panel does not start a man on bye. */
+    byeTeams,
     /** What activity did to each value, so a moved number can explain itself. */
     adjustments: adjusted?.adjustments,
     /** Players whose role has outgrown their price, and the reverse. */

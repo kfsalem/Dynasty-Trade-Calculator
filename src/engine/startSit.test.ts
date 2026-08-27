@@ -9,12 +9,13 @@ function entry(
   position: Position,
   winNowValue: number,
   injury?: InjuryStatus,
+  team: string | null = 'FA',
 ): ValuedPlayer {
   const player: Player = {
     id,
     name: id.toUpperCase(),
     position,
-    team: 'FA',
+    team,
     age: 25,
     yearsExp: 3,
     injury,
@@ -268,5 +269,106 @@ describe('startSit', () => {
     expect(ids(plan)).toEqual([null, 'wr1']);
     // Nothing to recommend for the QB slot, and no pretending otherwise.
     expect(plan.changes).toEqual([]);
+  });
+});
+
+describe('startSit — bye weeks', () => {
+  const entries = [
+    entry('qb1', 'QB', 900),
+    entry('rb1', 'RB', 800),
+    entry('wr1', 'WR', 700, undefined, 'LAR'),
+    entry('wr2', 'WR', 600),
+    entry('wr3', 'WR', 500),
+  ];
+  const set = ['qb1', 'rb1', 'wr1', 'wr2'];
+
+  it('leaves a man on bye out of the lineup entirely', () => {
+    const plan = startSit({
+      entries,
+      startingSlots: SLOTS,
+      setLineup: set,
+      byeTeams: new Set(['LAR']),
+    });
+
+    // Removed from the pool, not flagged inside it. A panel that recommends a
+    // player it has labelled as not playing is worse than one that never
+    // mentioned byes.
+    expect(ids(plan)).not.toContain('wr1');
+    expect(ids(plan)).toContain('wr3');
+    expect(plan.changes).toHaveLength(1);
+    expect(plan.changes[0].cause).toBe('bye');
+  });
+
+  it('counts a starter on bye as nothing in the lineup already set', () => {
+    const plan = startSit({
+      entries,
+      startingSlots: SLOTS,
+      setLineup: set,
+      byeTeams: new Set(['LAR']),
+    });
+
+    // 900 + 800 + 600, with the man on bye contributing zero.
+    expect(plan.setValue).toBe(2300);
+    // Benching him costs nothing, so the row is worth the full value of his
+    // replacement rather than the difference between the two.
+    expect(plan.changes[0].gain).toBe(500);
+    expect(plan.gain).toBe(500);
+  });
+
+  it('does nothing at all when no team is off', () => {
+    const withByes = startSit({
+      entries,
+      startingSlots: SLOTS,
+      setLineup: set,
+      byeTeams: new Set<string>(),
+    });
+    const without = startSit({ entries, startingSlots: SLOTS, setLineup: set });
+
+    expect(ids(withByes)).toEqual(ids(without));
+    expect(withByes.gain).toBe(without.gain);
+  });
+
+  /*
+    Null is the no-claim answer and must reproduce the pre-bye behaviour
+    exactly — a failed ingest costs the reader a caveat, never a lineup.
+  */
+  it('treats an absent bye set as no claim rather than as nobody being off', () => {
+    const plan = startSit({
+      entries,
+      startingSlots: SLOTS,
+      setLineup: set,
+      byeTeams: null,
+    });
+
+    expect(ids(plan)).toContain('wr1');
+    expect(plan.changes).toHaveLength(0);
+  });
+
+  /*
+    A rostered free agent has no team at all — Sleeper publishes null, and the
+    roster lists him like anyone else. He must not be swept up by a bye, which
+    is a fact about a team he does not have.
+  */
+  it('never puts a player with no team on bye', () => {
+    const teamless = [
+      entry('qb1', 'QB', 900),
+      entry('rb1', 'RB', 800),
+      entry('wr1', 'WR', 700, undefined, null),
+      entry('wr2', 'WR', 600),
+      entry('wr3', 'WR', 500),
+    ];
+
+    const plan = startSit({
+      entries: teamless,
+      startingSlots: SLOTS,
+      setLineup: set,
+      // The empty string is in the set on purpose: it is what a `team ?? ''`
+      // coercion would look up, and that mistake would bench every free agent
+      // in the league the first week the set was non-empty.
+      byeTeams: new Set(['LAR', '']),
+    });
+
+    expect(ids(plan)).toContain('wr1');
+    expect(plan.changes).toHaveLength(0);
   });
 });

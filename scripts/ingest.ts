@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import {
   DATA_FILES,
   type DataIndex,
+  type DataIndexEntry,
   type DatasetMeta,
   type DatasetName,
 } from '../src/data/types';
@@ -33,7 +34,8 @@ import {
   type MatchStats,
 } from './ingest/crosswalk';
 import { requireMatchRates, type MatchGate } from './ingest/matchGate';
-import { fetchText, resolveLatestSeason } from './ingest/sources';
+import { BYES_URL, fetchText, resolveLatestSeason } from './ingest/sources';
+import { reduceByeWeeks } from './ingest/byeWeeks';
 import { reduceDepthCharts } from './ingest/depthCharts';
 import { reduceSnapCounts } from './ingest/snapCounts';
 import { reduceWeeklyStats } from './ingest/weeklyStats';
@@ -126,16 +128,25 @@ async function fileSize(path: string): Promise<number | null> {
   }
 }
 
-/** Meta of a dataset we could not refresh, so the index still dates it correctly. */
-async function readExistingMeta(path: string): Promise<DatasetMeta & { players: number }> {
+/**
+ * Meta of a dataset we could not refresh, so the index still dates it correctly.
+ *
+ * Reads whichever collection the file carries: the three player-keyed datasets
+ * hold `players`, and `byes.json` holds `teams`. Counting the wrong one would
+ * report a healthy fallback as an empty file.
+ */
+async function readExistingMeta(path: string): Promise<DatasetMeta & { rows: number }> {
   const parsed: unknown = JSON.parse(await readFile(path, 'utf8'));
-  const file = parsed as DatasetMeta & { players: Record<string, unknown> };
+  const file = parsed as DatasetMeta & {
+    players?: Record<string, unknown>;
+    teams?: Record<string, unknown>;
+  };
   return {
     generatedAt: file.generatedAt,
     season: file.season,
     throughWeek: file.throughWeek,
     source: file.source,
-    players: Object.keys(file.players ?? {}).length,
+    rows: Object.keys(file.players ?? file.teams ?? {}).length,
   };
 }
 
@@ -188,6 +199,71 @@ function reportMatches(stats: MatchStats, gate: MatchGate): void {
   }
 }
 
+/**
+ * Bye weeks, which do not fit the loop above and should not be forced into it.
+ *
+ * Three of the four things `DATASETS` exists to do are meaningless here. There
+ * is no id crosswalk, because the file is keyed by team rather than by player;
+ * there is no season to resolve, because one URL carries every year; and there
+ * is no match gate, because nothing is being matched. What is left is a fetch,
+ * a reduce and the same fallback policy — so it runs beside the loop with the
+ * policy repeated, rather than inside it with three of its stages stubbed out.
+ *
+ * The gates that do apply are in `reduceByeWeeks`, and they are stricter than
+ * the row counts the loop uses: 32 teams, one bye each, and every team code
+ * recognised.
+ */
+async function ingestByes(generatedAt: string): Promise<DataIndexEntry> {
+  const path = `${OUT_DIR}${DATA_FILES.byes}`;
+
+  try {
+    const csv = await fetchText(BYES_URL);
+    const { file, notes } = reduceByeWeeks(csv, { source: BYES_URL, generatedAt });
+
+    const rows = Object.keys(file.teams).length;
+    console.log(`  byes  ${file.season} season, ${rows} teams`);
+    for (const note of notes) console.log(`    ${note}`);
+
+    await writeFile(path, `${JSON.stringify(file)}\n`);
+    console.log(`    ${DATA_FILES.byes}  ${kb((await fileSize(path)) ?? 0)}`);
+
+    return {
+      file: DATA_FILES.byes,
+      generatedAt: file.generatedAt,
+      season: file.season,
+      throughWeek: file.throughWeek,
+      rows,
+      fresh: true,
+    };
+  } catch (err) {
+    if (!(err instanceof IngestError) || err.kind !== 'fetch') throw err;
+
+    const existing = (await fileSize(path)) !== null ? await readExistingMeta(path) : null;
+    if (!existing) {
+      throw new IngestError(
+        'fetch',
+        `byes: ${(err as IngestError).message} No committed copy at ${DATA_FILES.byes} ` +
+          `to fall back to, so there is nothing to ship.`,
+      );
+    }
+
+    console.warn(`  byes  ${err.message}`);
+    console.warn(
+      `    falling back to the committed copy from ${existing.generatedAt} ` +
+        `(${existing.season} season, ${existing.rows} teams)`,
+    );
+
+    return {
+      file: DATA_FILES.byes,
+      generatedAt: existing.generatedAt,
+      season: existing.season,
+      throughWeek: existing.throughWeek,
+      rows: existing.rows,
+      fresh: false,
+    };
+  }
+}
+
 async function main(): Promise<void> {
   const generatedAt = new Date().toISOString();
   await mkdir(OUT_DIR, { recursive: true });
@@ -228,8 +304,8 @@ async function main(): Promise<void> {
         generatedAt,
       });
 
-      const players = Object.keys(file.players).length;
-      requireRows(dataset.name, players, dataset.minPlayers);
+      const rows = Object.keys(file.players).length;
+      requireRows(dataset.name, rows, dataset.minPlayers);
 
       const through = file.throughWeek === null ? 'snapshot' : `through week ${file.throughWeek}`;
       console.log(`  ${dataset.name}  ${file.season} season, ${through}`);
@@ -248,7 +324,7 @@ async function main(): Promise<void> {
         generatedAt: file.generatedAt,
         season: file.season,
         throughWeek: file.throughWeek,
-        players,
+        rows,
         fresh: true,
       };
     } catch (err) {
@@ -268,7 +344,7 @@ async function main(): Promise<void> {
       console.warn(`  ${dataset.name}  ${err.message}`);
       console.warn(
         `    falling back to the committed copy from ${existing.generatedAt} ` +
-          `(${existing.season} season, ${existing.players} players)`,
+          `(${existing.season} season, ${existing.rows} players)`,
       );
 
       datasets[dataset.name] = {
@@ -276,11 +352,15 @@ async function main(): Promise<void> {
         generatedAt: existing.generatedAt,
         season: existing.season,
         throughWeek: existing.throughWeek,
-        players: existing.players,
+        rows: existing.rows,
         fresh: false,
       };
     }
   }
+
+  const byes = await ingestByes(generatedAt);
+  datasets.byes = byes;
+  if (!byes.fresh) stale++;
 
   const index: DataIndex = { generatedAt, datasets };
   await writeFile(`${OUT_DIR}${DATA_FILES.index}`, `${JSON.stringify(index, null, 2)}\n`);
@@ -292,7 +372,10 @@ async function main(): Promise<void> {
 
   console.log(`  total  ${kb(total)} of a ${kb(BUDGET_BYTES)} budget`);
   if (stale > 0) {
-    console.warn(`  ${stale} of ${DATASETS.length} datasets are the committed fallback, not fresh.`);
+    // +1 for byes, which is ingested beside DATASETS rather than inside it.
+    console.warn(
+      `  ${stale} of ${DATASETS.length + 1} datasets are the committed fallback, not fresh.`,
+    );
   }
 
   if (total > BUDGET_BYTES) {

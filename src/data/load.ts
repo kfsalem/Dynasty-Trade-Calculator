@@ -15,6 +15,13 @@ export async function fetchDataFile<T extends DatasetMeta>(
   file: string,
   /** Column order to verify, for files whose rows are positional tuples. */
   expected?: readonly string[],
+  /**
+   * The key the file's rows live under. `byes.json` is keyed by team rather
+   * than by player, and a validator that insists on `players` would reject it
+   * as malformed — which is worse than it sounds, because the rejection is a
+   * console warning and a silent absence of byes.
+   */
+  collection: 'players' | 'teams' = 'players',
 ): Promise<T | null> {
   const url = `${import.meta.env.BASE_URL}data/${file}`;
 
@@ -31,7 +38,7 @@ export async function fetchDataFile<T extends DatasetMeta>(
     return null;
   }
 
-  return validate<T>(body, file, url, expected);
+  return validate<T>(body, file, url, expected, collection);
 }
 
 /**
@@ -48,19 +55,18 @@ function validate<T extends DatasetMeta>(
   file: string,
   url: string,
   expected?: readonly string[],
+  collection: 'players' | 'teams' = 'players',
 ): T | null {
-  const parsed = body as Partial<T> & { players?: unknown; columns?: unknown };
+  const parsed = body as Partial<T> & Record<string, unknown>;
 
-  // `typeof null === 'object'`, so `players` needs a truthiness check of its
-  // own: a file with `"players": null` would otherwise pass validation here and
-  // throw on the first iteration downstream.
-  if (
-    !parsed ||
-    typeof parsed !== 'object' ||
-    !parsed.players ||
-    typeof parsed.players !== 'object'
-  ) {
-    console.warn(`${file} at ${url} is not in the expected shape; ignoring it.`);
+  // `typeof null === 'object'`, so the collection needs a truthiness check of
+  // its own: a file with `"players": null` would otherwise pass validation here
+  // and throw on the first iteration downstream.
+  const rows = parsed ? parsed[collection] : undefined;
+  if (!parsed || typeof parsed !== 'object' || !rows || typeof rows !== 'object') {
+    console.warn(
+      `${file} at ${url} has no ${collection}; ignoring it rather than reading an empty file.`,
+    );
     return null;
   }
 

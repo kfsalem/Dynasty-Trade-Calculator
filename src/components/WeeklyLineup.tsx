@@ -14,6 +14,11 @@ interface Props {
   /** Where the NFL calendar stands, so the panel knows whether a game is next. */
   seasonPhase: SeasonPhase | undefined;
   currentWeek: number | null;
+  /**
+   * Teams with no game this week. Empty means no claim, not an empty schedule —
+   * see `engine/byes`.
+   */
+  byeTeams?: ReadonlySet<string> | null;
 }
 
 /**
@@ -37,6 +42,7 @@ export function WeeklyLineup({
   settings,
   seasonPhase,
   currentWeek,
+  byeTeams,
 }: Props) {
   const [showLineup, setShowLineup] = useState(false);
 
@@ -46,11 +52,23 @@ export function WeeklyLineup({
         entries: summary.players,
         startingSlots: settings.startingSlots,
         setLineup: roster.setLineup,
+        byeTeams,
       }),
-    [summary.players, settings.startingSlots, roster.setLineup],
+    [summary.players, settings.startingSlots, roster.setLineup, byeTeams],
   );
 
   const gameWeek = isGameWeek(seasonPhase ?? 'unknown');
+  /**
+   * Whether byes are actually being applied, so the disclaimer can say which.
+   *
+   * A panel that claims to check byes and silently is not would be worse than
+   * the one that admitted it never did — a manager who trusts the sentence
+   * stops checking for himself.
+   *
+   * Null, not empty: weeks 1-4, 12 and 15-18 of a real season have no byes in
+   * them, and "nobody is off this week" is data rather than the lack of it.
+   */
+  const knowsByes = byeTeams != null;
   const eyebrow =
     gameWeek && currentWeek !== null ? `Week ${currentWeek} lineup` : 'Your best lineup';
 
@@ -85,7 +103,9 @@ export function WeeklyLineup({
         {plan.unset
           ? 'Nothing has been set on the platform to compare against, so this is a recommendation rather than a correction.'
           : gameWeek
-            ? 'Ranked on win-now value — season-long, corrected for role and who can actually play. Not a weekly projection: no matchups, and no bye weeks.'
+            ? knowsByes
+              ? 'Ranked on win-now value — season-long, corrected for role, who can actually play, and who is on bye. Not a weekly projection: no matchups.'
+              : 'Ranked on win-now value — season-long, corrected for role and who can actually play. Not a weekly projection: no matchups, and bye weeks could not be loaded.'
             : 'Ranked on win-now value. No game is next, so this is the lineup this roster can field rather than a call for Sunday.'}
       </p>
 

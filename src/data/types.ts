@@ -123,6 +123,28 @@ export interface DepthChartsFile extends DatasetMeta {
 }
 
 // ---------------------------------------------------------------------------
+// byes.json — nflverse games, reduced to one bye week per team
+// ---------------------------------------------------------------------------
+
+/**
+ * When each team is off, for the season being played.
+ *
+ * Keyed by **Sleeper** team code, not nflverse's, because the only thing that
+ * ever reads this joins it to `Player.team`. The two vocabularies agree on 31
+ * of 32 teams and disagree on the Rams — nflverse writes `LA`, Sleeper writes
+ * `LAR` — so a file keyed the other way would silently never fire a bye for one
+ * roster's worth of players. The translation happens once, at ingest, where it
+ * can be gated; see `scripts/ingest/byeWeeks.ts`.
+ *
+ * A team-keyed file rather than a player-keyed one, which makes it the only
+ * dataset here that needs no id crosswalk at all.
+ */
+export interface ByeWeeksFile extends DatasetMeta {
+  /** Sleeper team code → the regular-season week that team does not play. */
+  teams: Record<string, number>;
+}
+
+// ---------------------------------------------------------------------------
 // index.json — what shipped, so the UI can date the data without loading it all
 // ---------------------------------------------------------------------------
 
@@ -131,7 +153,12 @@ export interface DataIndexEntry {
   generatedAt: string;
   season: number;
   throughWeek: number | null;
-  players: number;
+  /**
+   * Rows in the reduced file — players for the three player-keyed datasets,
+   * teams for `byes.json`. Named for what it counts rather than for what it
+   * counted when there was only one kind of row.
+   */
+  rows: number;
   /** False when this dataset fell back to the committed copy on the last run. */
   fresh: boolean;
 }
@@ -145,6 +172,7 @@ export const DATA_FILES = {
   snaps: 'snaps.json',
   opportunity: 'opportunity.json',
   depth: 'depth.json',
+  byes: 'byes.json',
   index: 'index.json',
 } as const;
 
