@@ -8,6 +8,7 @@ import {
   type ValuedPlayer,
 } from './rosterValue';
 import { availability, canPlayThisWeek } from './availability';
+import { onBye } from './byes';
 
 /**
  * The lineup you have set, against the lineup you could field.
@@ -29,21 +30,31 @@ import { availability, canPlayThisWeek } from './availability';
  *
  * **What this does not know, and does not pretend to.** Values here are
  * season-long win-now prices, corrected for role and availability. They are not
- * weekly projections: no opponent, no game script, and — because no feed this
- * app reads publishes one — no bye weeks. So it answers "who are my best
- * eligible players" and not "who scores most this Sunday", and the UI says so
- * rather than letting a confident-looking list imply otherwise.
+ * weekly projections: no opponent and no game script. So it answers "who are my
+ * best eligible players" and not "who scores most this Sunday", and the UI says
+ * so rather than letting a confident-looking list imply otherwise.
+ *
+ * Byes are the one exception, and they are not a projection. A team that is off
+ * scores nothing with certainty, which puts a bye in the same class as an empty
+ * slot rather than in the class of matchup nuance this file declines to model.
+ * They arrive as `byeTeams` because whether the question is even askable —
+ * which season, which week, is the file current — belongs to the caller; see
+ * `engine/byes`.
  */
 
 /**
  * Why a slot changes. One cause per slot, the most decisive one.
  *
  * Ordered by how much the manager needs to hear it: an empty slot is a
- * guaranteed zero, a dropped player is a lineup that no longer exists, an
- * injury is a fact he may not have seen, and only then does the app get to
- * offer an opinion about who is better.
+ * guaranteed zero, a dropped player is a lineup that no longer exists, a bye is
+ * the other guaranteed zero, an injury is a fact he may not have seen, and only
+ * then does the app get to offer an opinion about who is better.
+ *
+ * `bye` outranks `sidelined` because it is the more certain of the two — a
+ * questionable starter usually plays and a team on bye never does — and because
+ * it is the one a manager is least likely to have noticed himself.
  */
-export type ChangeCause = 'empty' | 'dropped' | 'sidelined' | 'upgrade' | 'move';
+export type ChangeCause = 'empty' | 'dropped' | 'bye' | 'sidelined' | 'upgrade' | 'move';
 
 export interface LineupChange {
   slot: LineupSlot;
@@ -123,6 +134,15 @@ export interface StartSitInput {
   startingSlots: LineupSlot[];
   /** `Roster.setLineup` — aligned to the slots, or empty when unknown. */
   setLineup: (string | null)[];
+  /**
+   * Sleeper team codes with no game this week.
+   *
+   * Null means "no claim" and an empty set means "nobody is off" — a real
+   * answer for the third of the season that has no byes in it. Both behave
+   * identically here; the difference matters to the UI, which has to decide
+   * whether to promise the reader that byes were checked. See `engine/byes`.
+   */
+  byeTeams?: ReadonlySet<string> | null;
 }
 
 /**
@@ -210,12 +230,25 @@ export function startSit({
   entries,
   startingSlots,
   setLineup,
+  byeTeams,
 }: StartSitInput): StartSitPlan {
+  const off = byeTeams ?? new Set<string>();
   const rostered = new Map(entries.map((entry) => [entry.player.id, entry]));
 
-  // The one substantive difference from `summarizeRoster`: this pool is what
-  // can play *this week*, not this season.
-  const playable = entries.filter((entry) => canPlayThisWeek(entry.player));
+  /**
+   * Can this man score points on Sunday?
+   *
+   * The one substantive difference from `summarizeRoster`: this pool is what
+   * can play *this week*, not this season. A bye removes a player from it
+   * rather than flagging him inside it, which is the whole point — annotating a
+   * bye would leave him in the recommended lineup, and a panel that recommends
+   * a player it has labelled as not playing is worse than one that never
+   * mentioned byes at all.
+   */
+  const playing = (entry: ValuedPlayer): boolean =>
+    canPlayThisWeek(entry.player) && !onBye(entry.player.team, off);
+
+  const playable = entries.filter(playing);
   const lineup = arrangeLike(
     bestLineup(playable, startingSlots),
     startingSlots,
@@ -238,13 +271,14 @@ export function startSit({
    * What the set lineup is worth *this week*.
    *
    * A starter who cannot play is counted as nothing rather than skipped. That
-   * is the honest reading — an empty slot and a slot holding a man on injured
-   * reserve both score zero on Sunday — and it is what makes the headline gain
-   * reflect the real cost of leaving the lineup alone.
+   * is the honest reading — an empty slot, a slot holding a man on injured
+   * reserve, and a slot holding a man whose team is off all score zero on
+   * Sunday — and it is what makes the headline gain reflect the real cost of
+   * leaving the lineup alone.
    */
   const setValue = setLineup.reduce((sum, id) => {
     const entry = id ? rostered.get(id) : undefined;
-    if (!entry || !canPlayThisWeek(entry.player)) return sum;
+    if (!entry || !playing(entry)) return sum;
     return sum + entry.winNowValue;
   }, 0);
 
@@ -264,7 +298,9 @@ export function startSit({
 
       // Only players joining or leaving the lineup as a *set* move the number.
       // A man shuffled from one slot to another is worth exactly what he was.
-      const leaving = sit !== null && !sitStays && canPlayThisWeek(sit.player);
+      // A man who is out or on bye is worth nothing this week, so benching him
+      // costs nothing and the row shows the full value of whoever replaces him.
+      const leaving = sit !== null && !sitStays && playing(sit);
       const gain =
         (startIsNew ? (start?.winNowValue ?? 0) : 0) - (leaving ? sit.winNowValue : 0);
 
@@ -275,7 +311,7 @@ export function startSit({
         sit,
         sitStays,
         startIsNew,
-        cause: cause({ setId, sit, sitStays, startIsNew }),
+        cause: cause({ setId, sit, sitStays, startIsNew, off }),
         ...(status ? { status } : {}),
         gain,
       });
@@ -307,11 +343,13 @@ function cause({
   sit,
   sitStays,
   startIsNew,
+  off,
 }: {
   setId: string | null;
   sit: ValuedPlayer | null;
   sitStays: boolean;
   startIsNew: boolean;
+  off: ReadonlySet<string>;
 }): ChangeCause {
   if (setId === null) return 'empty';
   if (!sit) return 'dropped';
@@ -319,5 +357,9 @@ function cause({
   // Worth nothing, and worth saying so rather than dressing it as an upgrade.
   if (sitStays && !startIsNew) return 'move';
   if (sitStays) return 'upgrade';
+  // Before the injury check, because a player can be both — a questionable
+  // receiver whose team is off is not questionable, he is unavailable, and
+  // "check again before kickoff" is the wrong thing to tell his manager.
+  if (onBye(sit.player.team, off)) return 'bye';
   return canPlayThisWeek(sit.player) ? 'upgrade' : 'sidelined';
 }

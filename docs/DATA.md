@@ -35,13 +35,14 @@ reduction.
 
 ## What ships
 
-Four files, 346 KB total against a 1 MB budget enforced by the ingest.
+Five files, 373 KB total against a 1 MB budget enforced by the ingest.
 
 | file | contents |
 |---|---|
 | `snaps.json` | Offensive snaps and snap share, per player-week |
 | `opportunity.json` | Targets, target share, air yards share, WOPR, carries, carry share, receptions, PPR points, per player-week |
 | `depth.json` | Current depth chart position and rank, one row per player |
+| `byes.json` | The week each team is off, one row per team |
 | `index.json` | What shipped and how fresh it is |
 
 Shapes are declared in `src/data/types.ts`, imported by both the ingest and the
@@ -73,6 +74,57 @@ id and none of them is Sleeper's — snap counts use `pfr_player_id`, weekly sta
 use gsis `player_id`, depth charts use `gsis_id` and `espn_id` — so the
 [DynastyProcess crosswalk](https://github.com/dynastyprocess/data) resolves them
 here, once, and the client never downloads 2.6 MB to look up ids we already knew.
+
+### Bye weeks are the one source we could fetch and don't
+
+`byes.json` is derived from `nflverse/nfldata`'s `games.csv`, which sits on
+`raw.githubusercontent.com` and **does** send `Access-Control-Allow-Origin: *`.
+Verified 2026-08-27. So unlike the other three, neither blocker at the top of
+this document applies to it: a browser could fetch this file directly.
+
+It is ingested anyway, for the second reason alone. The file is 2.18 MB because
+it carries every season since 1999, and reduced to one bye per team it is 365
+bytes. Shipping 2.18 MB to every visitor to answer "who is off this week"
+against a 1 MB budget for *everything* is not a trade worth making.
+
+Two things about it differ from the other datasets, and both are why it runs
+beside the main loop in `scripts/ingest.ts` rather than inside it:
+
+**No crosswalk.** The file is keyed by team, so nothing needs resolving to a
+Sleeper player id and the match gate has nothing to measure.
+
+**No season resolution.** One URL carries every year, so `reduceByeWeeks` picks
+the newest season out of the rows instead of probing per-season URLs. This has a
+consequence worth knowing: the reduction must *select* the season before it
+*validates* team codes. In 1999 the Raiders were in Oakland, the Rams in St.
+Louis and the Chargers in San Diego, and a one-pass version rejected the whole
+file on codes from a season nobody asked about.
+
+#### The team-code mismatch
+
+**nflverse writes the Rams `LA`; Sleeper writes `LAR`.** Verified against both
+vocabularies on 2026-08-27 — nflverse publishes 32 codes for 2024+, Sleeper's
+player blob carries 33, and that is the only disagreement between them.
+
+This is the one bug in this dataset that would never announce itself. The file
+would look complete, pass every count, and simply never fire a bye for one
+team's worth of players, because no `Player.team` in the app is ever equal to
+`LA`. So the translation happens at ingest, and every emitted code is checked
+against a known set — a relocation or rename upstream fails the build naming the
+code it did not recognise, rather than shipping a bye nothing can match.
+
+Sleeper's extra code is `OAK`, which is not a live team; it is where retired and
+inactive players who last played for the Raiders sit. It is deliberately not
+mapped.
+
+#### The gate is the count
+
+Every way this reduction can go wrong produces a wrong bye count, and both
+directions survive a spot check: a partially-published schedule gives some team
+several byes, and a season-type filter that matches too much gives it none. So
+the gate is **32 teams, exactly one bye each**, and it is worth more than the
+parse. A filter that quietly matched nothing would otherwise produce "every team
+is on bye" — a far worse output than no file at all.
 
 ## Seasons resolve per dataset
 

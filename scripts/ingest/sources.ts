@@ -18,6 +18,20 @@ const NFLVERSE_RELEASE = 'https://github.com/nflverse/nflverse-data/releases/dow
 export const CROSSWALK_URL =
   'https://raw.githubusercontent.com/dynastyprocess/data/master/files/db_playerids.csv';
 
+/**
+ * The NFL schedule, every season since 1999 in one file.
+ *
+ * Also on raw.githubusercontent.com, and so the one nflverse dataset the app
+ * could legally fetch for itself. It is ingested anyway: 2.18 MB of history to
+ * answer "who is off this week" is a poor trade against a `public/data` budget
+ * of 1 MB total, and reduced to a bye per team it is under a kilobyte.
+ *
+ * Unlike the release assets there is no per-season file to resolve — one URL
+ * carries every year, and `reduceByeWeeks` picks the newest season out of the
+ * rows.
+ */
+export const BYES_URL = 'https://github.com/nflverse/nfldata/raw/master/data/games.csv';
+
 export function nflverseUrl(release: string, file: string): string {
   return `${NFLVERSE_RELEASE}/${release}/${file}`;
 }

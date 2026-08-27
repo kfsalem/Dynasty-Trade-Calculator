@@ -27,6 +27,17 @@ export function describeChange(change: LineupChange): string {
     case 'dropped':
       return 'Whoever is in this slot is no longer on your roster.';
 
+    /*
+      Named as the team's week off, not as anything about the player. He is
+      healthy and carries no designation, which is exactly why this is the
+      change most likely to be missed — there is nothing on his row anywhere
+      else in the app to suggest he will not play.
+    */
+    case 'bye':
+      return name
+        ? `${name} is on bye — his team does not play this week, so the slot scores nothing.`
+        : 'This slot holds a player whose team is on bye, so it scores nothing.';
+
     case 'sidelined': {
       const label = change.status ? INJURY_LABEL[change.status] : 'Unavailable';
       return name ? `${name} — ${label.toLowerCase()}.` : `${label}.`;

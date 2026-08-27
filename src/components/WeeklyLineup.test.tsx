@@ -44,11 +44,16 @@ function panel(
     phase = 'regular' as SeasonPhase,
     week = 7 as number | null,
     injuries = {} as Record<string, InjuryStatus>,
+    teams = {} as Record<string, string>,
+    byeTeams = null as ReadonlySet<string> | null,
   } = {},
 ) {
   const withInjuries = new Map(players);
   for (const [id, injury] of Object.entries(injuries)) {
     withInjuries.set(id, { ...(players.get(id) as Player), injury });
+  }
+  for (const [id, team] of Object.entries(teams)) {
+    withInjuries.set(id, { ...(withInjuries.get(id) as Player), team });
   }
 
   const target = roster(setLineup);
@@ -61,6 +66,7 @@ function panel(
       settings={settings}
       seasonPhase={phase}
       currentWeek={week}
+      byeTeams={byeTeams}
     />,
   );
 }
@@ -139,8 +145,55 @@ describe('WeeklyLineup', () => {
 
   it('never promises weekly projections it does not have', () => {
     panel(['qb1', 'rb1', 'wr1', 'wr2']);
+    expect(screen.getByText(/Not a weekly projection: no matchups/)).toBeInTheDocument();
+  });
+
+  /*
+    The disclaimer has to track what the panel actually did, in both
+    directions. Claiming to check byes without the data is the dangerous half —
+    a manager who believes the sentence stops checking for himself.
+  */
+  it('says byes could not be loaded when they could not', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], { byeTeams: null });
     expect(
-      screen.getByText(/Not a weekly projection: no matchups, and no bye weeks/),
+      screen.getByText(/bye weeks could not be loaded/),
     ).toBeInTheDocument();
+  });
+
+  it('claims to check byes only when it has them', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], { byeTeams: new Set<string>() });
+    expect(screen.getByText(/who is on bye/)).toBeInTheDocument();
+    expect(screen.queryByText(/could not be loaded/)).not.toBeInTheDocument();
+  });
+
+  it('benches a starter whose team is off, and says why', async () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], {
+      teams: { wr2: 'LAR' },
+      byeTeams: new Set(['LAR']),
+    });
+
+    expect(screen.getByText('1 change to make')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Player wr2 is on bye — his team does not play this week/),
+    ).toBeInTheDocument();
+
+    // The slot is refilled from the bench rather than left to score nothing.
+    expect(screen.getByText('Player wr3')).toBeInTheDocument();
+  });
+
+  /*
+    A bye is not an injury and must not borrow its sentence. The two can be
+    true of the same player, and "check again before kickoff" is exactly the
+    wrong advice about a man whose team has no game.
+  */
+  it('calls a bye a bye even when the player is also questionable', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], {
+      teams: { wr2: 'LAR' },
+      byeTeams: new Set(['LAR']),
+      injuries: { wr2: { status: 'questionable' } },
+    });
+
+    expect(screen.getByText(/Player wr2 is on bye/)).toBeInTheDocument();
+    expect(screen.queryByText(/Worth checking again before kickoff/)).not.toBeInTheDocument();
   });
 });
