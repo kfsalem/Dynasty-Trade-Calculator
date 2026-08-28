@@ -1,7 +1,12 @@
 import { useMemo } from 'react';
 import type { League, Position, SeasonPhase } from '../types';
 import type { RosterSummary } from '../engine/rosterValue';
-import { analyzeTeam, leagueContention, type Quadrant } from '../engine/analysis';
+import {
+  analyzeTeam,
+  leagueContention,
+  type Quadrant,
+  type SeasonOdds,
+} from '../engine/analysis';
 import type { PositionScarcity } from '../engine/replacement';
 import { POSITION_STYLES, formatValue } from '../lib/format';
 import { ContentionScatter } from './charts/ContentionScatter';
@@ -19,6 +24,8 @@ interface Props {
   currentWeek: number | null;
   /** Teams with no game this week. Null when unknown or out of season. */
   byeTeams: ReadonlySet<string> | null;
+  /** Live playoff odds. Undefined out of season, and the advice then ignores them. */
+  season: SeasonOdds | undefined;
   onChangeTeam: () => void;
 }
 
@@ -37,9 +44,10 @@ export function TeamAnalysis({
   seasonPhase,
   currentWeek,
   byeTeams,
+  season,
   onChangeTeam,
 }: Props) {
-  const analysis = analyzeTeam(myRosterId, summaries, league.settings);
+  const analysis = analyzeTeam(myRosterId, summaries, league.settings, season);
   const roster = league.rosters.find((r) => r.rosterId === myRosterId);
 
   // Projecting every roster three years forward runs `bestLineup` once per
@@ -108,7 +116,7 @@ export function TeamAnalysis({
         <h3 className="mt-1 text-2xl font-bold">{contention.label}</h3>
         <p className="mt-2 text-sm">{contention.advice}</p>
 
-        <div className="mt-4 flex gap-6 border-t border-current/15 pt-3 text-sm">
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 border-t border-current/15 pt-3 text-sm">
           <div>
             <span className="opacity-70">Now</span>{' '}
             <span className="font-semibold tabular-nums">
@@ -121,6 +129,28 @@ export function TeamAnalysis({
               #{contention.futureRank} of {contention.teamCount}
             </span>
           </div>
+          {/*
+            The evidence behind the sentence above, whenever there is a season
+            to read. The advice quotes this figure, and a claim as strong as
+            "this season is not the one to spend on" should show the number it
+            rests on rather than asking to be taken on trust.
+
+            The two ranks either side of it are roster quantities and this one
+            is not, which is exactly why it earns its place: it is the only
+            thing on the card that knows the team has been losing.
+          */}
+          {contention.season && (
+            <div>
+              <span className="opacity-70">Playoff odds</span>{' '}
+              <span className="font-semibold tabular-nums">
+                {Math.round(contention.season.playoffOdds * 100)}%
+              </span>
+              <span className="opacity-70">
+                {' '}
+                after {contention.season.weeksPlayed} of {contention.season.weeksTotal}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

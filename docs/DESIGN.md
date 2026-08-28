@@ -308,6 +308,40 @@ Plot as a quadrant:
 
 This drives "what should I focus on this year," and it drives trade suggestions: contenders buy win-now, rebuilders sell for picks. A trade is far likelier to be accepted when the two teams sit in opposite quadrants.
 
+#### The season corrects it (#66)
+
+Everything above is computed from rosters and contains **no information about
+results**. It cannot know a team has lost six straight, which is how a roster
+grading `win_now` at 4% to make the playoffs in Week 11 came to be told to spend
+future picks on a season already decided — the worst available advice for that
+team, given by an app that was holding the number contradicting it.
+
+So once a season is under way the quadrant is corrected by live playoff odds
+(R13), on the one axis where results beat projection:
+
+- `SeasonOutlook.weight` is the fraction of the regular season played. It is a
+  statement about **evidence, not urgency** — the simulation already discounts
+  for how much season is left, so a 5% in Week 6 is 5% *knowing* eight weeks
+  remain. What grows with time is how much real football the model has seen.
+- `conviction` is that weight times distance from a coin flip. The advice speaks
+  about the season only above a bar, so a mid-table team in October is left
+  alone and a 4% team in Week 11 is not.
+- Nothing jumps. Both terms are continuous, for the same reason `windowWeights`
+  was made continuous: a median split put two teams a percent apart on opposite
+  sides of a two-and-a-half-fold difference in weighting.
+
+**The label and the quadrant do not move — only the advice does.** `label` heads
+the banner and `quadrant` colours the dot on the contention scatter, and that
+scatter plots `nowScore` against `retainedShare`, both roster quantities. A
+banner reading "Danger zone" above a dot in the top right would be the scarcity
+panel's old bug in a new costume.
+
+The signal lives on `ContentionProfile` rather than being passed to each
+consumer separately, which is what makes it structurally impossible for the team
+page and the suggestion engine to disagree — `windowWeights` reads that object
+and nothing else. Absent out of season, where both fall back to the roster
+verdict alone.
+
 ### 4.4 Age curves
 
 Position-specific decay, applied to future value:
@@ -346,7 +380,7 @@ The hardest and most valuable feature. Approach:
     but whose price has not is exactly the player it misses.
 2. Find complementary pairs — your surplus ↔ their need, and their surplus ↔ your need
 3. Generate candidate packages (players and picks) within a value tolerance (~±5–8%)
-4. Score by: value balance × **your** VORS gain × **their** VORS gain × contention-window fit
+4. Score by: value balance × **your** VORS gain × **their** VORS gain × contention-window fit — where the window is the quadrant *corrected by live playoff odds*, so a contender whose season is gone is no longer scored as though winning this year were worth 0.9 to it (§4.3)
 5. Rank, and prune to a handful of genuinely plausible offers
 
 **Ship the "why they say yes" explanation alongside every suggestion.** A suggestion the other manager instantly rejects is worthless. Showing *their* upside in *their* terms is the feature people will actually come back for — and no major calculator does it.

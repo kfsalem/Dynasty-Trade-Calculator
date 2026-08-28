@@ -69,6 +69,67 @@ export interface SurplusAsset {
 
 export type Quadrant = 'juggernaut' | 'win_now' | 'rebuilding' | 'danger';
 
+/**
+ * Live playoff odds for the league, and how much season is behind them.
+ *
+ * The quadrant is a claim about a *roster* — `starterValue` against a
+ * three-year projection — and it contains no information about results. It
+ * cannot know a team has lost six straight. This is the other half: what the
+ * season being played actually says.
+ *
+ * Passed as a league-wide map rather than one team's number because
+ * `suggestTrades` analyses every roster, and a partner's window has to be read
+ * the same way as your own or the two halves of a trade are scored on different
+ * models.
+ */
+export interface SeasonOdds {
+  /** Roster id to probability of making the playoffs, 0-1. */
+  odds: Map<number, number>;
+  /** Regular-season weeks with a result behind them. */
+  weeksPlayed: number;
+  /** Regular-season weeks in all — `playoffWeekStart - 1`. */
+  weeksTotal: number;
+}
+
+/**
+ * What the season says about one team, and how loudly it gets to say it.
+ *
+ * Null on a profile means there is no season to read: no schedule, no odds, or
+ * a calendar that is not in the regular season. Every consumer then falls back
+ * to the roster verdict, which is what the app did before this existed.
+ */
+export interface SeasonOutlook {
+  /** Probability of making the playoffs, 0-1. */
+  playoffOdds: number;
+  weeksPlayed: number;
+  weeksTotal: number;
+  /** Regular-season weeks still to play. */
+  weeksLeft: number;
+  /**
+   * How far to trust the odds over the roster projection, 0-1.
+   *
+   * The fraction of the regular season played, and it is a statement about
+   * *evidence* rather than about urgency. The simulation already discounts for
+   * how much season is left — a 5% in week 6 is 5% knowing eight weeks remain —
+   * so what grows with time is not the stake but how much real football the
+   * model has seen. `calibrate` measures its scoring model from completed weeks
+   * for the same reason.
+   *
+   * Zero before a game is played, where the simulation is a restatement of
+   * `starterValue` and blending it in would be the roster projection counted
+   * twice.
+   */
+  weight: number;
+  /**
+   * How strongly the season is contradicting or confirming the roster, 0-1.
+   *
+   * `weight` times distance from a coin flip. This is what decides whether the
+   * advice speaks about the season at all, and it is continuous in both terms
+   * so that nothing jumps between two adjacent weeks or two adjacent teams.
+   */
+  conviction: number;
+}
+
 export interface ContentionProfile {
   /** Win-now lineup strength: how good this team is *this season*. */
   nowScore: number;
@@ -118,6 +179,16 @@ export interface ContentionProfile {
   quadrant: Quadrant;
   label: string;
   advice: string;
+  /**
+   * What the season being played says, or null when there is none to read.
+   *
+   * Deliberately on the profile rather than passed separately to each consumer.
+   * `suggest.windowWeights` reads this object and nothing else, so putting the
+   * season here is what makes it structurally impossible for the advice on the
+   * team page and the weighting behind a trade suggestion to disagree about
+   * whether a season is still worth playing for.
+   */
+  season: SeasonOutlook | null;
 }
 
 export interface TeamAnalysis {
@@ -227,6 +298,96 @@ const QUADRANTS: Record<Quadrant, { label: string; advice: string }> = {
 };
 
 /**
+ * How convinced the season has to be before it gets to overrule the roster.
+ *
+ * `conviction` is `weight` times distance from a coin flip, both 0-1, so the
+ * bar is a curve rather than a week number. Worked against a 14-week regular
+ * season, where the week being played is not yet behind you — week 3 means two
+ * weeks of results:
+ *
+ * | week | weight | odds | conviction | speaks |
+ * |---|---|---|---|---|
+ * | 3 | 0.14 | 20% | 0.09 | no — nine weeks left and the roster is the better guide |
+ * | 5 | 0.29 | 4% | 0.26 | no |
+ * | 8 | 0.50 | 4% | 0.46 | yes |
+ * | 11 | 0.71 | 4% | 0.66 | yes |
+ * | 11 | 0.71 | 45% | 0.07 | no — a live season says nothing either way |
+ *
+ * The failure this is calibrated against is the one in #66: a roster grading
+ * `juggernaut` at 4% in week 11 being told to press its advantage. The bar has
+ * to be low enough to catch that and high enough that a mid-table team in
+ * October is left alone.
+ */
+const SPEAKS = 0.4;
+
+/** Odds below which a season reads as gone, and above which it reads as live. */
+const SEASON_LOST = 0.5;
+
+/**
+ * Read the league-wide odds for one team.
+ *
+ * Null rather than a default when this team has no entry: a roster missing from
+ * the simulation is a bug upstream, and entering it at 50% would quietly hand
+ * it a coin-flip season it never played.
+ */
+function seasonOutlook(rosterId: number, season: SeasonOdds | undefined): SeasonOutlook | null {
+  if (!season) return null;
+  const playoffOdds = season.odds.get(rosterId);
+  if (playoffOdds === undefined) return null;
+
+  const { weeksPlayed, weeksTotal } = season;
+  if (weeksTotal <= 0) return null;
+
+  const weight = Math.min(Math.max(weeksPlayed / weeksTotal, 0), 1);
+
+  return {
+    playoffOdds,
+    weeksPlayed,
+    weeksTotal,
+    weeksLeft: Math.max(weeksTotal - weeksPlayed, 0),
+    weight,
+    conviction: weight * Math.abs(playoffOdds - 0.5) * 2,
+  };
+}
+
+/**
+ * The advice, when the season has earned the right to give it.
+ *
+ * Null means it has not, and the quadrant's own line stands. The point is not
+ * to replace the roster verdict — that is a real and separate thing, and it
+ * still labels the banner and places the dot on the scatter — but to stop the
+ * app recommending a purchase for a season that is already decided.
+ *
+ * Both sentences quote the odds, because this app states its evidence and
+ * because "your season is over" is a claim a reader is entitled to check.
+ */
+function seasonAdvice(outlook: SeasonOutlook, quadrant: Quadrant): string | null {
+  if (outlook.conviction < SPEAKS) return null;
+
+  const pct = Math.round(outlook.playoffOdds * 100);
+  const left = outlook.weeksLeft;
+  const weeks = `${left} ${left === 1 ? 'week' : 'weeks'} left`;
+  const contending = quadrant === 'juggernaut' || quadrant === 'win_now';
+
+  if (outlook.playoffOdds < SEASON_LOST) {
+    return (
+      `${pct}% to make the playoffs with ${weeks}. This season is not the one to spend on: ` +
+      `sell the veterans who will not be there for your next good team, and buy the ones who will. ` +
+      (contending
+        ? 'Your roster still grades as a contender, and that is exactly the trap — a future pick spent on a season this far gone buys nothing.'
+        : 'Picks and young starters are the return to ask for.')
+    );
+  }
+
+  return (
+    `${pct}% to make the playoffs with ${weeks}. This season is live, whatever the roster grade says: ` +
+    (contending
+      ? 'press it, and spend the picks that will not help you before the window shuts.'
+      : 'a pick two years out is worth less to you than one more starting slot solved this month.')
+  );
+}
+
+/**
  * The median split, in one place.
  *
  * Extracted so the quadrant *label* and the quadrant *plot* cannot drift apart.
@@ -309,6 +470,7 @@ export function contentionProfile(
   summary: RosterSummary,
   all: RosterSummary[],
   settings: LeagueSettings,
+  season?: SeasonOdds,
 ): ContentionProfile {
   const nowScores = all.map((s) => s.starterValue);
   const futureScores = all.map((s) => futureScore(s, settings));
@@ -339,6 +501,10 @@ export function contentionProfile(
       ? 0.5
       : population.filter((v) => v < value).length / (population.length - 1);
 
+  const outlook = seasonOutlook(summary.rosterId, season);
+  const advice =
+    (outlook && seasonAdvice(outlook, quadrant)) ?? QUADRANTS[quadrant].advice;
+
   return {
     nowScore: now,
     futureScore: future,
@@ -349,7 +515,19 @@ export function contentionProfile(
     nowShare: share(now, nowScores),
     youthShare: share(retainedShare, retainedShares),
     quadrant,
-    ...QUADRANTS[quadrant],
+    /*
+      The label stays the roster verdict even when the season overrules the
+      advice, and that is deliberate rather than an oversight. `label` heads the
+      banner and `quadrant` colours the dot on the contention scatter, which
+      plots `nowScore` against `retainedShare` — both roster quantities. A
+      banner reading "Danger zone" above a dot in the top right would be the
+      scarcity panel's old bug in a new costume, which is the whole reason
+      `quadrantOf` was extracted. So the season changes what the app *advises*,
+      never where it says the roster stands.
+    */
+    label: QUADRANTS[quadrant].label,
+    advice,
+    season: outlook,
   };
 }
 
@@ -357,6 +535,7 @@ export function analyzeTeam(
   rosterId: number,
   all: RosterSummary[],
   settings: LeagueSettings,
+  season?: SeasonOdds,
 ): TeamAnalysis | null {
   const summary = all.find((s) => s.rosterId === rosterId);
   if (!summary) return null;
@@ -434,7 +613,7 @@ export function analyzeTeam(
     .sort((a, b) => b.wouldStartOn - a.wouldStartOn || b.value - a.value)
     .slice(0, 6);
 
-  const contention = contentionProfile(summary, all, settings);
+  const contention = contentionProfile(summary, all, settings, season);
   const strengths = positions.filter((p) => p.verdict === 'strength');
   const weaknesses = positions.filter((p) => p.verdict === 'weakness');
 

@@ -6,6 +6,7 @@ import {
   retention,
   type ContentionProfile,
   type Quadrant,
+  type SeasonOdds,
   type TeamAnalysis,
 } from './analysis';
 import { picksForRoster } from './picks';
@@ -97,6 +98,14 @@ export interface SuggestionResult {
 export interface SuggestContext extends TradeContext {
   summaries: RosterSummary[];
   /**
+   * League-wide playoff odds, when a season is being played.
+   *
+   * Reaches every team's `ContentionProfile` through `analyzeTeam`, so both
+   * sides of a proposed trade are weighted on the same evidence. Absent out of
+   * season, and the engine is then exactly what it was.
+   */
+  season?: SeasonOdds;
+  /**
    * Role trends, when activity data is available.
    *
    * Optional because the engine has to keep working without it — the static
@@ -171,11 +180,38 @@ export function windowWeights(contention: ContentionProfile): {
   const strong = contention.nowShare;
   const young = contention.youthShare;
 
-  const now =
+  const roster =
     (1 - strong) * (1 - young) * WINDOW_WEIGHTS.danger.now +
     (1 - strong) * young * WINDOW_WEIGHTS.rebuilding.now +
     strong * (1 - young) * WINDOW_WEIGHTS.win_now.now +
     strong * young * WINDOW_WEIGHTS.juggernaut.now;
+
+  /**
+   * The roster's projection of this season, corrected by the season itself.
+   *
+   * Everything above is a claim about a roster and contains no information
+   * about results, so a contender whose season is mathematically gone is still
+   * scored as though winning this year were worth 0.9 to it — and the engine
+   * will cheerfully recommend it buy. That is the same defect as #66's advice
+   * bug, one layer down, and it has to be fixed in the same place or the two
+   * surfaces contradict each other.
+   *
+   * Mapped onto the table's own corners rather than a new scale: a team certain
+   * to miss the playoffs is weighted like the danger zone, one certain to make
+   * them like a closing window, and everything between interpolates. Reusing
+   * the constants is the point — this is not a second opinion about how much
+   * winning is worth, it is the same opinion informed by the standings.
+   *
+   * `weight` is zero before a game is played, so the preseason answer is
+   * exactly the pre-#66 answer.
+   */
+  const season = contention.season;
+  if (!season) return { now: roster, future: 1 - roster };
+
+  const fromOdds =
+    WINDOW_WEIGHTS.danger.now +
+    season.playoffOdds * (WINDOW_WEIGHTS.win_now.now - WINDOW_WEIGHTS.danger.now);
+  const now = (1 - season.weight) * roster + season.weight * fromOdds;
 
   return { now, future: 1 - now };
 }
@@ -662,7 +698,12 @@ export function suggestTrades(
 
   const analyses = new Map<number, TeamAnalysis>();
   for (const summary of ctx.summaries) {
-    const analysis = analyzeTeam(summary.rosterId, ctx.summaries, ctx.league.settings);
+    const analysis = analyzeTeam(
+      summary.rosterId,
+      ctx.summaries,
+      ctx.league.settings,
+      ctx.season,
+    );
     if (analysis) analyses.set(summary.rosterId, analysis);
   }
 

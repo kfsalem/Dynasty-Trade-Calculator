@@ -466,7 +466,11 @@ describe('suggestTrades', () => {
 });
 
 describe('windowWeights', () => {
-  const profile = (nowShare: number, youthShare: number): ContentionProfile => ({
+  const profile = (
+    nowShare: number,
+    youthShare: number,
+    season: ContentionProfile['season'] = null,
+  ): ContentionProfile => ({
     nowScore: 0,
     futureScore: 0,
     nowRank: 1,
@@ -478,6 +482,17 @@ describe('windowWeights', () => {
     quadrant: 'danger',
     label: '',
     advice: '',
+    season,
+  });
+
+  /** A season signal at a chosen point of a 14-week regular season. */
+  const outlook = (playoffOdds: number, weeksPlayed: number): ContentionProfile['season'] => ({
+    playoffOdds,
+    weeksPlayed,
+    weeksTotal: 14,
+    weeksLeft: 14 - weeksPlayed,
+    weight: weeksPlayed / 14,
+    conviction: (weeksPlayed / 14) * Math.abs(playoffOdds - 0.5) * 2,
   });
 
   it('reproduces the quadrant table exactly at the corners', () => {
@@ -536,6 +551,66 @@ describe('windowWeights', () => {
       for (let young = 0; young <= 1.0001; young += 0.1) {
         expect(windowWeights(profile(Math.min(strong, 1), Math.min(young, 1))).now)
           .toBeGreaterThanOrEqual(0.35);
+      }
+    }
+  });
+
+  /*
+    #66, one layer below the advice. A roster that grades as a contender and
+    whose season is mathematically gone was weighted 0.9 on the present, so the
+    engine recommended it buy. The weights and the advice read the same signal
+    off the same object precisely so they cannot disagree about this.
+  */
+  it('stops weighting the present for a contender whose season is gone', () => {
+    const paper = windowWeights(profile(1, 0)).now;
+    const dead = windowWeights(profile(1, 0, outlook(0.04, 10))).now;
+
+    expect(paper).toBeCloseTo(WINDOW_WEIGHTS.win_now.now, 10);
+    expect(dead).toBeLessThan(paper);
+    // Pulled most of the way to the danger-zone corner, not merely nudged.
+    expect(dead).toBeLessThan(0.6);
+  });
+
+  it('keeps weighting the present for a rebuilder whose season is live', () => {
+    const paper = windowWeights(profile(0, 1)).now;
+    const live = windowWeights(profile(0, 1, outlook(0.92, 10))).now;
+
+    expect(paper).toBeCloseTo(WINDOW_WEIGHTS.rebuilding.now, 10);
+    expect(live).toBeGreaterThan(paper);
+  });
+
+  it('ignores the odds before a game has been played', () => {
+    // Week zero: the simulation is a restatement of roster strength, so
+    // blending it in would count the same projection twice.
+    const preseason = windowWeights(profile(1, 0, outlook(0.5, 0))).now;
+    expect(preseason).toBeCloseTo(WINDOW_WEIGHTS.win_now.now, 10);
+  });
+
+  it('moves continuously as the season goes on', () => {
+    // No week may be a cliff, which is the same property the bilinear form
+    // exists to give the quadrant.
+    const at = (week: number) => windowWeights(profile(1, 0, outlook(0.04, week))).now;
+    for (let week = 1; week <= 14; week++) {
+      expect(at(week)).toBeLessThan(at(week - 1));
+      expect(Math.abs(at(week) - at(week - 1))).toBeLessThan(0.06);
+    }
+  });
+
+  it('never leaves the range the quadrant table defines', () => {
+    // The floor and ceiling of the table are `danger` (0.35) and `win_now`
+    // (0.9) — not `juggernaut`, which sits inside them at 0.65 because a team
+    // that is strong *and* young can afford to care about both.
+    const corners = Object.values(WINDOW_WEIGHTS).map((w) => w.now);
+    const floor = Math.min(...corners);
+    const ceiling = Math.max(...corners);
+
+    for (const odds of [0, 0.25, 0.5, 0.75, 1]) {
+      for (const week of [0, 7, 14]) {
+        for (const strong of [0, 0.5, 1]) {
+          const now = windowWeights(profile(strong, 0.5, outlook(odds, week))).now;
+          expect(now).toBeGreaterThanOrEqual(floor - 1e-9);
+          expect(now).toBeLessThanOrEqual(ceiling + 1e-9);
+        }
       }
     }
   });

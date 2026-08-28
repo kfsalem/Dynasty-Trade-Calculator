@@ -91,6 +91,15 @@ Claim your team with your Sleeper username to get personalized analysis: your
 contention window, your positional strengths and weaknesses against the league,
 and which of your bench players other teams would actually start.
 
+The contention window is a claim about a *roster* — this year's lineup against a
+three-year projection — and it knows nothing about results. So once the season
+is under way it is corrected by the one number that does: your live playoff
+odds. A roster that grades as a contender and sits at 4% in Week 11 is told to
+sell, not to press, and it is told the figure that changed the answer. Early in
+the season the roster is the better guide and the correction is small; by
+November it decides. The label and the chart stay on the roster verdict, because
+that is what they are plotting — only the advice moves.
+
 **Trade ideas** searches the whole league for offers that leave both teams
 better off, and ships the reason the other manager accepts alongside each one.
 "Better off" is deliberately not the same measure for both sides: a team with a
@@ -99,6 +108,10 @@ lineup this year, and a team in the danger zone almost entirely on where it
 leaves them in three. Requiring both to gain *starting-lineup strength* would
 rule out the most common dynasty trade there is — a rebuilder sending a veteran
 to a contender for picks — because picks never start.
+
+The same playoff odds shift those weights too, and through the same object, so
+the advice on your team page and the offers on the ideas tab cannot disagree
+about whether a season is still worth playing for.
 
 See [`docs/DESIGN.md`](docs/DESIGN.md) for the architecture and the reasoning
 behind every model decision, and [`docs/ROADMAP.md`](docs/ROADMAP.md) for what is

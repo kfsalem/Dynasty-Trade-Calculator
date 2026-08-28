@@ -577,3 +577,105 @@ describe('analyzeTeam', () => {
     expect(analysis?.focus[0]).toBe(analysis?.contention.advice);
   });
 });
+
+describe('contentionProfile — the season overruling the roster', () => {
+  /** League-wide odds at a point in a 14-week regular season. */
+  const at = (odds: Record<number, number>, weeksPlayed: number) => ({
+    odds: new Map(Object.entries(odds).map(([id, p]) => [Number(id), p])),
+    weeksPlayed,
+    weeksTotal: 14,
+  });
+
+  const profileFor = (i: number, season?: ReturnType<typeof at>) => {
+    const { summaries } = world();
+    return contentionProfile(summaries[i], summaries, settings, season);
+  };
+
+  it('reads nothing at all without a season', () => {
+    const profile = profileFor(1);
+    expect(profile.season).toBeNull();
+    expect(profile.advice).toContain('This is your year to go all in');
+  });
+
+  /*
+    The failure in #66, in as many words. A roster in a closing window at 4% to
+    make the playoffs in week 11 was told to press its advantage and spend
+    future picks on a season already decided.
+  */
+  it('tells a contender whose season is gone to sell instead of press', () => {
+    const profile = profileFor(1, at({ 2: 0.04 }, 10));
+
+    expect(profile.quadrant).toBe('win_now');
+    expect(profile.advice).not.toContain('go all in');
+    expect(profile.advice).toContain('4% to make the playoffs');
+    expect(profile.advice).toContain('4 weeks left');
+    expect(profile.advice).toMatch(/sell/i);
+  });
+
+  it('tells a rebuilder whose season is live to spend on it', () => {
+    const profile = profileFor(2, at({ 3: 0.93 }, 10));
+
+    expect(profile.quadrant).toBe('rebuilding');
+    expect(profile.advice).toContain('93% to make the playoffs');
+    expect(profile.advice).toContain('This season is live');
+  });
+
+  it('leaves the roster verdict alone when the two agree', () => {
+    // A danger-zone team at 3% is being told what its quadrant already said.
+    // The sentence changes because it now carries evidence; the verdict does
+    // not.
+    const profile = profileFor(3, at({ 4: 0.03 }, 10));
+
+    expect(profile.quadrant).toBe('danger');
+    expect(profile.advice).toContain('3% to make the playoffs');
+    expect(profile.advice).toMatch(/sell/i);
+  });
+
+  it('says nothing about a season that is still a coin flip', () => {
+    const profile = profileFor(1, at({ 2: 0.48 }, 10));
+
+    expect(profile.season?.playoffOdds).toBe(0.48);
+    // The signal is real and simply not decisive, so the roster verdict stands.
+    expect(profile.advice).toContain('This is your year to go all in');
+  });
+
+  it('stays quiet early, when the roster is the better guide', () => {
+    // 20% in week 3 is nine weeks of football away from meaning anything.
+    const early = profileFor(1, at({ 2: 0.2 }, 2));
+    expect(early.advice).toContain('This is your year to go all in');
+
+    // The same odds late are decisive.
+    const late = profileFor(1, at({ 2: 0.2 }, 11));
+    expect(late.advice).toContain('20% to make the playoffs');
+  });
+
+  it('never lets the season move the quadrant or the label', () => {
+    /*
+      The banner heading and the dot on the contention scatter are both roster
+      quantities, and a banner reading one thing above a dot placed by another
+      is the drift `quadrantOf` was extracted to prevent. Only the advice moves.
+    */
+    const paper = profileFor(1);
+    const dead = profileFor(1, at({ 2: 0.02 }, 12));
+
+    expect(dead.quadrant).toBe(paper.quadrant);
+    expect(dead.label).toBe(paper.label);
+    expect(dead.nowScore).toBe(paper.nowScore);
+    expect(dead.nowShare).toBe(paper.nowShare);
+    expect(dead.advice).not.toBe(paper.advice);
+  });
+
+  it('makes no claim for a roster the simulation does not know about', () => {
+    // A missing entry is a bug upstream. Defaulting it to a coin flip would
+    // hand the team a season it never played.
+    expect(profileFor(1, at({ 99: 0.5 }, 10)).season).toBeNull();
+  });
+
+  it('carries zero weight before a game has been played', () => {
+    const profile = profileFor(1, at({ 2: 0.02 }, 0));
+
+    expect(profile.season?.weight).toBe(0);
+    expect(profile.season?.conviction).toBe(0);
+    expect(profile.advice).toContain('This is your year to go all in');
+  });
+});
