@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { startSit } from './startSit';
+import { startSit, CLEAR_MARGIN, relativeMargin } from './startSit';
 import { canStart } from './availability';
 import type { InjuryStatus, LineupSlot, Player, Position } from '../types';
 import type { ValuedPlayer } from './rosterValue';
@@ -370,5 +370,146 @@ describe('startSit — bye weeks', () => {
 
     expect(ids(plan)).toContain('wr1');
     expect(plan.changes).toHaveLength(0);
+  });
+});
+
+describe('startSit — confidence', () => {
+  const SWAP: LineupSlot[] = ['QB', 'RB', 'WR', 'FLEX'];
+  /** No flex, so the second receiver is genuinely on the bench. */
+  const ONE_WR: LineupSlot[] = ['QB', 'RB', 'WR'];
+
+  it('folds a swap too close to call', () => {
+    const entries = [
+      entry('qb1', 'QB', 900),
+      entry('rb1', 'RB', 800),
+      entry('wr1', 'WR', 700),
+      entry('wr2', 'WR', 690),
+    ];
+    // Two receivers ten points apart: a real difference, and not one this model
+    // can resolve — these are season-long values with no matchup in them.
+    const plan = startSit({
+      entries,
+      startingSlots: ONE_WR,
+      setLineup: ['qb1', 'rb1', 'wr2'],
+    });
+
+    const swap = plan.changes.find((c) => c.slot === 'WR');
+    expect(swap?.cause).toBe('upgrade');
+    expect(swap?.margin).toBeLessThan(CLEAR_MARGIN);
+    expect(swap?.decisive).toBe(false);
+    expect(plan.marginal).toContain(swap);
+  });
+
+  it('stands behind a swap that clears the bar', () => {
+    const entries = [
+      entry('qb1', 'QB', 900),
+      entry('rb1', 'RB', 800),
+      entry('wr1', 'WR', 700),
+      entry('wr2', 'WR', 300),
+    ];
+    const plan = startSit({
+      entries,
+      startingSlots: ONE_WR,
+      setLineup: ['qb1', 'rb1', 'wr2'],
+    });
+
+    const swap = plan.changes.find((c) => c.slot === 'WR');
+    expect(swap?.margin).toBeGreaterThan(CLEAR_MARGIN);
+    expect(plan.decisive).toContain(swap);
+  });
+
+  /*
+    A fact is a fact however small the number. A slot scoring zero is worth
+    reporting whoever is in it, and an empty slot has nobody to be better than —
+    its margin is zero by construction and must not fold it away.
+  */
+  it('always stands behind an empty slot, whatever it is worth', () => {
+    const entries = [entry('qb1', 'QB', 900), entry('wr1', 'WR', 1)];
+    const plan = startSit({
+      entries,
+      startingSlots: ['QB', 'WR'],
+      setLineup: ['qb1', null],
+    });
+
+    const empty = plan.changes.find((c) => c.cause === 'empty');
+    expect(empty?.margin).toBe(0);
+    expect(empty?.decisive).toBe(true);
+  });
+
+  /**
+   * The case the real league produced, and the reason rows are grouped at all.
+   *
+   * A receiver moves FLEX → WR and a back fills the FLEX behind him. Two rows,
+   * one decision: bench the weak receiver, start the back. Judged row by row the
+   * FLEX row compares the back against the receiver who is merely passing
+   * through — a 1% "gap" that would fold the row away and tell the manager to
+   * empty a slot the other row was going to fill.
+   */
+  const chain = (benched: number) => {
+    const entries = [
+      entry('qb1', 'QB', 900),
+      entry('rb1', 'RB', 800),
+      entry('wr1', 'WR', 700), // set in FLEX, belongs at WR
+      entry('wr2', 'WR', benched), // set at WR, the man actually being benched
+      entry('rb2', 'RB', 690), // on the bench, flex-eligible only
+    ];
+    return startSit({
+      entries,
+      startingSlots: SWAP,
+      setLineup: ['qb1', 'rb1', 'wr2', 'wr1'],
+    });
+  };
+
+  it('groups a slot shuffle and the swap behind it into one decision', () => {
+    const plan = chain(400);
+    const wr = plan.changes.find((c) => c.slot === 'WR');
+    const flex = plan.changes.find((c) => c.slot === 'FLEX');
+
+    expect(wr).toBeDefined();
+    expect(flex).toBeDefined();
+    expect(wr?.chain).toBe(flex?.chain);
+
+    // Row by row the FLEX call is a coin flip, because the man it names is not
+    // the man leaving the lineup.
+    expect(flex?.margin).toBeLessThan(CLEAR_MARGIN);
+
+    // As one decision it is 690 in for 400 out, and both rows are shown.
+    expect(wr?.decisive).toBe(true);
+    expect(flex?.decisive).toBe(true);
+    expect(plan.marginal).toHaveLength(0);
+  });
+
+  it('folds the whole chain when the decision behind it is close', () => {
+    const plan = chain(680);
+    const wr = plan.changes.find((c) => c.slot === 'WR');
+    const flex = plan.changes.find((c) => c.slot === 'FLEX');
+
+    expect(wr?.chain).toBe(flex?.chain);
+    // 690 in for 680 out. Never half-shown, which would empty the WR slot.
+    expect(wr?.decisive).toBe(false);
+    expect(flex?.decisive).toBe(false);
+    expect(plan.decisive).toHaveLength(0);
+    expect(plan.marginal).toHaveLength(2);
+  });
+
+  it('splits decisive and marginal without losing or duplicating a row', () => {
+    const plan = chain(400);
+    expect(plan.decisive.length + plan.marginal.length).toBe(plan.changes.length);
+    expect(new Set(plan.changes.map((c) => `${c.slot}-${c.index}`)).size).toBe(
+      plan.changes.length,
+    );
+  });
+});
+
+describe('relativeMargin', () => {
+  it('scales with the position rather than the points', () => {
+    // 40 points between two quarterbacks near 900 is a rounding error; the same
+    // 40 between two tight ends near 130 is a third of the position.
+    expect(relativeMargin(940, 900)).toBeLessThan(CLEAR_MARGIN);
+    expect(relativeMargin(170, 130)).toBeGreaterThan(CLEAR_MARGIN);
+  });
+
+  it('is zero when there is nothing to compare against', () => {
+    expect(relativeMargin(0, 0)).toBe(0);
   });
 });

@@ -32,6 +32,21 @@ Byes are in it because a bye is not a projection. A team that is off scores
 nothing with certainty, which puts it in the same class as an empty slot rather
 than in the class of matchup nuance the panel declines to model.
 
+It also separates the corrections it will argue for from the ones it will not.
+An empty slot, a dropped player, a bye and an injury are *facts*, and are
+reported however small the value involved. A straight "start him over him" is an
+*opinion*, and has to be worth more than 10% of the slot before it is stated as
+one — below that these season-long values, which carry no matchup, cannot tell
+the two men apart. The close calls are still there, folded away. On the real
+league that turns ten rows into nine worth acting on and one that was noise.
+
+And it looks past your own roster. Free agents are priced against the same
+replacement levels as everybody else, so the panel can say the thing that
+actually costs you points: the best man for that slot is unrostered. It names
+who to drop for him. Seven of a hundred starting slots in the test league were
+held by somebody the wire would beat — five of them quarterbacks, which is what
+a ten-team single-QB league guarantees.
+
 The trade calculator reports two numbers per side. **Net value** is what every
 other calculator shows. **Starting lineup** is the change in the best lineup
 that side can field — and it is the one that matters. Winning a trade on raw

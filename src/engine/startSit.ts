@@ -56,6 +56,44 @@ import { onBye } from './byes';
  */
 export type ChangeCause = 'empty' | 'dropped' | 'bye' | 'sidelined' | 'upgrade' | 'move';
 
+/**
+ * How much better the recommended man has to be before the app calls it a
+ * correction rather than a coin flip.
+ *
+ * Measured against the real ten-team league on 2026-08-27, over the ten change
+ * rows the panel actually produced: two of the eight `upgrade` rows were 1.6%
+ * and 4.0%, and the next was 32.7%. Nothing at all fell between 4% and 33%, so
+ * anywhere in that gap separates the same rows; 10% is the round number in the
+ * middle of it rather than a value fitted to eight observations.
+ *
+ * The reason the gap is so wide is worth keeping. A manager's lineup and the
+ * app's disagree precisely where the call is close, so change rows are
+ * *selected* for closeness — measured across every starting slot in the league
+ * instead, only 3% of starters sit within 10% of the best man on their bench,
+ * against 25% of the rows this panel prints. Calibrating on all slots would
+ * have set the bar in the wrong place.
+ *
+ * Below this the app is claiming a precision it does not have: these are
+ * season-long win-now values with no matchup in them, and a 4% edge is inside
+ * the noise of a single Sunday.
+ */
+export const CLEAR_MARGIN = 0.1;
+
+/**
+ * How much better one man is than another, as a share of the larger.
+ *
+ * Relative rather than absolute because the same gap means different things in
+ * different slots: 40 points between two quarterbacks priced near 900 is a
+ * rounding error, and 40 points between two tight ends priced near 130 is a
+ * third of the position. An absolute threshold would fold away real upgrades at
+ * the shallow end of the roster and print noise at the deep end.
+ */
+export function relativeMargin(better: number, worse: number): number {
+  const larger = Math.max(better, worse);
+  if (larger <= 0) return 0;
+  return (better - worse) / larger;
+}
+
 export interface LineupChange {
   slot: LineupSlot;
   /** Position in `startingSlots`, so a league's two FLEX slots stay distinct. */
@@ -85,6 +123,36 @@ export interface LineupChange {
   /** The designation behind a `sidelined` cause, for naming it exactly. */
   status?: InjuryStatus['status'];
   /**
+   * How much better the recommended man is, as a share of the larger value.
+   *
+   * Zero where the comparison is meaningless — an empty slot has nobody to be
+   * better than. Read alongside `decisive`, never instead of it.
+   */
+  margin: number;
+  /**
+   * Which chain of dependent rows this belongs to.
+   *
+   * Rows are not independent, and treating them as though they were is a way to
+   * give broken advice. On the real league one roster had a receiver moving from
+   * FLEX to WR with a bench player filling the FLEX behind him: two rows, and
+   * following only the first empties a slot the second was going to fill. Rows
+   * that shuffle a man between slots are one decision wearing several hats, so
+   * they are shown and hidden together.
+   */
+  chain: number;
+  /**
+   * Whether this is a correction the app is willing to stand behind.
+   *
+   * Decided for the whole chain, never for the row — see `chain`. Within that:
+   * `empty`, `dropped`, `bye` and `sidelined` are *facts* about the roster and
+   * always qualify, however small the value involved, because a slot scoring
+   * zero is worth saying whoever is in it. An `upgrade` is an *opinion*, and its
+   * chain has to clear `CLEAR_MARGIN` to be stated as one. A chain that moves
+   * nobody in or out of the lineup never qualifies: it is the same eleven men
+   * differently arranged, and the engine's own accounting puts it at zero.
+   */
+  decisive: boolean;
+  /**
    * Win-now value this row adds, counting only players entering or leaving the
    * lineup as a set — a man shuffled between two slots is worth what he was
    * worth. Row gains therefore sum to `StartSitPlan.gain` exactly, which is the
@@ -99,8 +167,18 @@ export interface StartSitPlan {
    * wherever that is legal, so the only rows that differ are rows that matter.
    */
   lineup: LineupAssignment[];
-  /** Slots where the two disagree, most valuable first. */
+  /**
+   * Slots where the two disagree, most valuable first.
+   *
+   * Every disagreement, including the ones not worth acting on. Nothing is
+   * dropped here — `decisive` says which are worth presenting as corrections,
+   * and a caller that wants the whole picture can still have it.
+   */
   changes: LineupChange[];
+  /** Changes the app will stand behind. What the headline counts. */
+  decisive: LineupChange[];
+  /** The rest: coin flips and pure rearrangement. Real, and not worth a row. */
+  marginal: LineupChange[];
   /** Total win-now value the changes add. Zero when the lineup is already best. */
   gain: number;
   /** What the set lineup is worth, counting a sidelined or missing starter as nothing. */
@@ -304,6 +382,21 @@ export function startSit({
       const gain =
         (startIsNew ? (start?.winNowValue ?? 0) : 0) - (leaving ? sit.winNowValue : 0);
 
+      const why = cause({ setId, sit, sitStays, startIsNew, off });
+
+      /*
+        Measured between the two men in this slot, not from `gain`.
+
+        `gain` is an accounting figure: it counts only players entering or
+        leaving the lineup as a set, so that the rows sum to `plan.gain`
+        exactly. That makes it the wrong number for confidence — a row where the
+        displaced starter merely slides to another slot carries the newcomer's
+        entire value, and would read as overwhelming when the actual question,
+        "is this man better than the one in the slot", may be a coin flip.
+      */
+      const margin =
+        start && sit ? relativeMargin(start.winNowValue, sit.winNowValue) : 0;
+
       changes.push({
         slot,
         index,
@@ -311,13 +404,19 @@ export function startSit({
         sit,
         sitStays,
         startIsNew,
-        cause: cause({ setId, sit, sitStays, startIsNew, off }),
+        cause: why,
         ...(status ? { status } : {}),
+        margin,
+        // Both filled in once every row exists — a chain cannot be identified
+        // from inside one of its members.
+        chain: -1,
+        decisive: false,
         gain,
       });
     }
   }
 
+  linkChains(changes, playing);
   changes.sort((a, b) => b.gain - a.gain || a.index - b.index);
 
   const watch = lineup
@@ -330,12 +429,100 @@ export function startSit({
   return {
     lineup,
     changes,
+    decisive: changes.filter((change) => change.decisive),
+    marginal: changes.filter((change) => !change.decisive),
     gain: recommendedValue - setValue,
     setValue,
     recommendedValue,
     unset,
     watch,
   };
+}
+
+/**
+ * Group rows into independent decisions, and decide each group on its merits.
+ *
+ * A row is not an action. Moving a receiver from FLEX to WR and filling the
+ * FLEX from the bench is *one* decision printed as two rows, and the two are
+ * linked by the man who appears as `sit` in the first and `start` in the second.
+ * Presenting them separately invites a manager to do half of it and leave a slot
+ * empty, and hiding one as marginal does the same thing without asking.
+ *
+ * So rows are joined wherever they share a player who is merely moving, and the
+ * whole group stands or falls together. What the group is *worth* is then the
+ * only honest question: the men who actually join the lineup against the men who
+ * actually leave it. In the example above that is "bench Watson, start
+ * Henderson" — and the receiver shuffling slots, whose value appears on both
+ * sides, correctly cancels.
+ */
+function linkChains(
+  changes: LineupChange[],
+  playing: (entry: ValuedPlayer) => boolean,
+): void {
+  /** Row indices keyed by a player who is only changing slots. */
+  const movers = new Map<string, number[]>();
+  const note = (id: string, row: number) => {
+    const rows = movers.get(id) ?? [];
+    rows.push(row);
+    movers.set(id, rows);
+  };
+
+  for (const [row, change] of changes.entries()) {
+    if (change.sitStays && change.sit) note(change.sit.player.id, row);
+    if (!change.startIsNew && change.start) note(change.start.player.id, row);
+  }
+
+  const chainOf = changes.map(() => -1);
+  let next = 0;
+
+  for (const [row] of changes.entries()) {
+    if (chainOf[row] !== -1) continue;
+    const id = next++;
+
+    // Breadth-first across shared movers. Chains are two or three rows in
+    // practice, so nothing cleverer than a queue is warranted.
+    const queue = [row];
+    chainOf[row] = id;
+    while (queue.length > 0) {
+      const current = queue.pop() as number;
+      const change = changes[current];
+      const ids = [
+        ...(change.sitStays && change.sit ? [change.sit.player.id] : []),
+        ...(!change.startIsNew && change.start ? [change.start.player.id] : []),
+      ];
+      for (const playerId of ids) {
+        for (const neighbour of movers.get(playerId) ?? []) {
+          if (chainOf[neighbour] !== -1) continue;
+          chainOf[neighbour] = id;
+          queue.push(neighbour);
+        }
+      }
+    }
+  }
+
+  const FACTS: ChangeCause[] = ['empty', 'dropped', 'bye', 'sidelined'];
+
+  for (let id = 0; id < next; id++) {
+    const rows = changes.filter((_, row) => chainOf[row] === id);
+
+    // Only players crossing the lineup's edge count. Anyone shuffling between
+    // slots appears on both sides and cancels, which is the whole point.
+    const joining = rows
+      .filter((change) => change.startIsNew && change.start)
+      .reduce((sum, change) => sum + (change.start?.winNowValue ?? 0), 0);
+    const leaving = rows
+      .filter((change) => !change.sitStays && change.sit && playing(change.sit))
+      .reduce((sum, change) => sum + (change.sit?.winNowValue ?? 0), 0);
+
+    const inert = rows.every((change) => !change.startIsNew && change.sitStays);
+    const fact = rows.some((change) => FACTS.includes(change.cause));
+    const decisive = fact || (!inert && relativeMargin(joining, leaving) >= CLEAR_MARGIN);
+
+    for (const change of rows) {
+      change.chain = id;
+      change.decisive = decisive;
+    }
+  }
 }
 
 function cause({
