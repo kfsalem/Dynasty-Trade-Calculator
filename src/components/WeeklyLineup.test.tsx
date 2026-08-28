@@ -5,6 +5,21 @@ import { WeeklyLineup } from './WeeklyLineup';
 import { summarizeRoster } from '../engine/rosterValue';
 import { makePlayer, makeRoster, makeSettings, makeValue } from '../engine/testFixtures';
 import type { InjuryStatus, Player, PlayerValue, Roster, SeasonPhase } from '../types';
+import type { FreeAgent, FreeAgentBoard } from '../engine/freeAgents';
+
+const freeAgent = (id: string, position: 'QB' | 'WR', winNow: number): FreeAgent => ({
+  player: { ...makePlayer(id, position), team: 'KC' },
+  value: makeValue(id, winNow, position, winNow, winNow, winNow),
+  snaps: undefined,
+  usage: undefined,
+  adjustment: undefined,
+});
+
+const wire = (...priced: FreeAgent[]): FreeAgentBoard => ({
+  priced,
+  unpriced: [],
+  all: priced,
+});
 
 /**
  * The in-season register, which live data cannot reach for most of the year.
@@ -46,6 +61,8 @@ function panel(
     injuries = {} as Record<string, InjuryStatus>,
     teams = {} as Record<string, string>,
     byeTeams = null as ReadonlySet<string> | null,
+    board = undefined as FreeAgentBoard | undefined,
+    values: overrideValues = values as Map<string, PlayerValue>,
   } = {},
 ) {
   const withInjuries = new Map(players);
@@ -57,7 +74,7 @@ function panel(
   }
 
   const target = roster(setLineup);
-  const summary = summarizeRoster(target, withInjuries, values, settings);
+  const summary = summarizeRoster(target, withInjuries, overrideValues, settings);
 
   return render(
     <WeeklyLineup
@@ -67,6 +84,7 @@ function panel(
       seasonPhase={phase}
       currentWeek={week}
       byeTeams={byeTeams}
+      board={board}
     />,
   );
 }
@@ -195,5 +213,61 @@ describe('WeeklyLineup', () => {
 
     expect(screen.getByText(/Player wr2 is on bye/)).toBeInTheDocument();
     expect(screen.queryByText(/Worth checking again before kickoff/)).not.toBeInTheDocument();
+  });
+
+  /*
+    The headline is a claim, not a row count. A panel that says "3 changes" and
+    means "one real one and two coin flips" teaches the reader to skim all
+    three, and the row that matters loses its urgency to the noise beside it.
+  */
+  /**
+   * An empty QB slot, which is a fact worth stating however small the value,
+   * and 660 for 600 in the flex, which is 9% and not a call this model can
+   * make. The panel should claim exactly one of the two.
+   */
+  const mixed = () => {
+    const close = new Map(values);
+    close.set('wr3', makeValue('wr3', 660, 'WR', 660, 660, 660));
+    return close;
+  };
+  const MIXED_LINEUP = [null, 'rb1', 'wr1', 'wr2'];
+
+  it('counts only the changes it will stand behind', () => {
+    panel(MIXED_LINEUP, { values: mixed() });
+
+    expect(screen.getByText('1 change to make')).toBeInTheDocument();
+    expect(screen.getByText(/1 swap too close to call/)).toBeInTheDocument();
+  });
+
+  it('keeps the close call reachable rather than discarding it', async () => {
+    panel(MIXED_LINEUP, { values: mixed() });
+    await userEvent.click(screen.getByText(/1 swap too close to call/));
+
+    expect(screen.getByText(/Within 10% on win-now value/)).toBeInTheDocument();
+  });
+
+  it('says nothing about closeness when every change is decisive', () => {
+    panel(['qb1', 'rb1', 'wr3', 'wr2']);
+    expect(screen.queryByText(/too close to call/)).not.toBeInTheDocument();
+  });
+
+  it('names a free agent who beats a starter, and who to drop for him', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], {
+      board: wire(freeAgent('purdy', 'QB', 2000)),
+    });
+
+    expect(screen.getByText(/beats your lineup/)).toBeInTheDocument();
+    expect(screen.getByText('Player purdy')).toBeInTheDocument();
+    expect(screen.getByText(/Better than Player qb1 in this slot/)).toBeInTheDocument();
+    // The cheapest asset on the bench, not the weakest starter.
+    expect(screen.getByText(/Drop Player wr3 for him/)).toBeInTheDocument();
+  });
+
+  it('stays quiet about a free agent who is barely better', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], {
+      board: wire(freeAgent('marginal', 'QB', 930)),
+    });
+
+    expect(screen.queryByText(/beats? your lineup/i)).not.toBeInTheDocument();
   });
 });

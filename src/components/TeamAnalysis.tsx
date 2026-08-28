@@ -8,6 +8,7 @@ import {
   type SeasonOdds,
 } from '../engine/analysis';
 import type { PositionScarcity } from '../engine/replacement';
+import type { FreeAgentBoard } from '../engine/freeAgents';
 import { POSITION_STYLES, formatValue } from '../lib/format';
 import { ContentionScatter } from './charts/ContentionScatter';
 import { PositionalStrengthChart } from './charts/PositionalStrengthChart';
@@ -26,6 +27,10 @@ interface Props {
   byeTeams: ReadonlySet<string> | null;
   /** Live playoff odds. Undefined out of season, and the advice then ignores them. */
   season: SeasonOdds | undefined;
+  /** The priced waiver wire, so the lineup panel can look past the roster. */
+  freeAgents: FreeAgentBoard | undefined;
+  /** Whether the activity data describes the season being played. */
+  activityCurrent: boolean;
   onChangeTeam: () => void;
 }
 
@@ -45,6 +50,8 @@ export function TeamAnalysis({
   currentWeek,
   byeTeams,
   season,
+  freeAgents,
+  activityCurrent,
   onChangeTeam,
 }: Props) {
   const analysis = analyzeTeam(myRosterId, summaries, league.settings, season);
@@ -105,6 +112,8 @@ export function TeamAnalysis({
             seasonPhase={seasonPhase}
             currentWeek={currentWeek}
             byeTeams={byeTeams}
+            board={freeAgents}
+            activityCurrent={activityCurrent}
           />
         </div>
       )}

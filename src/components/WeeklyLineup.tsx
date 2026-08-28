@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react';
 import type { LeagueSettings, Roster, SeasonPhase } from '../types';
 import type { RosterSummary, ValuedPlayer } from '../engine/rosterValue';
-import { startSit, type LineupChange } from '../engine/startSit';
+import { startSit, CLEAR_MARGIN, type LineupChange } from '../engine/startSit';
+import { wireUpgrades, type WireUpgrade } from '../engine/wire';
+import type { FreeAgentBoard } from '../engine/freeAgents';
+import { playingTime } from '../engine/freeAgents';
 import { isGameWeek } from '../engine/season';
 import { injuryNote } from '../engine/availability';
 import { formatInjury, formatSlot, formatValue, POSITION_STYLES } from '../lib/format';
@@ -19,6 +22,13 @@ interface Props {
    * see `engine/byes`.
    */
   byeTeams?: ReadonlySet<string> | null;
+  /**
+   * The waiver wire, priced. Undefined until it loads, and the panel simply
+   * says nothing about free agents until then.
+   */
+  board?: FreeAgentBoard;
+  /** Whether the activity data describes the season being played. */
+  activityCurrent?: boolean;
 }
 
 /**
@@ -43,6 +53,8 @@ export function WeeklyLineup({
   seasonPhase,
   currentWeek,
   byeTeams,
+  board,
+  activityCurrent = false,
 }: Props) {
   const [showLineup, setShowLineup] = useState(false);
 
@@ -55,6 +67,17 @@ export function WeeklyLineup({
         byeTeams,
       }),
     [summary.players, settings.startingSlots, roster.setLineup, byeTeams],
+  );
+
+  const wire = useMemo(
+    () =>
+      wireUpgrades({
+        lineup: plan.lineup,
+        entries: summary.players,
+        board,
+        byeTeams,
+      }),
+    [plan.lineup, summary.players, board, byeTeams],
   );
 
   const gameWeek = isGameWeek(seasonPhase ?? 'unknown');
@@ -72,7 +95,13 @@ export function WeeklyLineup({
   const eyebrow =
     gameWeek && currentWeek !== null ? `Week ${currentWeek} lineup` : 'Your best lineup';
 
-  const changes = plan.changes.length;
+  /*
+    The headline counts what the panel is actually claiming, not how many slots
+    differ. A count that includes coin flips trains the reader to skim all of
+    them, and the two rows that matter — an empty slot, a starter who is out —
+    lose their urgency to the noise beside them.
+  */
+  const changes = plan.decisive.length;
   const headline = plan.unset
     ? 'No lineup set yet'
     : changes === 0
@@ -111,11 +140,15 @@ export function WeeklyLineup({
 
       {changes > 0 && (
         <ul className="mt-4 space-y-3">
-          {plan.changes.map((change) => (
+          {plan.decisive.map((change) => (
             <ChangeRow key={`${change.slot}-${change.index}`} change={change} />
           ))}
         </ul>
       )}
+
+      {plan.marginal.length > 0 && <Marginal changes={plan.marginal} />}
+
+      {wire.length > 0 && <Wire upgrades={wire} activityCurrent={activityCurrent} />}
 
       {plan.watch.length > 0 && (
         <p className="mt-4 border-t border-line pt-3 text-xs text-muted">
@@ -185,6 +218,110 @@ export function WeeklyLineup({
           </ul>
         )}
       </div>
+    </section>
+  );
+}
+
+/**
+ * The swaps the app will not argue for, folded away but not hidden.
+ *
+ * These are real disagreements between the lineup you have set and the best one
+ * — they are simply too close to call. Values here are season-long and carry no
+ * matchup, so a two-percent edge is inside the noise of a single Sunday, and
+ * printing it as a correction claims a precision the model does not have.
+ *
+ * Still reachable, because "too close to call" is itself an answer a manager may
+ * want, and because silently discarding a difference the app can see would be a
+ * worse habit than showing it quietly.
+ */
+function Marginal({ changes }: { changes: LineupChange[] }) {
+  const count = changes.length;
+  return (
+    <details className="mt-4 border-t border-line pt-3">
+      <summary className="cursor-pointer text-sm font-medium text-accent">
+        {count} {count === 1 ? 'swap' : 'swaps'} too close to call
+      </summary>
+      <p className="mt-2 text-xs text-muted">
+        Within {Math.round(CLEAR_MARGIN * 100)}% on win-now value. Worth knowing about,
+        not worth acting on.
+      </p>
+      <ul className="mt-3 space-y-3">
+        {changes.map((change) => (
+          <ChangeRow key={`${change.slot}-${change.index}`} change={change} />
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/**
+ * Free agents who beat somebody you are starting.
+ *
+ * The panel used to stop at the edge of the roster, which meant it could say
+ * "start Smith over Jones" and not the more useful thing — that the best man at
+ * the position is unrostered. On the real ten-team league seven of a hundred
+ * starting slots held somebody the wire would beat, five of them quarterbacks,
+ * which is what a 1QB league guarantees: ten teams start ten of them, so QB11 is
+ * always available and somebody is always starting worse.
+ *
+ * The drop is named because nearly every claim is an add/drop and a
+ * recommendation that ignores the cost is only half of one.
+ */
+function Wire({
+  upgrades,
+  activityCurrent,
+}: {
+  upgrades: WireUpgrade[];
+  activityCurrent: boolean;
+}) {
+  return (
+    <section className="mt-4 rounded-lg border border-accent bg-accent-soft/60 p-4">
+      <h4 className="text-sm font-semibold text-accent">
+        {upgrades.length === 1 ? 'A free agent beats' : 'Free agents beat'} your lineup
+      </h4>
+      <p className="mt-1 text-xs text-accent/90">
+        Unrostered, and priced against this league's replacement levels — so these
+        numbers mean the same thing as everyone else's.
+      </p>
+
+      <ul className="mt-3 space-y-3">
+        {upgrades.map((upgrade) => {
+          const time = playingTime(upgrade.add.snaps);
+          return (
+            <li key={upgrade.add.player.id}>
+              <div className="flex items-baseline gap-2">
+                <span className="w-12 shrink-0 text-xs font-semibold uppercase tracking-wide text-accent/70">
+                  {formatSlot(upgrade.slot)}
+                </span>
+                <span className="min-w-0 flex-1 font-medium">
+                  <span className="text-accent/80">Add </span>
+                  {upgrade.add.player.name}
+                </span>
+                <span className="tabular shrink-0 text-sm font-semibold text-positive">
+                  +{formatValue(upgrade.addValue - upgrade.replaces.winNowValue)}
+                </span>
+              </div>
+              <p className="mt-0.5 pl-14 text-xs text-muted">
+                Better than {upgrade.replaces.player.name} in this slot.
+                {/*
+                  Playing time is evidence, never part of the ranking — the two
+                  are different currencies and #46 is explicit that they are
+                  never mixed. Labelled by season, because out of season the only
+                  shares there are belong to last year.
+                */}
+                {time
+                  ? ` ${Math.round(time.share * 100)}% of snaps${
+                      time.recent ? ' lately' : ''
+                    }${activityCurrent ? '' : ' last season'}.`
+                  : ''}
+                {upgrade.drop
+                  ? ` Drop ${upgrade.drop.player.name} for him.`
+                  : ' Nothing on your roster is obviously spare, so the claim costs you a choice.'}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }

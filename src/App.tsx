@@ -380,6 +380,8 @@ function App() {
                     currentWeek={currentWeek}
                     byeTeams={byeTeams}
                     season={season}
+                    freeAgents={freeAgents}
+                    activityCurrent={activityCurrent}
                     onChangeTeam={() => setMyRoster(null)}
                   />
                 ))}
