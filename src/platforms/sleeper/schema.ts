@@ -20,16 +20,48 @@ export const sleeperLeagueSchema = z.object({
   avatar: z.string().nullish(),
   total_rosters: z.number(),
   roster_positions: z.array(z.string()),
+  /**
+   * The league's rules.
+   *
+   * Sleeper published 51 keys here for the test league's 2025 season and 47 for
+   * its 2023 — it adds keys over time and without notice, which is the whole
+   * reason this object strips what it does not name instead of failing on it.
+   * Every key below is `nullish` for the same reason in the other direction:
+   * `waiver_bid_min` is documented, is meaningful, and is simply *absent* from
+   * all four seasons of that league.
+   */
   settings: z
     .object({
       type: z.number().nullish(), // 0 redraft, 1 keeper, 2 dynasty
       num_teams: z.number().nullish(),
       taxi_slots: z.number().nullish(),
+      taxi_years: z.number().nullish(),
+      taxi_allow_vets: z.number().nullish(),
       reserve_slots: z.number().nullish(),
+      reserve_allow_out: z.number().nullish(),
+      reserve_allow_doubtful: z.number().nullish(),
+      reserve_allow_na: z.number().nullish(),
+      reserve_allow_sus: z.number().nullish(),
+      reserve_allow_dnr: z.number().nullish(),
+      reserve_allow_cov: z.number().nullish(),
       draft_rounds: z.number().nullish(),
       /** First playoff week — the regular season is everything before it. */
       playoff_week_start: z.number().nullish(),
       playoff_teams: z.number().nullish(),
+      playoff_type: z.number().nullish(),
+      playoff_round_type: z.number().nullish(),
+      playoff_seed_type: z.number().nullish(),
+      /** 0 disables pick trading. Every pick-balanced offer is illegal then. */
+      pick_trading: z.number().nullish(),
+      disable_trades: z.number().nullish(),
+      /** Week trades close. `99` is Sleeper's "no deadline". */
+      trade_deadline: z.number().nullish(),
+      best_ball: z.number().nullish(),
+      /** Teams also play the league median each week. */
+      league_average_match: z.number().nullish(),
+      waiver_type: z.number().nullish(),
+      waiver_budget: z.number().nullish(),
+      waiver_bid_min: z.number().nullish(),
     })
     .nullish(),
   scoring_settings: z.record(z.string(), z.number()).nullish(),

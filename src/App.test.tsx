@@ -288,3 +288,67 @@ describe('App — switching leagues', () => {
     expect(window.location.search).not.toContain('ap=p1');
   });
 });
+
+describe('App — a league that does not trade', () => {
+  /**
+   * `disable_trades` means the two trade tabs have nothing to offer. An
+   * explanation, not an empty state: "no trades found" reads as a failure of
+   * the search and invites the reader to try again, change teams, or conclude
+   * the app is broken — none of which help, because the league decided this.
+   */
+  const noTrades = (id = '55') => {
+    const league = {
+      ...leagueWithRosters(id, 1, 2),
+      settings: makeSettings(['QB', 'RB'], {
+        draftRounds: 1,
+        teamCount: 2,
+        tradesDisabled: true,
+      }),
+    };
+    mocks.states[id] = ready(league, [1, 2]);
+    return id;
+  };
+
+  it('explains the rule on the calculator instead of pricing offers nobody can accept', async () => {
+    const id = noTrades();
+    localStorage.setItem('dynasty:leagueId', id);
+    await openAt('/');
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Trade calculator' }));
+
+    expect(await screen.findByText("This league doesn't do trades")).toBeInTheDocument();
+    expect(screen.getByText(/could not be made/)).toBeInTheDocument();
+  });
+
+  it('explains the rule on the ideas tab, and points at what still works', async () => {
+    const id = noTrades('56');
+    localStorage.setItem('dynasty:leagueId', id);
+    await openAt('/');
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Trade ideas' }));
+
+    expect(await screen.findByText("This league doesn't do trades")).toBeInTheDocument();
+    expect(screen.getByText(/roster and free-agent views/)).toBeInTheDocument();
+  });
+
+  it('leaves the tabs themselves in place', async () => {
+    // Removing them would hide the explanation along with the feature, and a
+    // manager who knows the app has a calculator would think it had broken.
+    const id = noTrades('57');
+    localStorage.setItem('dynasty:leagueId', id);
+    await openAt('/');
+
+    expect(await screen.findByRole('tab', { name: 'Trade calculator' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Trade ideas' })).toBeInTheDocument();
+  });
+
+  it('still builds trades in an ordinary league', async () => {
+    mocks.states['58'] = ready(leagueWithRosters('58', 1, 2), [1, 2]);
+    localStorage.setItem('dynasty:leagueId', '58');
+    await openAt('/');
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Trade calculator' }));
+
+    expect(screen.queryByText("This league doesn't do trades")).not.toBeInTheDocument();
+  });
+});

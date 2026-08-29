@@ -4,6 +4,7 @@ import type { RosterSummary } from '../engine/rosterValue';
 import { suggestTrades, type SuggestContext, type SuggestedTrade, type TradeAsset } from '../engine/suggest';
 import type { RoleTrends } from '../engine/roleTrend';
 import type { SeasonOdds } from '../engine/analysis';
+import { deadlineNotice, tradeWindow } from '../engine/tradeWindow';
 import { RoleTrendPanel } from './RoleTrendPanel';
 import { FAIRNESS_LABEL } from '../engine/trade';
 import { POSITION_STYLES, formatValue } from '../lib/format';
@@ -216,6 +217,18 @@ export function TradeSuggestions({
     return suggestTrades(myRosterId, ctx);
   }, [league, players, values, picks, summaries, myRosterId, trends, odds]);
 
+  /**
+   * The deadline, said out loud while there is still time to act on it.
+   *
+   * Only ever rendered for a window that is still *open*: once it has closed,
+   * the engine returns no trades and says why in `note`, and printing both
+   * would state the same fact twice in two registers.
+   */
+  const deadline = useMemo(() => {
+    const window = tradeWindow(league.settings, odds);
+    return window.open ? deadlineNotice(window) : null;
+  }, [league, odds]);
+
   return (
     <div>
       <h2 className="text-xl font-bold tracking-tight">Trade ideas</h2>
@@ -223,6 +236,14 @@ export function TradeSuggestions({
         Offers where both teams come out ahead — measured in what each team actually
         wants, which is not the same thing for a contender and a rebuilder.
       </p>
+
+      {/* Caution, not a neutral note: this one is about to expire, which is
+          the whole reason it is on screen. */}
+      {deadline && (
+        <p className="mt-4 rounded-lg border border-caution bg-caution-soft p-3 text-sm text-caution">
+          {deadline}
+        </p>
+      )}
 
       {/* Above the offers on purpose. These are the players the suggestions
           below are reaching for, and seeing why makes the offers legible

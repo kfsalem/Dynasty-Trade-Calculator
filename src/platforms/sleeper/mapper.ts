@@ -110,28 +110,102 @@ export function mapFreeAgents(
   return freeAgents;
 }
 
+/**
+ * Sleeper writes booleans as 1 and 0.
+ *
+ * The default is the caller's to choose and it is never cosmetic: an absent
+ * key has to leave the app doing exactly what it did before this function
+ * learned to read the key at all. So `pick_trading` defaults to *allowed* and
+ * `disable_trades` to *not disabled* — the permissive reading in both cases,
+ * because a league that publishes neither is a league this app has always
+ * treated as trading normally.
+ */
+const flag = (value: number | null | undefined, fallback: boolean): boolean =>
+  value == null ? fallback : value !== 0;
+
+/**
+ * The longest the NFL regular season can be, and therefore the last week a
+ * trade deadline could fall in.
+ */
+const LAST_POSSIBLE_WEEK = 18;
+
+/**
+ * The week trading closes, or null when it never does.
+ *
+ * Sleeper stores "no deadline" as `99` — verified across all four seasons of
+ * the test league. Rather than hardcoding that sentinel and hoping no league
+ * uses a different large number, anything past the end of the NFL regular
+ * season is read as "never binds". Both readings agree on 99, and this one
+ * cannot be wrong about a deadline that could actually arrive.
+ */
+function mapTradeDeadline(week: number | null | undefined): number | null {
+  if (week == null || week <= 0 || week > LAST_POSSIBLE_WEEK) return null;
+  return week;
+}
+
+/**
+ * FAAB budget, when the league runs one.
+ *
+ * Gated on the budget being positive rather than on `waiver_type`, because the
+ * budget is the thing #47 actually needs and a zero budget is not a FAAB
+ * league whatever the type code says.
+ */
+const mapWaiverBudget = (budget: number | null | undefined): number | null =>
+  budget != null && budget > 0 ? budget : null;
+
 export function mapSettings(league: SleeperLeague): LeagueSettings {
   const allSlots = league.roster_positions as LineupSlot[];
   const startingSlots = allSlots.filter((s) => !BENCH.has(s));
+  const settings = league.settings;
 
   return {
     // type 2 is dynasty; 1 is keeper. Treat keeper as dynasty-ish for valuation,
     // since both carry players across seasons.
-    isDynasty: (league.settings?.type ?? 0) >= 1,
-    teamCount: league.total_rosters || league.settings?.num_teams || 12,
+    isDynasty: (settings?.type ?? 0) >= 1,
+    teamCount: league.total_rosters || settings?.num_teams || 12,
     ppr: league.scoring_settings?.rec ?? 0,
     // A SUPER_FLEX slot is what actually makes QBs scarce, not the QB count.
     numQbs: startingSlots.includes('SUPER_FLEX') ? 2 : 1,
     startingSlots,
     allSlots,
-    taxiSlots: league.settings?.taxi_slots ?? 0,
-    reserveSlots: league.settings?.reserve_slots ?? 0,
-    draftRounds: league.settings?.draft_rounds ?? 4,
+    // Counted, not configured: Sleeper expresses bench depth by repeating "BN"
+    // in roster_positions rather than by publishing a number. The test league
+    // carries 19 of them against 11 starting slots.
+    benchSlots: allSlots.filter((slot) => slot === 'BN').length,
+    taxiSlots: settings?.taxi_slots ?? 0,
+    taxiYears: settings?.taxi_years ?? 0,
+    taxiAllowVets: flag(settings?.taxi_allow_vets, false),
+    reserveSlots: settings?.reserve_slots ?? 0,
+    // Every flag defaults to false: claiming a designation may be stashed when
+    // the league never said so would overstate how cheap an injured player is
+    // to hold, and that is the direction that costs somebody a roster spot.
+    reserveAllows: {
+      out: flag(settings?.reserve_allow_out, false),
+      doubtful: flag(settings?.reserve_allow_doubtful, false),
+      na: flag(settings?.reserve_allow_na, false),
+      sus: flag(settings?.reserve_allow_sus, false),
+      dnr: flag(settings?.reserve_allow_dnr, false),
+      cov: flag(settings?.reserve_allow_cov, false),
+    },
+    draftRounds: settings?.draft_rounds ?? 4,
     // Sleeper's own defaults when a league has not overridden them. Both are
     // read rather than assumed because they decide how much season is left to
     // play and how many teams that season has to sort out.
-    playoffWeekStart: league.settings?.playoff_week_start ?? 15,
-    playoffTeams: league.settings?.playoff_teams ?? 6,
+    playoffWeekStart: settings?.playoff_week_start ?? 15,
+    playoffTeams: settings?.playoff_teams ?? 6,
+    playoffType: settings?.playoff_type ?? null,
+    playoffRoundType: settings?.playoff_round_type ?? null,
+    playoffSeedType: settings?.playoff_seed_type ?? null,
+    pickTrading: flag(settings?.pick_trading, true),
+    tradesDisabled: flag(settings?.disable_trades, false),
+    tradeDeadline: mapTradeDeadline(settings?.trade_deadline),
+    bestBall: flag(settings?.best_ball, false),
+    medianMatch: flag(settings?.league_average_match, false),
+    waivers: {
+      type: settings?.waiver_type ?? null,
+      budget: mapWaiverBudget(settings?.waiver_budget),
+      minBid: settings?.waiver_bid_min ?? null,
+    },
   };
 }
 

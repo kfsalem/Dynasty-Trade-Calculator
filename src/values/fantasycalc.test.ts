@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LeagueSettings } from '../types';
+import { makeSettings } from '../engine/testFixtures';
 
 /**
  * The value source the whole app rests on, and until now the only one of the
@@ -20,20 +21,19 @@ import { fetchJson } from '../lib/http';
 import { cached } from '../lib/cache';
 import { fetchFantasyCalcValues } from './fantasycalc';
 
-const settings = (overrides: Partial<LeagueSettings> = {}): LeagueSettings => ({
-  isDynasty: true,
-  teamCount: 12,
-  ppr: 1,
-  numQbs: 1,
-  startingSlots: ['QB', 'RB'],
-  allSlots: ['QB', 'RB', 'BN'],
-  taxiSlots: 0,
-  reserveSlots: 0,
-  draftRounds: 4,
-  playoffWeekStart: 15,
-  playoffTeams: 6,
-  ...overrides,
-});
+/**
+ * Delegates to the shared fixture rather than keeping a second hand-written
+ * `LeagueSettings` literal. The duplicate had to be edited every time the type
+ * grew a field, and it only ever cared about four of them.
+ */
+const settings = (overrides: Partial<LeagueSettings> = {}): LeagueSettings =>
+  makeSettings(['QB', 'RB'], {
+    teamCount: 12,
+    allSlots: ['QB', 'RB', 'BN'],
+    benchSlots: 1,
+    draftRounds: 4,
+    ...overrides,
+  });
 
 const row = (over: Record<string, unknown> = {}) => ({
   player: { id: 1, name: 'A Player', position: 'rb', sleeperId: 'p1' },

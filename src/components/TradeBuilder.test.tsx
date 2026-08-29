@@ -318,3 +318,59 @@ describe('TradeBuilder — playoff odds', () => {
     expect(two).toEqual(one);
   });
 });
+
+describe('TradeBuilder — a league that forbids pick trading', () => {
+  /**
+   * Two reasons the pick columns can be empty, and they call for opposite
+   * reactions. "Unavailable right now" invites the reader to wait and try
+   * again; a league rule will never change, and saying the first about the
+   * second sends someone back to a page that will look identical tomorrow.
+   */
+  const noPickTrading = () =>
+    render(
+      <TradeBuilder
+        league={{
+          ...league,
+          settings: makeSettings(['QB', 'RB'], {
+            draftRounds: 1,
+            teamCount: 3,
+            pickTrading: false,
+          }),
+        }}
+        players={players}
+        values={values}
+        picks={[]}
+        // The outage flag is set too, and must lose: the rule is the true and
+        // more useful statement, and printing both would contradict itself.
+        picksUnavailable
+        myRosterId={1}
+        initial={initial}
+        priced={priced}
+      />,
+    );
+
+  it('names the rule rather than reporting an outage', () => {
+    noPickTrading();
+
+    expect(screen.getByText(/pick trading switched off/)).toBeInTheDocument();
+    expect(screen.queryByText(/unavailable right now/i)).not.toBeInTheDocument();
+  });
+
+  it('still reports a genuine outage in a league that does allow picks', () => {
+    render(
+      <TradeBuilder
+        league={league}
+        players={players}
+        values={values}
+        picks={[]}
+        picksUnavailable
+        myRosterId={1}
+        initial={initial}
+        priced={priced}
+      />,
+    );
+
+    expect(screen.getByText(/unavailable right now/i)).toBeInTheDocument();
+    expect(screen.queryByText(/pick trading switched off/)).not.toBeInTheDocument();
+  });
+});

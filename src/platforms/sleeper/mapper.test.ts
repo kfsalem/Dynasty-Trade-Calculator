@@ -47,6 +47,117 @@ describe('mapSettings', () => {
   it('defaults ppr to 0 when scoring settings omit receptions', () => {
     expect(mapSettings({ ...baseLeague, scoring_settings: {} }).ppr).toBe(0);
   });
+
+  /**
+   * The contract that lets every field above be added safely: a league that
+   * publishes none of these keys has to come out behaving exactly as it did
+   * before the app could read them. Sleeper adds settings keys without notice
+   * and old leagues carry fewer of them — the 2023 season of the test league
+   * publishes 47 against 2025's 51 — so "absent" is the common case, not the
+   * edge one.
+   */
+  it('defaults every new setting to the permissive reading when the league omits it', () => {
+    const settings = mapSettings({ ...baseLeague, settings: null });
+
+    expect(settings.pickTrading).toBe(true);
+    expect(settings.tradesDisabled).toBe(false);
+    expect(settings.tradeDeadline).toBeNull();
+    expect(settings.bestBall).toBe(false);
+    expect(settings.medianMatch).toBe(false);
+    expect(settings.taxiYears).toBe(0);
+    expect(settings.taxiAllowVets).toBe(false);
+    expect(settings.waivers).toEqual({ type: null, budget: null, minBid: null });
+    expect(settings.playoffType).toBeNull();
+    expect(Object.values(settings.reserveAllows).every((allowed) => !allowed)).toBe(true);
+  });
+
+  it('reads the flags Sleeper writes as 1 and 0', () => {
+    const settings = mapSettings({
+      ...baseLeague,
+      settings: {
+        ...baseLeague.settings,
+        pick_trading: 0,
+        disable_trades: 1,
+        best_ball: 1,
+        league_average_match: 1,
+        taxi_allow_vets: 1,
+      },
+    });
+
+    expect(settings.pickTrading).toBe(false);
+    expect(settings.tradesDisabled).toBe(true);
+    expect(settings.bestBall).toBe(true);
+    expect(settings.medianMatch).toBe(true);
+    expect(settings.taxiAllowVets).toBe(true);
+  });
+
+  /**
+   * `99` is what Sleeper stores for "no deadline" — verified against all four
+   * seasons of the test league, every one of which carries it. Read literally
+   * it is a week 81 games past the end of the season.
+   */
+  it('reads a deadline that cannot arrive as no deadline at all', () => {
+    const deadlineOf = (trade_deadline: number | null | undefined) =>
+      mapSettings({ ...baseLeague, settings: { ...baseLeague.settings, trade_deadline } })
+        .tradeDeadline;
+
+    expect(deadlineOf(99)).toBeNull();
+    expect(deadlineOf(19)).toBeNull();
+    expect(deadlineOf(0)).toBeNull();
+    expect(deadlineOf(undefined)).toBeNull();
+    // A deadline that can actually arrive is kept as the week it is.
+    expect(deadlineOf(11)).toBe(11);
+    expect(deadlineOf(18)).toBe(18);
+  });
+
+  it('counts bench spots from roster_positions rather than assuming them', () => {
+    expect(mapSettings(baseLeague).benchSlots).toBe(2);
+    expect(
+      mapSettings({ ...baseLeague, roster_positions: ['QB', 'RB', 'IR', 'TAXI'] }).benchSlots,
+    ).toBe(0);
+  });
+
+  it('reads each reserve designation separately', () => {
+    const settings = mapSettings({
+      ...baseLeague,
+      settings: {
+        ...baseLeague.settings,
+        reserve_allow_out: 1,
+        reserve_allow_cov: 1,
+        reserve_allow_doubtful: 0,
+      },
+    });
+
+    expect(settings.reserveAllows.out).toBe(true);
+    expect(settings.reserveAllows.cov).toBe(true);
+    expect(settings.reserveAllows.doubtful).toBe(false);
+    // Never published by the test league, and absent must not read as allowed.
+    expect(settings.reserveAllows.na).toBe(false);
+  });
+
+  /**
+   * `waiver_bid_min` is documented and meaningful and simply *absent* from all
+   * four seasons of the test league, which is why it cannot be a number with a
+   * zero default: "the minimum bid is $0" and "this league did not say" are
+   * different facts, and #47 will need to tell them apart.
+   */
+  it('carries waiver settings, including the budget key that is often missing', () => {
+    const settings = mapSettings({
+      ...baseLeague,
+      settings: { ...baseLeague.settings, waiver_type: 2, waiver_budget: 100 },
+    });
+
+    expect(settings.waivers).toEqual({ type: 2, budget: 100, minBid: null });
+  });
+
+  it('does not report a FAAB budget for a league whose budget is zero', () => {
+    const settings = mapSettings({
+      ...baseLeague,
+      settings: { ...baseLeague.settings, waiver_type: 0, waiver_budget: 0 },
+    });
+
+    expect(settings.waivers.budget).toBeNull();
+  });
 });
 
 describe('mapLeague', () => {

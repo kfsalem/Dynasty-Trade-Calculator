@@ -730,10 +730,23 @@ export function TradeBuilder({
         </p>
       )}
 
-      {picksUnavailable && (
-        <p className="mt-3 rounded-lg border border-caution bg-caution-soft p-3 text-sm text-caution">
-          Draft pick values are unavailable right now, so only players can be traded.
+      {/*
+        Two reasons the pick columns are empty, and they call for opposite
+        reactions from the reader: one is a temporary failure worth waiting out,
+        the other is a rule that will never change. "Unavailable right now" is
+        actively misleading in a league that has switched pick trading off, so
+        the rule is checked first and the outage message is not reached at all.
+      */}
+      {!league.settings.pickTrading ? (
+        <p className="mt-3 rounded-lg border border-line bg-raised p-3 text-sm text-muted">
+          This league has pick trading switched off, so trades here are players only.
         </p>
+      ) : (
+        picksUnavailable && (
+          <p className="mt-3 rounded-lg border border-caution bg-caution-soft p-3 text-sm text-caution">
+            Draft pick values are unavailable right now, so only players can be traded.
+          </p>
+        )
       )}
 
       {/*

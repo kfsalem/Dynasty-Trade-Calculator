@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { LeagueImport } from './components/LeagueImport';
 import { LeagueHeader } from './components/LeagueHeader';
 import { RosterList } from './components/RosterList';
@@ -37,6 +37,20 @@ const TABS: [Tab, string, string][] = [
   ['agents', 'Free agents', 'Free agents'],
   ['trade', 'Trade calculator', 'Calculator'],
 ];
+
+/**
+ * What the two trade tabs show in a league that has trading switched off.
+ *
+ * An explanation, not an empty state — the distinction matters. "No trades
+ * found" reads as a failure of the search and invites the reader to try again,
+ * change teams, or conclude the app is broken. None of those help: the league
+ * decided this, and the honest thing is to say so and point at what still
+ * works. The shell is the existing `EmptyState` because the shape is right; it
+ * is the copy that has to do the work.
+ */
+function TradingDisabled({ children }: { children: ReactNode }) {
+  return <EmptyState title="This league doesn't do trades">{children}</EmptyState>;
+}
 
 /**
  * The "profile": a league id plus which roster is yours, both in localStorage.
@@ -152,6 +166,24 @@ function App() {
   }, [leagueId]);
 
   /**
+   * The picks that may legally change hands in this league.
+   *
+   * `pick_trading` is a league rule, so it is applied once, here, rather than
+   * by each surface that shows a pick. The trade *engine* reads the setting
+   * itself — it has to, since it decides what to propose — but everything that
+   * merely renders or resolves a pick can work from a list that already holds
+   * only the legal ones, which is how the asset picker and a shared link stay
+   * consistent with each other without either knowing the rule.
+   *
+   * Note this is deliberately not applied to the roster or free-agent views:
+   * a pick you cannot trade is still a pick you own.
+   */
+  const tradablePicks = useMemo(
+    () => (league && !league.settings.pickTrading ? [] : picks),
+    [league, picks],
+  );
+
+  /**
    * The shared trade, checked against the league that has now loaded.
    *
    * Deferred until the league is in hand because the link cannot be trusted:
@@ -169,8 +201,8 @@ function App() {
   const fromLink = useMemo(() => {
     if (!linkedTrade || !league || !picksSettled) return null;
     if (linkedTrade.leagueId !== league.id) return null;
-    return resolveShare(linkedTrade, league, picks);
-  }, [league, picks, picksSettled]);
+    return resolveShare(linkedTrade, league, tradablePicks);
+  }, [league, tradablePicks, picksSettled]);
 
   /**
    * Whether the link has been *judged*, as opposed to merely not seeded yet.
@@ -387,7 +419,14 @@ function App() {
                 ))}
 
               {tab === 'ideas' &&
-                (myRosterId === null ? (
+                (league.settings.tradesDisabled ? (
+                  <TradingDisabled>
+                    Trading is switched off in this league's settings, so there are no
+                    offers to suggest. The roster and free-agent views are where the
+                    value in this app is for you — every player is still priced against
+                    this league's own replacement levels.
+                  </TradingDisabled>
+                ) : myRosterId === null ? (
                   <ClaimTeam league={league} onClaim={setMyRoster} />
                 ) : (
                   <TradeSuggestions
@@ -437,29 +476,36 @@ function App() {
                   </EmptyState>
                 ))}
 
-              {tab === 'trade' && (
-                <TradeBuilder
-                  key={seed.seq}
-                  league={league}
-                  players={players}
-                  values={values}
-                  picks={picks}
-                  picksUnavailable={picksUnavailable}
-                  myRosterId={myRosterId}
-                  // Re-seeded from the app's own copy, so switching tabs and
-                  // coming back no longer discards the trade you were building.
-                  initial={shared}
-                  onChange={handleTradeChange}
-                  droppedFromLink={seed.dropped}
-                  odds={oddsContext}
-                  snaps={snaps}
-                  usage={usage}
-                  roles={roles}
-                  chartSeason={snapsMeta?.chartSeason ?? null}
-                  adjustments={adjustments}
-                  priced={priced}
-                />
-              )}
+              {tab === 'trade' &&
+                (league.settings.tradesDisabled ? (
+                  <TradingDisabled>
+                    Trading is switched off in this league's settings, so a trade built
+                    here could not be made. The calculator stays out of the way rather
+                    than pricing offers nobody can accept.
+                  </TradingDisabled>
+                ) : (
+                  <TradeBuilder
+                    key={seed.seq}
+                    league={league}
+                    players={players}
+                    values={values}
+                    picks={tradablePicks}
+                    picksUnavailable={picksUnavailable}
+                    myRosterId={myRosterId}
+                    // Re-seeded from the app's own copy, so switching tabs and
+                    // coming back no longer discards the trade you were building.
+                    initial={shared}
+                    onChange={handleTradeChange}
+                    droppedFromLink={seed.dropped}
+                    odds={oddsContext}
+                    snaps={snaps}
+                    usage={usage}
+                    roles={roles}
+                    chartSeason={snapsMeta?.chartSeason ?? null}
+                    adjustments={adjustments}
+                    priced={priced}
+                  />
+                ))}
             </div>
           </>
         )}

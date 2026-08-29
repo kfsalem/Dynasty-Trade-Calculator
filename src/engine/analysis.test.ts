@@ -679,3 +679,82 @@ describe('contentionProfile — the season overruling the roster', () => {
     expect(profile.advice).toContain('This is your year to go all in');
   });
 });
+
+describe('contentionProfile — the deadline bounding the advice', () => {
+  const at = (odds: Record<number, number>, weeksPlayed: number) => ({
+    odds: new Map(Object.entries(odds).map(([id, p]) => [Number(id), p])),
+    weeksPlayed,
+    weeksTotal: 14,
+  });
+
+  const profileFor = (
+    i: number,
+    tradeDeadline: number | null,
+    season?: ReturnType<typeof at>,
+  ) => {
+    const { summaries } = world();
+    return contentionProfile(
+      summaries[i],
+      summaries,
+      makeSettings(SLOTS, { tradeDeadline }),
+      season,
+    );
+  };
+
+  /*
+    Every sentence this app offers as advice recommends a trade. Telling a
+    contender to press its advantage in week 13 of a league that closed trading
+    in week 11 is worse than saying nothing: confident, specific, and impossible
+    to act on.
+  */
+  it('stops recommending trades once the deadline has passed', () => {
+    const profile = profileFor(1, 11, at({ 2: 0.93 }, 12));
+
+    expect(profile.advice).toContain('deadline passed in week 11');
+    expect(profile.advice).not.toContain('go all in');
+    expect(profile.advice).not.toMatch(/spend the picks/i);
+  });
+
+  it('still reads the season after the deadline, and points at the lineup', () => {
+    const live = profileFor(1, 11, at({ 2: 0.93 }, 12));
+    expect(live).toMatchObject({ quadrant: 'win_now' });
+    expect(live.advice).toContain('93% to make the playoffs');
+    expect(live.advice).toContain('weekly lineup');
+
+    const gone = profileFor(1, 11, at({ 2: 0.04 }, 12));
+    expect(gone.advice).toContain('4% to make the playoffs');
+    expect(gone.advice).toContain('offseason');
+  });
+
+  it('leaves the roster verdict alone, exactly as the season does', () => {
+    // The label heads the banner and colours the dot on the contention scatter,
+    // both of which plot roster quantities. A closed trade window changes what
+    // the app advises, never where it says the roster stands.
+    const profile = profileFor(1, 11, at({ 2: 0.93 }, 12));
+
+    expect(profile.label).toBe('Window closing');
+    expect(profile.quadrant).toBe('win_now');
+  });
+
+  it('warns while the deadline is close but still open', () => {
+    // Eight weeks played, so week 9 is in progress and three remain including it.
+    const profile = profileFor(1, 11, at({ 2: 0.93 }, 8));
+
+    expect(profile.advice).toContain('Trades close after week 11');
+    expect(profile.advice).toContain('3 weeks left');
+  });
+
+  it('says nothing about a deadline that is months away', () => {
+    const profile = profileFor(1, 11, at({ 2: 0.93 }, 2));
+
+    expect(profile.advice).not.toContain('Trades close');
+  });
+
+  it('is unchanged for a league with no deadline at all', () => {
+    const withNone = profileFor(1, null, at({ 2: 0.93 }, 12));
+    const far = profileFor(1, 18, at({ 2: 0.93 }, 12));
+
+    expect(withNone.advice).not.toContain('deadline');
+    expect(far.advice).toEqual(withNone.advice);
+  });
+});

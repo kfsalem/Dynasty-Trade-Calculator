@@ -110,6 +110,38 @@ export function WeeklyLineup({
         : 'Nothing to change'
       : `${changes} ${changes === 1 ? 'change' : 'changes'} to make`;
 
+  /*
+    Best ball has no lineup decision in it — the platform scores each team's
+    optimal lineup after the games, so there is nothing to set and nothing to
+    get wrong. Every sentence below this point is about a choice the manager
+    does not make, which makes the whole panel a confident answer to a question
+    this league never asks.
+
+    After the hooks rather than before them, because React requires it: the
+    plan and the wire are computed and discarded here, which costs one pass over
+    a thirty-player roster and keeps the rule inside the component that is
+    wrong without it.
+  */
+  if (settings.bestBall) {
+    return (
+      <section className="card">
+        <p className="text-xs font-semibold uppercase tracking-wide text-subtle">
+          Weekly lineup
+        </p>
+        <h3 className="mt-1 text-lg font-bold tracking-tight">
+          Best ball — no lineup to set
+        </h3>
+        <p className="mt-2 text-sm text-muted">
+          This league scores each team's best possible lineup automatically once the
+          games are done, so there is no start/sit call to make and no way to leave
+          points on your bench. The rest of the app still applies: what your roster is
+          worth, where it is thin, and who is worth acquiring are the same questions
+          here as anywhere.
+        </p>
+      </section>
+    );
+  }
+
   return (
     <section className="card">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
