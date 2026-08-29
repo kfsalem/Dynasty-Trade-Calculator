@@ -3,6 +3,13 @@ import { summarizeRoster, type RosterSummary } from './rosterValue';
 import { activityFactor, type ActivityAdjustment } from './activityFactor';
 import type { SnapShare } from './snapShare';
 import type { Opportunity } from './opportunity';
+import {
+  NO_PREMIUM,
+  premiumFor,
+  scoringPremium,
+  type ScoringPremium,
+} from './scoringPremium';
+import type { ScoringFile } from '../data/types';
 
 /**
  * Replacement level: what a position is actually worth in *this* league.
@@ -133,13 +140,23 @@ export function pricedPositions(values: Map<string, PlayerValue>): Set<Position>
 export function replacementLevels(
   values: Map<string, PlayerValue>,
   starters: StarterCounts,
+  /**
+   * Positional correction for the league's own scoring.
+   *
+   * Applied here as well as in `applyReplacement` so the two stay in the same
+   * units. A replacement level read off uncorrected prices and then subtracted
+   * from corrected ones would charge every position the wrong rent — and by
+   * exactly the amount this whole feature exists to find.
+   */
+  premium: ScoringPremium = NO_PREMIUM,
 ): Partial<Record<Position, ReplacementLevel>> {
   const byPosition = new Map<Position, { market: number[]; redraft: number[] }>();
   for (const value of values.values()) {
     if (!value.position) continue;
     const lists = byPosition.get(value.position) ?? { market: [], redraft: [] };
-    lists.market.push(value.marketValue);
-    lists.redraft.push(value.redraftValue);
+    const scale = premiumFor(premium, value.position);
+    lists.market.push(value.marketValue * scale);
+    lists.redraft.push(value.redraftValue * scale);
     byPosition.set(value.position, lists);
   }
 
@@ -295,6 +312,8 @@ export function applyReplacement(
    * exactly as it was.
    */
   adjustments: Map<string, ActivityAdjustment> = new Map(),
+  /** The same positional correction `replacementLevels` was given. */
+  premium: ScoringPremium = NO_PREMIUM,
 ): Map<string, PlayerValue> {
   // An unknown position fails *closed*. Charging nothing would let a player the
   // feed failed to classify keep his full market value while every classified
@@ -326,12 +345,24 @@ export function applyReplacement(
     // make a rising role show up in his asset price and vanish from his lineup
     // contribution, or the reverse.
     const factor = adjustments.get(id)?.factor ?? 1;
-    const dynasty = leagueValue(value.marketValue, replacement) * factor;
+    /*
+      The market's price, corrected for the rulebook it was quoted under.
+
+      FantasyCalc prices a player for standard scoring at the league's reception
+      value and knows nothing else about it, so in a TE-premium league every
+      tight end arrives underpriced by the size of the premium. Applied to both
+      scales because both are its prices — see `scoringPremium`.
+
+      `marketValue` and `redraftValue` themselves are left untouched below, so
+      the number the other manager will quote is still the number on screen.
+    */
+    const scale = premiumFor(premium, value.position);
+    const dynasty = leagueValue(value.marketValue * scale, replacement) * factor;
     out.set(id, {
       ...value,
       value: dynasty,
       winNowValue: winNowPublished
-        ? leagueValue(value.redraftValue, winNowReplacement) * factor
+        ? leagueValue(value.redraftValue * scale, winNowReplacement) * factor
         : dynasty,
     });
   }
@@ -399,15 +430,27 @@ export interface PositionScarcity extends ReplacementLevel {
 export function positionScarcity(
   market: Map<string, PlayerValue>,
   levels: Partial<Record<Position, ReplacementLevel>>,
+  /**
+   * The same positional correction the levels were computed under.
+   *
+   * Not optional in spirit, whatever the default says. `level.value` arrives on
+   * the corrected scale, so a top-of-position price taken uncorrected would
+   * divide two different currencies and hand the explanatory panel a `retained`
+   * share that the engine never computes. This panel exists to teach the model
+   * the app runs; running a second one here is the specific failure its own
+   * comment warns about.
+   */
+  premium: ScoringPremium = NO_PREMIUM,
 ): Partial<Record<Position, PositionScarcity>> {
   const top: Partial<Record<Position, number>> = {};
   const topRedraft: Partial<Record<Position, number>> = {};
   for (const value of market.values()) {
     if (!value.position) continue;
-    top[value.position] = Math.max(top[value.position] ?? 0, value.marketValue);
+    const scale = premiumFor(premium, value.position);
+    top[value.position] = Math.max(top[value.position] ?? 0, value.marketValue * scale);
     topRedraft[value.position] = Math.max(
       topRedraft[value.position] ?? 0,
-      value.redraftValue,
+      value.redraftValue * scale,
     );
   }
 
@@ -452,6 +495,8 @@ export interface LeagueValuation {
   shrink: number;
   /** What activity did to each player, for explaining a value that moved. */
   adjustments: Map<string, ActivityAdjustment>;
+  /** How this league's scoring moved each position against the market's. */
+  premium: ScoringPremium;
 }
 
 const sameCounts = (a: StarterCounts, b: StarterCounts): boolean => {
@@ -483,6 +528,12 @@ export function valueLeague(
   market: Map<string, PlayerValue>,
   settings: LeagueSettings,
   activity?: LeagueActivity,
+  /**
+   * Weekly stat lines, so the league's own scoring can correct market prices
+   * that were quoted for a different rulebook. Absent leaves every value
+   * exactly as it was.
+   */
+  scoringStats?: ScoringFile | null,
   maxPasses = 5,
 ): LeagueValuation {
   const summarize = (values: Map<string, PlayerValue>) =>
@@ -511,11 +562,19 @@ export function valueLeague(
   // Every pass recomputes levels, values and summaries together, so whatever is
   // returned is internally consistent — the counts describe the very lineups
   // the returned values produce.
+  /*
+    Measured from the starter counts, which are measured from the lineups — so
+    the premium has to be recomputed as the counts converge, exactly like the
+    levels. It is cheap: a few hundred players scored twice.
+  */
   const pass = (counts: StarterCounts) => {
-    const levels = replacementLevels(market, counts);
-    const values = applyReplacement(market, levels, adjustments);
+    const premium = scoringStats
+      ? scoringPremium(scoringStats, settings.scoring, counts)
+      : NO_PREMIUM;
+    const levels = replacementLevels(market, counts, premium);
+    const values = applyReplacement(market, levels, adjustments, premium);
     const summaries = summarize(values);
-    return { levels, values, summaries, starters: counts };
+    return { levels, values, summaries, starters: counts, premium };
   };
 
   const baseline = startersByPosition(summarize(market));
@@ -537,7 +596,7 @@ export function valueLeague(
 
   return {
     ...state,
-    scarcity: positionScarcity(market, state.levels),
+    scarcity: positionScarcity(market, state.levels, state.premium),
     shrink: leagueShrinkFactor(state.summaries, state.values),
     adjustments,
   };
