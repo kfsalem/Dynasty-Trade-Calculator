@@ -193,8 +193,36 @@ export interface LeagueSettings {
   startingSlots: LineupSlot[];
   /** Full roster_positions including bench, for roster-size math. */
   allSlots: LineupSlot[];
+  /**
+   * Bench spots, counted from `roster_positions` rather than assumed.
+   *
+   * A league with 7 bench spots and one with 20 value depth completely
+   * differently: the first cannot hold a prospect without cutting somebody,
+   * the second can stash a whole rookie class. The count was always implicit
+   * in `allSlots` — `rosterCap` has read it all along — but never named, so
+   * nothing that reasons about depth could ask the question directly.
+   */
+  benchSlots: number;
   taxiSlots: number;
+  /**
+   * Seasons a player may be held on the taxi squad. 0 when the league has no
+   * taxi squad, and also when it has one with no year limit — read it only
+   * alongside `taxiSlots`.
+   */
+  taxiYears: number;
+  /** Whether veterans may occupy a taxi slot, rather than rookies only. */
+  taxiAllowVets: boolean;
   reserveSlots: number;
+  /**
+   * Which injury designations may legally occupy a reserve slot.
+   *
+   * #9 decided *availability* from the NFL designation rather than from the
+   * manager's IR slot, deliberately and correctly — a player on IR is out
+   * whether or not his manager stashed him. This is the other question:
+   * whether a roster can park him somewhere that does not cost a bench spot,
+   * which is what decides the price of holding an injured asset.
+   */
+  reserveAllows: ReserveEligibility;
   /** Rookie draft rounds — how many picks per team per year exist to trade. */
   draftRounds: number;
   /**
@@ -206,6 +234,95 @@ export interface LeagueSettings {
   playoffWeekStart: number;
   /** How many teams make the playoffs. Sleeper's default is 6. */
   playoffTeams: number;
+  /**
+   * Bracket shape, as the platform's own codes.
+   *
+   * Carried rather than named. The app has only ever seen `0` for all three —
+   * four seasons of the test league — so translating the other values into
+   * words would be inventing meanings for numbers nobody here has observed.
+   * #52's standings rule needs the raw codes; it can name them when it has a
+   * league that uses one.
+   */
+  playoffType: number | null;
+  playoffRoundType: number | null;
+  playoffSeedType: number | null;
+  /**
+   * Whether draft picks may be traded at all.
+   *
+   * Some leagues switch this off, and every suggestion built with a pick in it
+   * is then *illegal* rather than merely unappealing — `balancePackage` closes
+   * uneven offers with a pick by default, so this was the setting that turned
+   * silently-wrong output into the visible kind.
+   */
+  pickTrading: boolean;
+  /** Whether the league permits trades at all. */
+  tradesDisabled: boolean;
+  /**
+   * Last week trades are allowed, or null when trading never closes.
+   *
+   * Null covers both the league that publishes no deadline and the one that
+   * publishes a week past the end of the season — Sleeper stores "no deadline"
+   * as `99`, verified across four seasons of the test league. Rather than
+   * guessing which large numbers are sentinels, any week beyond the NFL
+   * regular season is read as "never binds", which is the same answer for both
+   * and cannot be wrong about a deadline that could actually arrive.
+   */
+  tradeDeadline: number | null;
+  /**
+   * Best ball: lineups are scored optimally after the fact.
+   *
+   * There is no lineup to set, so the weekly start/sit panel is not merely
+   * unhelpful here — it answers a question the league does not ask.
+   */
+  bestBall: boolean;
+  /**
+   * Whether every team also plays the league median each week.
+   *
+   * Parsed and surfaced, not simulated. #13's playoff model is head-to-head,
+   * and a median match materially changes the variance it rests on; saying so
+   * is honest, and quietly reporting head-to-head odds for a league that does
+   * not play head-to-head is not.
+   */
+  medianMatch: boolean;
+  waivers: WaiverSettings;
+}
+
+/**
+ * Which injury designations may legally occupy a reserve slot.
+ *
+ * Sleeper publishes one flag per designation. `cov` is the COVID list, which
+ * still ships in the settings payload and which the app's own `InjuryStatus`
+ * has no member for — kept here because the league's rules are the league's
+ * rules whether or not the designation is still issued.
+ */
+export interface ReserveEligibility {
+  out: boolean;
+  doubtful: boolean;
+  na: boolean;
+  sus: boolean;
+  dnr: boolean;
+  cov: boolean;
+}
+
+/**
+ * How the league adds free agents. Parsed for #47, which is what will read it.
+ */
+export interface WaiverSettings {
+  /**
+   * Sleeper's raw code. `2` is FAAB — verified against the test league, which
+   * runs a $100 budget alongside it. The two non-FAAB modes have never been
+   * observed by this app, so they are carried as the number rather than given
+   * names that would be guesses.
+   */
+  type: number | null;
+  /** FAAB budget, when the league runs one; null when it does not. */
+  budget: number | null;
+  /**
+   * Smallest legal bid. Null when absent — and it *is* absent: Sleeper omits
+   * the key entirely in all four seasons of the test league, which is why it
+   * cannot be read as a number with a zero default.
+   */
+  minBid: number | null;
 }
 
 /**

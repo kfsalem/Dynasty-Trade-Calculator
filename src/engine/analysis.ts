@@ -1,3 +1,4 @@
+import { DEADLINE_SPEAKS_AT, tradeWindow, type TradeWindow } from './tradeWindow';
 import type { LeagueSettings, Player, Position } from '../types';
 import { bestLineup, byValue, type RosterSummary, type ValuedPlayer } from './rosterValue';
 
@@ -388,6 +389,52 @@ function seasonAdvice(outlook: SeasonOutlook, quadrant: Quadrant): string | null
 }
 
 /**
+ * The advice, bounded by whether a trade can still be made.
+ *
+ * Every sentence this app offers as advice — all four quadrant lines and both
+ * season lines — recommends a trade. After the deadline there are none to
+ * recommend, and telling a contender to press its advantage in week 13 of a
+ * league that closed trading in week 11 is worse than saying nothing: it is
+ * confident, specific, and impossible to act on.
+ *
+ * The *reading* of the season does not change here. The same odds mean the same
+ * thing whether or not the window is open; what changes is which lever they
+ * point at, and after the deadline the only lever left is the lineup.
+ */
+function adviceFor(
+  outlook: SeasonOutlook | null,
+  quadrant: Quadrant,
+  window: TradeWindow,
+): string {
+  if (!window.open) {
+    const head = `This league's trade deadline passed in week ${window.deadline}, so the roster you have is the one you finish the season with.`;
+
+    // The season still gets to speak when it has earned the right — the same
+    // conviction bar `seasonAdvice` uses, because this is the same claim.
+    if (outlook && outlook.conviction >= SPEAKS) {
+      const pct = Math.round(outlook.playoffOdds * 100);
+      return outlook.playoffOdds < SEASON_LOST
+        ? `${head} At ${pct}% to make the playoffs, what is left is a list for the offseason: the veterans who will not be there for your next good team.`
+        : `${head} At ${pct}% to make the playoffs it is still live, so the weekly lineup is where the remaining wins are.`;
+    }
+
+    return `${head} Anything worth doing about the roster is a plan for the offseason rather than a move available now.`;
+  }
+
+  const base = (outlook && seasonAdvice(outlook, quadrant)) ?? QUADRANTS[quadrant].advice;
+
+  // Urgency, but only once it is urgent. A deadline four months out appended to
+  // every reading of every roster is furniture, and furniture stops being read
+  // — which would cost the sentence its force in the weeks it actually matters.
+  const { weeksLeft, deadline } = window;
+  if (weeksLeft === null || weeksLeft > DEADLINE_SPEAKS_AT) return base;
+
+  return weeksLeft === 1
+    ? `${base} Trades close at the end of week ${deadline}, so this is the last week to act on any of it.`
+    : `${base} Trades close after week ${deadline} — ${weeksLeft} weeks left, this one included.`;
+}
+
+/**
  * The median split, in one place.
  *
  * Extracted so the quadrant *label* and the quadrant *plot* cannot drift apart.
@@ -502,8 +549,7 @@ export function contentionProfile(
       : population.filter((v) => v < value).length / (population.length - 1);
 
   const outlook = seasonOutlook(summary.rosterId, season);
-  const advice =
-    (outlook && seasonAdvice(outlook, quadrant)) ?? QUADRANTS[quadrant].advice;
+  const advice = adviceFor(outlook, quadrant, tradeWindow(settings, season));
 
   return {
     nowScore: now,

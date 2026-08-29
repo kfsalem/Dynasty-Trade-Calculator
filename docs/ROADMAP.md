@@ -980,3 +980,83 @@ color layer, light and dark, and the accessibility bar. Delivered as
 `docs/DESIGN-SYSTEM.md`, plus the repo's first `.claude/skills/` entries, so the
 decisions apply to everyone working in the codebase rather than living in one
 person's head.
+
+## The league settings the app reads past
+
+**Status:** Shipped — [#78](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/78).
+The first of the league-native pass, and deliberately first: it is the only
+layer of it that cannot be confidently wrong.
+
+`/league/<id>` publishes about fifty settings keys and the app read seven. The
+rest are deterministic facts about how a league works — no model, no inference,
+no shrinkage. They are read or they are not.
+
+### What was verified, and what the issue got wrong
+
+Checked against the test league and the three seasons chained behind it
+(2025 → 2023) rather than against the documentation:
+
+- **The key count moves.** 51 keys in 2025, 47 in 2023. Sleeper adds settings
+  without notice, which is why the schema strips what it does not name instead
+  of failing on it.
+- **`waiver_bid_min` is never published.** The issue listed it among the keys
+  available; it is absent from all four seasons. That is exactly why it is
+  `number | null` rather than a number with a zero default — "the minimum bid is
+  $0" and "this league did not say" are different facts, and #47 will need to
+  tell them apart.
+- **`trade_deadline` is 99 in every season**, which is Sleeper's "no deadline".
+  Rather than hardcoding the sentinel, anything past week 18 is read as a
+  deadline that can never arrive. Both readings agree on 99, and this one cannot
+  be wrong about a deadline that could actually bind.
+- **`taxi_years` really does vary** — 1 in 2023 and 2024, 3 in 2025. The fields
+  are not decorative.
+- **Bench depth was never discarded**, contrary to the issue. `roster_positions`
+  reaches `allSlots` intact and `trade.ts` has always counted it into
+  `rosterCap`. What was missing is a *named* figure, which is what `benchSlots`
+  now is: 19 bench spots against 11 starting slots in the test league.
+
+### What changes an answer today
+
+**`pick_trading`** was the defect worth the whole issue. `balancePackage` closes
+an uneven offer with a draft pick and has no other currency, so in a league that
+forbids pick trading every balanced suggestion was *illegal* — not unappealing,
+illegal — and nothing said so. Picks are now withheld from the candidate pool
+and from the balancer, which means some offers simply cannot be built there, and
+the engine says which rule it was working under.
+
+That sentence is **appended, never given as the cause**. A league that forbids
+picks and also contains no mutually good trade has two independent facts about
+it, and naming the rule as the reason would tell the reader that allowing picks
+would have found something. Often it would not, and the app has not tested it.
+
+**`trade_deadline`** bounds every piece of advice the app gives, because all of
+it recommends a trade. Telling a contender to press its advantage in week 13 of
+a league that closed trading in week 11 is worse than saying nothing:
+confident, specific, and impossible to act on. The window is derived from
+`weeksPlayed + 1` rather than from a calendar — the season odds already carry
+it, so there is no second source of truth about what week it is.
+
+The safe direction is **open**. An unknown week leaves the window open, and only
+a deadline that has demonstrably passed closes it: a window wrongly reported
+closed hides the app's main feature behind a claim the reader knows to be false.
+
+**`disable_trades`** and **`best_ball`** each delete a surface. Both get an
+explanation rather than an empty state — "no trades found" reads as a failure of
+the search and invites the reader to try again or conclude the app is broken,
+when in fact the league decided this and nothing will change.
+
+### What was parsed but deliberately not modelled
+
+`league_average_match` is read and not simulated. #13's playoff model is
+head-to-head, and a median match materially changes the variance it rests on;
+building that is a model change, and this issue is about reading fields.
+
+The three playoff bracket codes are carried as raw numbers. The app has only
+ever observed `0` for all three, so naming the other values would be inventing
+meanings for numbers nobody here has seen. #52 can name them when it has a
+league that uses one.
+
+Taxi and reserve capacity are carried through to `LeagueSettings` and no
+further. How many stash slots exist genuinely changes what an injured asset
+costs to hold — but that is a valuation model, and #9's rule stands: availability
+comes from the NFL designation, not from the manager's IR slot.

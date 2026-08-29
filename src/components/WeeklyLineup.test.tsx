@@ -271,3 +271,47 @@ describe('WeeklyLineup', () => {
     expect(screen.queryByText(/beats? your lineup/i)).not.toBeInTheDocument();
   });
 });
+describe('WeeklyLineup — best ball', () => {
+  /**
+   * The lineup panel is the app's answer to "who do I start this week". A
+   * best-ball league does not ask it: the platform scores each team's optimal
+   * lineup after the games, so there is no decision to make and no way to leave
+   * points on the bench. Every sentence the panel would otherwise print is a
+   * confident answer to a question this league never asks.
+   */
+  const bestBall = () => {
+    const target = roster(['qb1', 'rb1', 'wr1', 'wr2']);
+    const bestBallSettings = makeSettings(['QB', 'RB', 'WR', 'FLEX'], { bestBall: true });
+
+    return render(
+      <WeeklyLineup
+        roster={target}
+        summary={summarizeRoster(target, players, values, bestBallSettings)}
+        settings={bestBallSettings}
+        seasonPhase="regular"
+        currentWeek={7}
+        byeTeams={null}
+      />,
+    );
+  };
+
+  it('explains itself instead of recommending a lineup', () => {
+    bestBall();
+
+    expect(screen.getByText('Best ball — no lineup to set')).toBeInTheDocument();
+    expect(screen.queryByText('Week 7 lineup')).not.toBeInTheDocument();
+    expect(screen.queryByText(/changes to make/)).not.toBeInTheDocument();
+  });
+
+  it('points at what does still apply, rather than reading as a dead end', () => {
+    bestBall();
+
+    expect(screen.getByText(/what your roster is worth/i)).toBeInTheDocument();
+  });
+
+  it('leaves an ordinary league untouched', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2']);
+
+    expect(screen.queryByText(/Best ball/)).not.toBeInTheDocument();
+  });
+});

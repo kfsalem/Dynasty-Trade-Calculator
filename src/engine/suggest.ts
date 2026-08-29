@@ -10,6 +10,7 @@ import {
   type TeamAnalysis,
 } from './analysis';
 import { picksForRoster } from './picks';
+import { tradeWindow } from './tradeWindow';
 import { bestLineup, byValue, valuePlayers, type RosterSummary } from './rosterValue';
 import { evaluateTrade, type TradeContext } from './trade';
 import type { RoleTrend, RoleTrends } from './roleTrend';
@@ -337,11 +338,21 @@ export function movableAssets(
     );
   }
 
-  if (CONTENDING.includes(analysis.contention.quadrant)) {
+  const contending = CONTENDING.includes(analysis.contention.quadrant);
+
+  // Picks are the contender's currency — but only in a league that lets them be
+  // spent. With `pick_trading` off every package built from one is illegal, and
+  // an illegal suggestion is worse than no suggestion: to anyone who knows
+  // their own league's rules it reads as a bug in the app.
+  //
+  // A contender in such a league therefore adds nothing here, which is the
+  // honest answer rather than a gap — its spare players are already in the pool
+  // above, and the aging-starters branch belongs to rebuilders on purpose.
+  if (contending && ctx.league.settings.pickTrading) {
     for (const pick of picksForRoster(ctx.picks, summary.rosterId)) {
       if (pick.value > 0) assets.set(pick.id, pickAsset(pick));
     }
-  } else {
+  } else if (!contending) {
     for (const slot of summary.lineup) {
       const entry = slot.entry;
       if (!entry || entry.value <= 0) continue;
@@ -385,6 +396,13 @@ function balancePackage(
 
   const gap = gapOf(give, get);
   if (Math.abs(gap) / larger <= tolerance) return { give, get };
+
+  // The only currency this function spends is a draft pick, so where the league
+  // forbids trading them there is nothing to close the gap with. Returning null
+  // rather than shipping the unbalanced package is the same answer this
+  // function already gives when no pick fits: those two assets do not make a
+  // trade *here*, whatever they would make somewhere else.
+  if (!ctx.league.settings.pickTrading) return null;
 
   // Positive gap means we are receiving more, so our side is the light one.
   const shortRosterId = gap > 0 ? myRosterId : partnerRosterId;
@@ -696,6 +714,33 @@ export function suggestTrades(
     minBenefitShare = 0.005,
   } = options;
 
+  const { pickTrading, tradesDisabled } = ctx.league.settings;
+
+  /*
+    Two league rules that end the search before it starts, checked here rather
+    than inside the loop because neither depends on a roster: no amount of
+    searching turns up a legal trade in a league that has switched trading off,
+    and none of it can be acted on after the deadline. Running the search anyway
+    and reporting "found none worth proposing" would blame the rosters for a
+    constraint that has nothing to do with them.
+  */
+  if (tradesDisabled) {
+    return {
+      trades: [],
+      considered: 0,
+      note: 'This league has trading switched off, so there are no offers to make. Everything else in the app still works — the rosters, the values and the weekly lineup do not depend on being able to trade.',
+    };
+  }
+
+  const window = tradeWindow(ctx.league.settings, ctx.season);
+  if (!window.open) {
+    return {
+      trades: [],
+      considered: 0,
+      note: `This league's trade deadline passed in week ${window.deadline}, so the roster you have is the one you finish the season with. Suggestions come back in the offseason, when they can be acted on again.`,
+    };
+  }
+
   const analyses = new Map<number, TeamAnalysis>();
   for (const summary of ctx.summaries) {
     const analysis = analyzeTeam(
@@ -720,7 +765,12 @@ export function suggestTrades(
     return {
       trades: [],
       considered: 0,
-      note: 'Nothing on your roster is spare. Every player good enough to start somewhere is already in your lineup, and you hold no picks to spend.',
+      // Two different reasons the pool is empty, and only one of them is about
+      // what you own. Telling a manager who holds four firsts that he has "no
+      // picks to spend" is a false statement about his own roster.
+      note: pickTrading
+        ? 'Nothing on your roster is spare. Every player good enough to start somewhere is already in your lineup, and you hold no picks to spend.'
+        : 'Nothing on your roster is spare. Every player good enough to start somewhere is already in your lineup, and this league does not allow pick trading, so your picks cannot be moved either.',
     };
   }
 
@@ -778,12 +828,31 @@ export function suggestTrades(
     .filter((trade) => !seen.has(trade.id) && seen.add(trade.id))
     .slice(0, maxResults);
 
-  const note =
-    ranked.length > 0
-      ? null
-      : ctx.picks.length === 0
-        ? `Searched ${considered} packages and found none worth proposing. Draft-pick values didn't load, which removes the usual way to balance an uneven offer — try again in a moment.`
-        : `Searched ${considered} packages and found none worth proposing. Either they leave the other team worse off, or the gain is too small on both sides to be worth opening a negotiation over.`;
+  /*
+    Why the search came back empty, and — separately — what it was working
+    under.
+
+    The pick ban is deliberately *appended* rather than given as the cause. It
+    is a real constraint and worth knowing, but a league that forbids picks and
+    also contains no mutually good trade has two independent facts about it, and
+    naming the rule as the reason would tell a reader that allowing picks would
+    have found something. Often it would not. The app states its evidence; it
+    should not volunteer a counterfactual it has not tested.
+
+    The pick-values outage is a genuine alternative cause and stays exclusive —
+    but only where picks were going to be used at all, since "pick values didn't
+    load" is noise in a league that could not have spent them.
+  */
+  const searched = `Searched ${considered} packages and found none worth proposing.`;
+  const because =
+    pickTrading && ctx.picks.length === 0
+      ? " Draft-pick values didn't load, which removes the usual way to balance an uneven offer — try again in a moment."
+      : ' Either they leave the other team worse off, or the gain is too small on both sides to be worth opening a negotiation over.';
+  const alsoUnder = pickTrading
+    ? ''
+    : ' This league also has pick trading switched off, so an uneven offer here cannot be levelled with a draft pick.';
+
+  const note = ranked.length > 0 ? null : `${searched}${because}${alsoUnder}`;
 
   return { trades: ranked, considered, note };
 }

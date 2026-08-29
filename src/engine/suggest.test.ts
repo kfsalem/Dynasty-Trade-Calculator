@@ -7,9 +7,17 @@ import {
   type SuggestContext,
 } from './suggest';
 import type { RoleTrend, RoleTrends } from './roleTrend';
-import { analyzeTeam, type ContentionProfile } from './analysis';
+import { analyzeTeam, type ContentionProfile, type SeasonOdds } from './analysis';
 import { summarizeRoster, type RosterSummary } from './rosterValue';
-import type { DraftPick, LineupSlot, Player, PlayerValue, Position, Roster } from '../types';
+import type {
+  DraftPick,
+  LeagueSettings,
+  LineupSlot,
+  Player,
+  PlayerValue,
+  Position,
+  Roster,
+} from '../types';
 import {
   makeLeague,
   makePick,
@@ -613,5 +621,159 @@ describe('windowWeights', () => {
         }
       }
     }
+  });
+});
+/**
+ * The same world under a different rulebook.
+ *
+ * Only `league.settings` changes: none of the fields varied here feed
+ * `summarizeRoster`, so the summaries built above stay valid and the tests
+ * compare like with like — the same rosters, the same values, one rule
+ * different.
+ */
+const underRules = (
+  ctx: SuggestContext,
+  overrides: Partial<LeagueSettings>,
+): SuggestContext => ({
+  ...ctx,
+  league: { ...ctx.league, settings: { ...ctx.league.settings, ...overrides } },
+});
+
+/** `weeksPlayed` is the only field the trade window reads. */
+const weeksPlayed = (played: number): SeasonOdds => ({
+  odds: new Map(COMPLEMENTARY.map((s) => [s.rosterId, 0.5])),
+  weeksPlayed: played,
+  weeksTotal: 14,
+});
+
+/**
+ * A league whose one complementary trade cannot balance on players alone.
+ *
+ * Identical to `COMPLEMENTARY` but for the two prices that matter: our spare
+ * receiver is 3,000 and their RB is 4,200, so the 1,200 gap is a first-round
+ * pick wide and `balancePackage` has to reach for one.
+ */
+const NEEDS_A_SWEETENER: Spec[] = COMPLEMENTARY.map((spec) => {
+  if (spec.rosterId === 1) {
+    return {
+      ...spec,
+      players: spec.players.map((p) => (p[0] === 'wr2' ? ['wr2', 'WR', 3000, 25] : p)),
+    } as Spec;
+  }
+  if (spec.rosterId === 2) {
+    return {
+      ...spec,
+      players: spec.players.map((p) => (p[0] === 'rb' ? ['rb', 'RB', 4200, 29] : p)),
+    } as Spec;
+  }
+  return spec;
+});
+
+describe('league rules the engine has to obey', () => {
+  /**
+   * The defect that made this the highest-confidence work on the board: with
+   * pick trading switched off, every package the engine balanced with a pick
+   * was *illegal* rather than merely unappealing, and nothing said so.
+   */
+  it('never offers a pick in a league that forbids trading them', () => {
+    const ctx = underRules(world(COMPLEMENTARY, 1200), { pickTrading: false });
+
+    const { trades } = suggestTrades(1, ctx, { maxResults: 20 });
+
+    expect(trades.length).toBeGreaterThan(0);
+    for (const trade of trades) {
+      expect([...trade.give, ...trade.get].every((a) => a.kind === 'player')).toBe(true);
+    }
+  });
+
+  /**
+   * The control, and the sharper half of the pair: a trade that *only* a pick
+   * can balance. Their RB is worth 1,200 more than our spare receiver, which is
+   * exactly a first — so the package exists in one league and cannot exist in
+   * the other, and the difference is the rule rather than the rosters.
+   */
+  it('balances that same offer with a pick when the league allows it', () => {
+    const ctx = world(NEEDS_A_SWEETENER, 1200);
+    const withPicks = suggestTrades(1, ctx, { maxResults: 20 });
+    const swap = withPicks.trades.find((t) => t.get.some((a) => a.id === 't2_rb'));
+
+    expect(swap).toBeDefined();
+    expect(swap!.give.some((a) => a.kind === 'pick')).toBe(true);
+
+    const banned = suggestTrades(1, underRules(ctx, { pickTrading: false }), {
+      maxResults: 20,
+    });
+
+    expect(banned.trades.some((t) => t.get.some((a) => a.id === 't2_rb'))).toBe(false);
+  });
+
+  it('mentions the pick ban without blaming it for an empty search', () => {
+    // An impossible benefit floor is what empties the list here, so the rule is
+    // demonstrably *not* the cause — and the note still has to mention it
+    // without claiming it is.
+    const ctx = underRules(world(COMPLEMENTARY, 1200), { pickTrading: false });
+    const { trades, note } = suggestTrades(1, ctx, { minBenefitShare: 1 });
+
+    expect(trades).toHaveLength(0);
+    expect(note).toContain('also has pick trading switched off');
+    // The reason offered stays the honest one.
+    expect(note).toContain('too small on both sides');
+  });
+
+  it('does not tell a pick-banned league that its pick values failed to load', () => {
+    const ctx = underRules(world(COMPLEMENTARY), { pickTrading: false });
+    const { note } = suggestTrades(1, ctx, { minBenefitShare: 1 });
+
+    expect(note).not.toContain("didn't load");
+  });
+
+  it('does not tell a manager he holds no picks when he simply cannot trade them', () => {
+    // Nothing spare: one man per starting slot and no bench, so the candidate
+    // pool is empty however many picks the roster owns.
+    const bare = world(
+      [
+        { rosterId: 1, players: [['qb', 'QB', 3000, 25], ['rb', 'RB', 3000, 25], ['wr', 'WR', 3000, 25]] },
+        { rosterId: 2, players: [['qb', 'QB', 3000, 25], ['rb', 'RB', 3000, 25], ['wr', 'WR', 3000, 25]] },
+      ],
+      1200,
+    );
+    const { note } = suggestTrades(1, underRules(bare, { pickTrading: false }));
+
+    expect(note).not.toContain('you hold no picks');
+    expect(note).toContain('does not allow pick trading');
+  });
+
+  it('has nothing to suggest in a league that does not trade, and says why', () => {
+    const ctx = underRules(world(COMPLEMENTARY, 1200), { tradesDisabled: true });
+    const result = suggestTrades(1, ctx);
+
+    expect(result.trades).toHaveLength(0);
+    expect(result.note).toContain('trading switched off');
+    // Not "searched 240 packages and found nothing": no package was ever legal,
+    // and reporting a search implies the rosters are the problem.
+    expect(result.considered).toBe(0);
+  });
+
+  it('stops suggesting once the trade deadline has passed', () => {
+    const ctx = underRules(world(COMPLEMENTARY, 1200), { tradeDeadline: 11 });
+    const closed = suggestTrades(1, { ...ctx, season: weeksPlayed(12) });
+
+    expect(closed.trades).toHaveLength(0);
+    expect(closed.note).toContain('deadline passed in week 11');
+  });
+
+  it('still suggests during the deadline week itself', () => {
+    const ctx = underRules(world(COMPLEMENTARY, 1200), { tradeDeadline: 11 });
+    // Ten weeks played means week 11 is in progress, and a week-11 deadline has
+    // not passed.
+    const open = suggestTrades(1, { ...ctx, season: weeksPlayed(10) });
+
+    expect(open.trades.length).toBeGreaterThan(0);
+  });
+
+  it('ignores a deadline out of season, when there is no week for it to have passed in', () => {
+    const ctx = underRules(world(COMPLEMENTARY, 1200), { tradeDeadline: 1 });
+
+    expect(suggestTrades(1, ctx).trades.length).toBeGreaterThan(0);
   });
 });

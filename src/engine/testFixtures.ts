@@ -113,13 +113,36 @@ export function makeSettings(
     numQbs: startingSlots.includes('SUPER_FLEX') ? 2 : 1,
     startingSlots,
     allSlots: [...startingSlots, 'BN', 'BN', 'BN', 'BN', 'BN', 'BN'],
+    benchSlots: 6,
     taxiSlots: 0,
+    taxiYears: 0,
+    taxiAllowVets: false,
     reserveSlots: 0,
+    reserveAllows: {
+      out: false,
+      doubtful: false,
+      na: false,
+      sus: false,
+      dnr: false,
+      cov: false,
+    },
     draftRounds: 2,
     // Sleeper's defaults. A test about anything else should not have to care
     // when the playoffs start.
     playoffWeekStart: 15,
     playoffTeams: 6,
+    playoffType: null,
+    playoffRoundType: null,
+    playoffSeedType: null,
+    // The permissive defaults, matching a league that publishes none of these
+    // keys — so every test written before the app could read them still
+    // describes the league it thought it was describing.
+    pickTrading: true,
+    tradesDisabled: false,
+    tradeDeadline: null,
+    bestBall: false,
+    medianMatch: false,
+    waivers: { type: null, budget: null, minBid: null },
     ...overrides,
   };
 }
