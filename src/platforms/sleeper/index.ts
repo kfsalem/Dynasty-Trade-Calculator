@@ -1,5 +1,5 @@
 import type { Matchup, Player, SeasonPhase } from '../../types';
-import type { LeagueBundle, LeagueProvider } from '../types';
+import type { AwardedPoints, LeagueBundle, LeagueProvider, Schedule } from '../types';
 import type { KnownDraftOrder, TradedPickRef } from '../../engine/picks';
 import {
   getDraft,
@@ -13,7 +13,8 @@ import {
   getUsers,
   parseLeagueId,
 } from './client';
-import { mapFreeAgents, mapLeague, mapMatchups, mapPlayer } from './mapper';
+import type { SleeperMatchup } from './schema';
+import { mapAwardedPoints, mapFreeAgents, mapLeague, mapMatchups, mapPlayer } from './mapper';
 
 /**
  * Sleeper's `season_type`, canonicalised.
@@ -109,18 +110,27 @@ export const sleeperProvider: LeagueProvider = {
    * costs the simulation the games in it, which shows up as slightly less
    * certainty; a rejected promise would cost the feature entirely.
    */
-  async loadSchedule(leagueId: string, throughWeek: number): Promise<Matchup[]> {
+  async loadSchedule(leagueId: string, throughWeek: number): Promise<Schedule> {
     const weeks = Array.from({ length: Math.max(0, throughWeek) }, (_, i) => i + 1);
 
     const perWeek = await Promise.all(
       weeks.map((week) =>
         getMatchups(leagueId, week)
-          .then((rows) => mapMatchups(week, rows))
-          .catch(() => [] as Matchup[]),
+          .then((rows) => ({ week, matchups: mapMatchups(week, rows), rows }))
+          .catch(() => ({ week, matchups: [] as Matchup[], rows: [] as SleeperMatchup[] })),
       ),
     );
 
-    return perWeek.flat();
+    // The awarded points come out of the responses the fixtures were already
+    // read from, so the oracle costs no extra round trip — see
+    // `players_points` on the matchup schema.
+    const awarded: AwardedPoints = new Map();
+    for (const { week, rows } of perWeek) {
+      const paid = mapAwardedPoints(rows);
+      if (paid.size > 0) awarded.set(week, paid);
+    }
+
+    return { matchups: perWeek.flatMap((entry) => entry.matchups), awarded };
   },
 };
 

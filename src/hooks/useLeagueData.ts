@@ -10,6 +10,7 @@ import { freeAgentBoard, type FreeAgentBoard } from '../engine/freeAgents';
 import { pricedPositions, valueLeague, type LeagueActivity } from '../engine/replacement';
 import { snapShares } from '../engine/snapShare';
 import { opportunities } from '../engine/opportunity';
+import { checkScoring } from '../engine/scoringCheck';
 import { playerRoles } from '../engine/role';
 import { byeTeams as teamsOnBye } from '../engine/byes';
 import { roleTrends } from '../engine/roleTrend';
@@ -19,6 +20,7 @@ import {
   fetchByeWeeks,
   fetchDepthCharts,
   fetchOpportunity,
+  fetchScoring,
   fetchSnapCounts,
 } from '../data/activity';
 import {
@@ -125,6 +127,22 @@ export function useOpportunity() {
   });
 }
 
+/**
+ * Per-week stat lines, so the app can score players in the league's own rules.
+ *
+ * Its own query rather than a widening of `useOpportunity`: different columns,
+ * different players — this one keeps kickers — and a different question. See
+ * `SCORING_COLUMNS`.
+ */
+export function useScoringStats() {
+  return useQuery({
+    queryKey: ['scoring'],
+    queryFn: fetchScoring,
+    staleTime: Infinity,
+    retry: 1,
+  });
+}
+
 /** When each team is off, for the lineup panel. */
 export function useByeWeeks() {
   return useQuery({
@@ -143,6 +161,7 @@ export function useLeagueSummaries(leagueId: string | null) {
   const scheduleQuery = useSchedule(leagueId, settings?.playoffWeekStart);
   const snapsQuery = useSnapShares();
   const opportunityQuery = useOpportunity();
+  const scoringQuery = useScoringStats();
   const depthQuery = useDepthCharts();
   const byesQuery = useByeWeeks();
 
@@ -312,7 +331,7 @@ export function useLeagueSummaries(leagueId: string | null) {
    */
   const oddsContext = useMemo<OddsContext | undefined>(() => {
     const bundle = leagueQuery.data;
-    const schedule = scheduleQuery.data;
+    const schedule = scheduleQuery.data?.matchups;
     if (!bundle || !schedule || !adjusted || summaries.length === 0) return undefined;
 
     const teams = teamStates(bundle.league, summaries);
@@ -436,6 +455,22 @@ export function useLeagueSummaries(leagueId: string | null) {
    * league is enough on its own: the values query is keyed on settings that
    * arrive with it, so it starts by itself the moment the league lands.
    */
+  /**
+   * Whether this app can reproduce the league's own scoring, and how closely.
+   *
+   * Computed from data already in hand: the stat lines ship in `scoring.json`
+   * and the awarded points ride along in the matchup responses the schedule
+   * already fetches, so the answer costs one pass over a few hundred rows and
+   * no extra request.
+   */
+  const scoringFidelity = useMemo(
+    () =>
+      settings
+        ? checkScoring(scoringQuery.data, scheduleQuery.data?.awarded, settings.scoring)
+        : undefined,
+    [scoringQuery.data, scheduleQuery.data, settings],
+  );
+
   const leagueRefetch = leagueQuery.refetch;
   const valuesRefetch = valuesQuery.refetch;
   const retry = useCallback(() => {
@@ -446,6 +481,8 @@ export function useLeagueSummaries(leagueId: string | null) {
   return {
     league: leagueQuery.data?.league,
     players: leagueQuery.data?.players,
+    /** What the app can and cannot reproduce of this league's scoring rules. */
+    scoringFidelity,
     /** Where the NFL calendar stands, so a week number can be read correctly. */
     seasonPhase: leagueQuery.data?.seasonPhase,
     currentWeek: leagueQuery.data?.currentWeek ?? null,

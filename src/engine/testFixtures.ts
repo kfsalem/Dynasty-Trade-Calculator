@@ -110,6 +110,9 @@ export function makeSettings(
     isDynasty: true,
     teamCount: 2,
     ppr: 1,
+    // Full PPR and nothing else, which is what `ppr: 1` has always meant here.
+    // A test that cares about league scoring passes its own rulebook.
+    scoring: { rec: 1, pass_yd: 0.04, pass_td: 4, rush_yd: 0.1, rush_td: 6, rec_yd: 0.1, rec_td: 6 },
     numQbs: startingSlots.includes('SUPER_FLEX') ? 2 : 1,
     startingSlots,
     allSlots: [...startingSlots, 'BN', 'BN', 'BN', 'BN', 'BN', 'BN'],

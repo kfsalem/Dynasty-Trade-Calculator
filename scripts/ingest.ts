@@ -39,6 +39,7 @@ import { reduceByeWeeks } from './ingest/byeWeeks';
 import { reduceDepthCharts } from './ingest/depthCharts';
 import { reduceSnapCounts } from './ingest/snapCounts';
 import { reduceWeeklyStats } from './ingest/weeklyStats';
+import { reduceScoring } from './ingest/scoring';
 
 const OUT_DIR = fileURLToPath(new URL('../public/data/', import.meta.url));
 
@@ -106,6 +107,18 @@ const DATASETS: Dataset[] = [
     release: 'stats_player',
     fileFor: (season) => `stats_player_week_${season}.csv`,
     reduce: reduceWeeklyStats,
+    minPlayers: 300,
+  },
+  {
+    // Second reduction of `stats_player_week`, and a deliberate one: the same
+    // source answers two different questions, and the files have different
+    // columns, different players and different consumers. `fetchText` caches
+    // within a run, so the 8.6 MB is downloaded once regardless.
+    name: 'scoring',
+    release: 'stats_player',
+    fileFor: (season) => `stats_player_week_${season}.csv`,
+    reduce: reduceScoring,
+    // Wider than `opportunity`: this one keeps kickers too.
     minPlayers: 300,
   },
   {

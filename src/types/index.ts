@@ -181,12 +181,37 @@ export interface DraftPick {
   label: string;
 }
 
+/**
+ * Every scoring rule the league publishes, by Sleeper's own key.
+ *
+ * Sleeper ships all 148 keys for every league, most of them zero, and the app
+ * read exactly one of them — `rec`, to pick a PPR flavour. Everything else was
+ * dropped on the floor, so a TE-premium league with six-point passing
+ * touchdowns was valued as though it were neither.
+ *
+ * Kept as the raw record rather than parsed into named fields. The keys are
+ * Sleeper's contract, they change without notice, and `engine/scoring` already
+ * has to say which of them it can and cannot express — turning them into an
+ * interface would mean a rule Sleeper adds tomorrow silently vanishing at the
+ * schema instead of being reported as unknown.
+ */
+export type ScoringSettings = Readonly<Record<string, number>>;
+
 export interface LeagueSettings {
   /** Sleeper: settings.type 0=redraft, 1=keeper, 2=dynasty. */
   isDynasty: boolean;
   teamCount: number;
-  /** Points per reception: 1 = PPR, 0.5 = half, 0 = standard. */
+  /**
+   * Points per reception: 1 = PPR, 0.5 = half, 0 = standard.
+   *
+   * Still derived, and still needed: it is one of the four knobs FantasyCalc's
+   * API takes, so it decides which market prices the app fetches. `scoring`
+   * below is what this league actually does; `ppr` is the nearest thing the
+   * market has ever heard of.
+   */
   ppr: number;
+  /** The whole published rulebook, for scoring in this league's own currency. */
+  scoring: ScoringSettings;
   /** 2 when the lineup has a SUPER_FLEX slot, else 1. Drives QB valuation. */
   numQbs: number;
   /** Starting slots in order, bench excluded. */

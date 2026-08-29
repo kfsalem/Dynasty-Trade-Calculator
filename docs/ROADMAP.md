@@ -1088,3 +1088,113 @@ Taxi and reserve capacity are carried through to `LeagueSettings` and no
 further. How many stash slots exist genuinely changes what an injured asset
 costs to hold — but that is a valuation model, and #9's rule stands: availability
 comes from the NFL designation, not from the manager's IR slot.
+
+## Read the league's actual scoring settings
+
+**Status:** Shipped — [#73](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/73),
+scoring engine and self-check. Replacement level in league points is the
+follow-up; see the end of this section.
+
+The app read **one** of the 148 scoring rules Sleeper publishes — `rec`, to pick
+a PPR flavour for FantasyCalc — and dropped the rest. The Eternal Rebuild is
+TE-premium with six-point passing touchdowns and seven long-play bonuses, and
+the header cheerfully described it as "PPR".
+
+### The oracle is the point
+
+Everything else in `engine/` is a model, testable only against its own intent.
+Scoring is arithmetic over published fields, and Sleeper publishes **its own
+answer** for every rostered player in every played week under
+`matchups/<week>.players_points`. So this is the one number in the app that can
+be checked against the truth, in the league it is running in.
+
+It rides along in a response `loadSchedule` already fetches, so the oracle costs
+no extra request.
+
+Measured over the whole 2025 regular season of that league — 2,579 player-weeks
+against Sleeper's own totals:
+
+| | |
+|---|---|
+| exact to the cent | **95.1%** |
+| explained by named bonuses | 4.8% |
+| unexplained | 1 player-week (0.04%) |
+| aggregate error | **−0.85%** |
+
+Per position, the headline defect is gone: **tight ends are exact**, and
+quarterbacks come in at −0.01%. 457 of those player-weeks are committed as a
+fixture so the claim is a test rather than a memory.
+
+### What the residuals actually are
+
+Every one bar a single player-week is a **long-touchdown bonus**.
+`stats_player_week` publishes plays of 40+ yards but not whether a *touchdown*
+was 40+ or 50+, and `pass_int_td` needs to know an interception was returned for
+a score. Both need play-by-play — a far larger file for bonuses worth one or two
+points on a rare event, against a TE premium the old behaviour missed entirely.
+
+The engine can therefore only ever be **short**, never over — a property worth
+having and worth a test, since it means no player is ever priced above what his
+league would have paid him.
+
+The one exception: Caleb Williams, week 6, half a point. nflverse nets a −5
+fumble-recovery loss into rushing yards where Sleeper does not. That is a
+disagreement about what a rushing yard is, not a scoring bug.
+
+### Two corrections to the issue's own findings
+
+- **`passing_40` is completions of 40+ yards**, which the issue flagged as
+  unverified before `pass_cmp_40p` read it. Confirmed by cross-checking against
+  `receiving_40`: they agree in 543 of 544 team-weeks (228 against 227), against
+  controls where `passing_tds`/`receiving_tds` and `completions`/`receptions`
+  match exactly. The single mismatch is a lateral splitting receiving yards.
+- **Fumbles must come from `fumbles_lost_total`**, not the sum of the rushing,
+  receiving and sack buckets. Trevor Etienne lost one on a punt return in week
+  3, which belongs to none of the three and cost a real −2 the sum could not
+  see. That fix alone took week 3 from 93% to 94% exact.
+
+### The budget decided the file shape
+
+`public/data` has a hard 1 MB ceiling and every visitor pays it. Per-player-week
+stat lines for 37 columns measured **492 KB padded**. Ordering the columns so
+rarely-used ones trail — kicking last, receptions first — and trimming trailing
+zeros brought the same 37 columns to **301 KB**, which is less than the naive
+26-column version. Total is now 675 KB of 977 KB.
+
+**`SCORING_COLUMNS` order is therefore load-bearing**, and reordering it without
+re-measuring quietly costs tens of kilobytes.
+
+Season totals would have been 53 KB, and were rejected: per-week rows are what
+make the runtime self-check possible at all, and the self-check is the feature.
+
+### Saying so out loud
+
+Two surfaces, both of which existed to be wrong before:
+
+- The header badges now say **TE premium +0.5** and **6-pt pass TD**, which
+  "PPR" was actively hiding.
+- `ScoringNote` reports what the app can and cannot reproduce, naming
+  unreachable rules in words rather than Sleeper's key names — "50+ yard
+  receiving touchdowns", not `rec_td_50p`. It is silent when there is nothing to
+  report, and a league whose scoring cannot be reproduced is told that values
+  fell back to market rankings.
+
+`classifyRules` sorts every published rule into supported, unreachable,
+defensive and unknown. Defensive rules are set aside rather than counted as
+gaps: the app does not value DEF or IDP at all (#10), so counting 22 of them as
+failures would bury the six that actually cost a skill player points.
+
+### Deliberately not done here
+
+**Replacement level in league points.** The issue's real payoff and the reason
+it was split: re-deriving replacement level moves every valuation in the app,
+where the scoring engine merely adds one that can be checked against an oracle.
+`scoringIsUsable` is the seam it will read — a league the engine cannot
+reproduce falls back to the market ranking rather than shipping quietly wrong
+numbers.
+
+**Play-by-play** for the long-touchdown bonuses, at a measured 0.85% on a
+deliberately bonus-heavy league.
+
+**Replacing FantasyCalc.** Market value stays market value; `ppr` is still
+derived, because it is one of the four knobs that API takes.

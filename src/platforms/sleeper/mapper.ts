@@ -166,6 +166,12 @@ export function mapSettings(league: SleeperLeague): LeagueSettings {
     isDynasty: (settings?.type ?? 0) >= 1,
     teamCount: league.total_rosters || settings?.num_teams || 12,
     ppr: league.scoring_settings?.rec ?? 0,
+    // The whole rulebook, not just the one rule the market API understands.
+    // Sleeper omits `scoring_settings` for no league this app has seen, but an
+    // empty record is the honest fallback: it scores every stat line at zero,
+    // which `engine/scoring`'s callers already have to handle for a league
+    // whose rules they cannot reproduce.
+    scoring: league.scoring_settings ?? {},
     // A SUPER_FLEX slot is what actually makes QBs scarce, not the QB count.
     numQbs: startingSlots.includes('SUPER_FLEX') ? 2 : 1,
     startingSlots,
@@ -261,6 +267,36 @@ export function mapMatchups(week: number, rows: SleeperMatchup[]): Matchup[] {
     });
   }
   return fixtures.sort((x, y) => x.rosterIds[0] - y.rosterIds[0]);
+}
+
+/**
+ * What Sleeper paid each rostered player in one week, under the league's rules.
+ *
+ * The oracle `engine/scoring` gets to check itself against. Rows are per
+ * roster, so one week's payments are spread across ten of them and get merged
+ * here; a player can only appear on one roster, so there is nothing to
+ * reconcile.
+ *
+ * A week nobody has played returns an empty map rather than a map of zeros.
+ * Sleeper publishes the keys with zero values well before kickoff, and a
+ * self-check that read those as real would conclude the scoring engine was
+ * wrong about every player in the league — the same "0 is not the same as not
+ * yet" trap `mapMatchups` documents for fixture points, reached from the other
+ * side.
+ */
+export function mapAwardedPoints(rows: SleeperMatchup[]): Map<string, number> {
+  const paid = new Map<string, number>();
+  let anyScored = false;
+
+  for (const row of rows) {
+    for (const [playerId, points] of Object.entries(row.players_points ?? {})) {
+      if (!isRealPlayerId(playerId)) continue;
+      paid.set(playerId, points);
+      if (points !== 0) anyScored = true;
+    }
+  }
+
+  return anyScored ? paid : new Map();
 }
 
 /**
