@@ -43,6 +43,20 @@ export function ScoringNote({ fidelity }: Props) {
       ? `${count(exact)} of ${count(compared)} player-weeks match Sleeper's own totals exactly`
       : null;
 
+  // Nothing played, but rules this engine cannot express. The common state of
+  // a dynasty league in August, and the one the copy below cannot describe: it
+  // is built around a check that has not run, and saying "Scoring check" of a
+  // check with no evidence behind it is the same overclaim in miniature.
+  if (verdict === 'unchecked') {
+    return (
+      <p className="mt-3 rounded-lg border border-line bg-raised p-3 text-sm text-muted">
+        No week has been played yet, so there is nothing to check this app's scoring
+        against. When there is, these will still not be counted: {joinWords(missing)} —
+        nflverse publishes weekly totals, which cannot say how long a touchdown was.
+      </p>
+    );
+  }
+
   if (verdict === 'unreliable') {
     return (
       <p className="mt-3 rounded-lg border border-caution bg-caution-soft p-3 text-sm text-caution">
@@ -59,10 +73,8 @@ export function ScoringNote({ fidelity }: Props) {
         <>Scoring check: this app reproduces your league's rules exactly — {checked}.</>
       ) : (
         <>
-          Scoring check
-          {checked ? `: ${checked}` : ' on your league’s rules'}. Not counted:{' '}
-          {joinWords(missing)} — nflverse publishes weekly totals, which cannot say how
-          long a touchdown was.
+          Scoring check: {checked}. Not counted: {joinWords(missing)} — nflverse
+          publishes weekly totals, which cannot say how long a touchdown was.
         </>
       )}
     </p>

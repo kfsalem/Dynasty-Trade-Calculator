@@ -125,3 +125,31 @@ describe('LeagueHeader — scoring badges', () => {
     expect(screen.queryByText(/pass TD/)).not.toBeInTheDocument();
   });
 });
+
+describe('ScoringNote — the state a dynasty league is in for most of the year', () => {
+  /**
+   * August: the league exists, its rules are known, and no game has been
+   * played. The check cannot have run, so the note must not speak as though it
+   * did — while still naming the bonuses that will be missing once it can.
+   */
+  it('does not report a check that has not run', () => {
+    render(
+      <ScoringNote
+        fidelity={{
+          compared: 0,
+          exact: 0,
+          error: 0,
+          unreachable: ['rec_td_50p'],
+          unknown: [],
+          verdict: 'unchecked',
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/No week has been played yet/)).toBeInTheDocument();
+    expect(screen.getByText(/50\+ yard receiving touchdowns/)).toBeInTheDocument();
+    expect(screen.queryByText(/Scoring check/)).not.toBeInTheDocument();
+    // And no empty "0 of 0" anywhere.
+    expect(screen.queryByText(/0 of 0/)).not.toBeInTheDocument();
+  });
+});
