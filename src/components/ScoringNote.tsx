@@ -1,8 +1,11 @@
 import type { ScoringFidelity } from '../engine/scoringCheck';
-import { describeRules, joinWords } from '../lib/scoringText';
+import type { ScoringPremium } from '../engine/scoringPremium';
+import { describeRules, joinWords, premiumSentence } from '../lib/scoringText';
 
 interface Props {
   fidelity: ScoringFidelity | undefined;
+  /** How the league's scoring moved each position against the market's. */
+  premium?: ScoringPremium;
 }
 
 const count = (n: number) => n.toLocaleString('en-US');
@@ -20,23 +23,25 @@ const count = (n: number) => n.toLocaleString('en-US');
  * engine scores exactly gets one short line; a league it cannot gets told which
  * rules, in words rather than in Sleeper's key names.
  *
- * **It reports the check, not the prices.** Nothing in the app values players
- * in league points yet — that is the follow-up this issue was split from — so a
- * note reading "scored in your league's own rules" would be describing a
- * capability as though it were a number on screen. When replacement level
- * starts reading `scoringIsUsable`, this copy gains a sentence about pricing
- * and not before.
+ * It reports the check *and*, now that something reads it, what the check
+ * bought: the positions whose prices this league's scoring actually moved. The
+ * two are kept as separate sentences because they are separate claims — one is
+ * measured against Sleeper's own output, the other is a correction applied to
+ * somebody else's prices.
  */
-export function ScoringNote({ fidelity }: Props) {
+export function ScoringNote({ fidelity, premium }: Props) {
   if (!fidelity) return null;
 
   const { verdict, compared, exact, unreachable, unknown } = fidelity;
   const missing = describeRules([...unreachable, ...unknown]);
+  // Only worth a sentence where it changed something. A league the market
+  // already prices correctly gets no correction and no claim of one.
+  const priced = premium?.measured ? premiumSentence(premium) : null;
 
   // Nothing has been played, and nothing is wrong. Saying "checked 0 of 0" or
   // claiming success would both be worse than staying silent — the header
   // badges already say what the league's rules are.
-  if (verdict === 'unchecked' && missing.length === 0) return null;
+  if (verdict === 'unchecked' && missing.length === 0 && !priced) return null;
 
   const checked =
     compared > 0
@@ -50,9 +55,14 @@ export function ScoringNote({ fidelity }: Props) {
   if (verdict === 'unchecked') {
     return (
       <p className="mt-3 rounded-lg border border-line bg-raised p-3 text-sm text-muted">
-        No week has been played yet, so there is nothing to check this app's scoring
-        against. When there is, these will still not be counted: {joinWords(missing)} —
-        nflverse publishes weekly totals, which cannot say how long a touchdown was.
+        {priced ? `${priced} ` : ''}No week has been played yet, so there is nothing to
+        check that scoring against.{' '}
+        {missing.length > 0 && (
+          <>
+            When there is, these will still not be counted: {joinWords(missing)} — nflverse
+            publishes weekly totals, which cannot say how long a touchdown was.
+          </>
+        )}
       </p>
     );
   }
@@ -70,11 +80,15 @@ export function ScoringNote({ fidelity }: Props) {
   return (
     <p className="mt-3 rounded-lg border border-line bg-raised p-3 text-sm text-muted">
       {verdict === 'exact' ? (
-        <>Scoring check: this app reproduces your league's rules exactly — {checked}.</>
+        <>
+          Scoring check: this app reproduces your league's rules exactly — {checked}.
+          {priced ? ` ${priced}` : ''}
+        </>
       ) : (
         <>
           Scoring check: {checked}. Not counted: {joinWords(missing)} — nflverse
           publishes weekly totals, which cannot say how long a touchdown was.
+          {priced ? ` ${priced}` : ''}
         </>
       )}
     </p>

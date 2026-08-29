@@ -10,7 +10,7 @@ import { freeAgentBoard, type FreeAgentBoard } from '../engine/freeAgents';
 import { pricedPositions, valueLeague, type LeagueActivity } from '../engine/replacement';
 import { snapShares } from '../engine/snapShare';
 import { opportunities } from '../engine/opportunity';
-import { checkScoring } from '../engine/scoringCheck';
+import { checkScoring, scoringIsUsable } from '../engine/scoringCheck';
 import { playerRoles } from '../engine/role';
 import { byeTeams as teamsOnBye } from '../engine/byes';
 import { roleTrends } from '../engine/roleTrend';
@@ -253,6 +253,45 @@ export function useLeagueSummaries(leagueId: string | null) {
    * gives RB 26 / WR 33 / TE 11 and the converged answer is RB 22 / WR 35 /
    * TE 13.
    */
+  /**
+   * Whether this app can reproduce the league's own scoring, and how closely.
+   *
+   * Computed from data already in hand: the stat lines ship in `scoring.json`
+   * and the awarded points ride along in the matchup responses the schedule
+   * already fetches, so the answer costs one pass over a few hundred rows and
+   * no extra request.
+   *
+   * Above `adjusted` because it now gates it. A league whose scoring this app
+   * cannot reproduce must not have its market prices corrected by a rulebook
+   * the app is demonstrably reading wrong.
+   */
+  const scoringFidelity = useMemo(
+    () =>
+      settings
+        ? checkScoring(scoringQuery.data, scheduleQuery.data?.awarded, settings.scoring)
+        : undefined,
+    [scoringQuery.data, scheduleQuery.data, settings],
+  );
+
+  /**
+   * The stat lines, but only where the scoring engine has earned the right.
+   *
+   * `scoringIsUsable` is the degrade path #73 built and left unwired: a league
+   * whose published points this engine cannot reproduce falls back to the
+   * market ranking rather than having every position reweighted by arithmetic
+   * that is already known to disagree with the platform's own.
+   *
+   * An unplayed season counts as usable. No week has been checked, but the
+   * premium is a ratio between two *rulebooks* scored over the same players —
+   * it is not a claim about this season, and refusing to compute it every
+   * August would mean the feature never works when dynasty leagues are busiest.
+   */
+  const scoringStats = useMemo(
+    () =>
+      scoringFidelity && scoringIsUsable(scoringFidelity) ? scoringQuery.data : null,
+    [scoringFidelity, scoringQuery.data],
+  );
+
   const adjusted = useMemo(() => {
     const bundle = leagueQuery.data;
     const market = valuesQuery.data?.bySleeperId;
@@ -264,8 +303,9 @@ export function useLeagueSummaries(leagueId: string | null) {
       market,
       bundle.league.settings,
       activity,
+      scoringStats,
     );
-  }, [leagueQuery.data, valuesQuery.data, activity]);
+  }, [leagueQuery.data, valuesQuery.data, activity, scoringStats]);
 
   /**
    * The waiver wire, priced against the levels the rostered pool produced.
@@ -455,22 +495,6 @@ export function useLeagueSummaries(leagueId: string | null) {
    * league is enough on its own: the values query is keyed on settings that
    * arrive with it, so it starts by itself the moment the league lands.
    */
-  /**
-   * Whether this app can reproduce the league's own scoring, and how closely.
-   *
-   * Computed from data already in hand: the stat lines ship in `scoring.json`
-   * and the awarded points ride along in the matchup responses the schedule
-   * already fetches, so the answer costs one pass over a few hundred rows and
-   * no extra request.
-   */
-  const scoringFidelity = useMemo(
-    () =>
-      settings
-        ? checkScoring(scoringQuery.data, scheduleQuery.data?.awarded, settings.scoring)
-        : undefined,
-    [scoringQuery.data, scheduleQuery.data, settings],
-  );
-
   const leagueRefetch = leagueQuery.refetch;
   const valuesRefetch = valuesQuery.refetch;
   const retry = useCallback(() => {
@@ -483,6 +507,8 @@ export function useLeagueSummaries(leagueId: string | null) {
     players: leagueQuery.data?.players,
     /** What the app can and cannot reproduce of this league's scoring rules. */
     scoringFidelity,
+    /** How this league's scoring moved each position against the market's. */
+    premium: adjusted?.premium,
     /** Where the NFL calendar stands, so a week number can be read correctly. */
     seasonPhase: leagueQuery.data?.seasonPhase,
     currentWeek: leagueQuery.data?.currentWeek ?? null,

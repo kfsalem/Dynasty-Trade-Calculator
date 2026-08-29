@@ -934,7 +934,7 @@ describe('valueLeague', () => {
     expect(first.values.get('rb_star')!.value).toBe(second.values.get('rb_star')!.value);
 
     // A different pass cap must not change the answer either.
-    const capped = valueLeague(rosters, players, values, settings, undefined, 2);
+    const capped = valueLeague(rosters, players, values, settings, undefined, null, 2);
     expect(capped.starters).toEqual(first.starters);
   });
 
@@ -1045,7 +1045,7 @@ describe('valueLeague', () => {
 
     // Same reason, along the other axis: more passes cannot move a factor, so
     // capping the loop must not change the answer either.
-    const capped = valueLeague(rosters, players, values, settings, activity, 2);
+    const capped = valueLeague(rosters, players, values, settings, activity, null, 2);
     expect(capped.adjustments).toEqual(baseline.adjustments);
     expect(capped.starters).toEqual(baseline.starters);
   });

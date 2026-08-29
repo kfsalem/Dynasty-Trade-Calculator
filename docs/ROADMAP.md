@@ -1198,3 +1198,81 @@ deliberately bonus-heavy league.
 
 **Replacing FantasyCalc.** Market value stays market value; `ppr` is still
 derived, because it is one of the four knobs that API takes.
+
+## Replacement level, and the correction that actually mattered
+
+**Status:** Shipped — the payoff deferred from [#73](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/73),
+and scope item 6 of [#74](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/74).
+
+### The obvious implementation is a no-op
+
+Both issues describe deriving replacement level from league points instead of
+from a market ranking. Built and measured on the two real leagues, that changes
+**nothing**:
+
+```
+starters who change identity, ranked by league points vs the market's rulebook
+  Eternal Rebuild 2026   QB 0/10   RB 0/25   WR 0/35   TE 0/12
+  Tight Ends 2025        QB 0/10   RB 0/25   WR 0/35   TE 0/12
+```
+
+The reason is structural. A TE premium or six-point passing touchdowns lift
+*every* player at a position together, so the ordering **within** a position
+barely moves — and replacement level reads a market price off whoever sits at
+rank N+1. Re-picking that player by points hands back the same player.
+
+### The mis-valuation was between positions, not within them
+
+Scoring the same players under the league's rules and under the rulebook the
+market prices assume:
+
+| | QB | RB | WR | TE |
+|---|---|---|---|---|
+| Eternal Rebuild 2026 | **+12.7%** | −5.1% | −5.0% | **+10.9%** |
+| Tight Ends 2025 | +0.2% | −3.2% | −2.8% | **+15.8%** |
+
+That is #73's claim — "every tight end in it is systematically underpriced by
+the tool today, and so is every quarterback" — as a number. Nothing measured
+within a position was ever going to find it.
+
+### Why this is still a measurement
+
+FantasyCalc is asked for prices parameterised by `isDynasty`, `numQbs`,
+`numTeams` and `ppr`, and nothing else. So its prices **are** prices under
+standard scoring at that reception value — a rulebook this repo can write down
+exactly (`marketBaseline`). The premium is the ratio of two scorings of the same
+players: theirs and yours. No projection, no fitting, no thresholds.
+
+Normalised by the **pooled** ratio rather than the mean of the ratios, so the
+total value of every starting lineup is unchanged and only the split between
+positions moves. A mean would weight a ten-starter position like a
+thirty-five-starter one and quietly inflate or deflate the whole league
+depending on its lineup shape.
+
+Last season's stat lines are the right sample here, and this is the one place in
+the app that needs no prior-season caveat: the same players are scored twice
+under two rulebooks, so the ratio is a property of the *rulebooks*, not of the
+season. #46's labelling rule exists because "98% of snaps" reads as a claim
+about now; "a TE reception is worth 0.5 here" does not.
+
+### The identity case, and the degrade path
+
+A league scored the way the market assumes gets `measured: false` and is left
+completely alone — including half-PPR, since `ppr` is one of the knobs the
+market API already takes. Below a 2% spread the premium is smaller than the
+0.85% the scoring engine is itself known to be short by, and applying it would
+be dressing noise as a finding.
+
+`scoringIsUsable` is finally wired, which is what #73 built it for: a league
+whose published points this engine cannot reproduce keeps the uncorrected market
+prices rather than having every position reweighted by arithmetic already known
+to disagree with the platform's own.
+
+### One trap worth recording
+
+`positionScarcity` feeds the panel that explains the model, and its levels now
+arrive on the corrected scale. Reading a top-of-position price uncorrected there
+divides two different currencies and teaches a `retained` share the engine never
+computes — the exact failure that panel's own comment warns about. Both ends
+take the premium, and a test pins that a uniform correction cannot move the
+ratio.

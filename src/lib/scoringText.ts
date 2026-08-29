@@ -95,3 +95,31 @@ export function joinWords(items: readonly string[]): string {
   if (items.length <= 1) return items[0] ?? '';
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
+
+/**
+ * What the league's scoring did to the market's prices, in one sentence.
+ *
+ * Only the positions that actually moved, and only by how much. The market
+ * prices every player for standard scoring at the league's reception value, so
+ * in a TE-premium league every tight end arrives underpriced by the size of the
+ * premium — this is the app saying it corrected that, and by how much, rather
+ * than quietly doing it.
+ */
+export function premiumSentence(premium: {
+  byPosition: Partial<Record<string, number>>;
+}): string | null {
+  const moved = Object.entries(premium.byPosition)
+    .map(([position, multiplier]) => ({
+      position,
+      pct: Math.round(((multiplier ?? 1) - 1) * 100),
+    }))
+    .filter((entry) => entry.pct !== 0)
+    .sort((a, b) => b.pct - a.pct);
+
+  if (moved.length === 0) return null;
+
+  const phrases = moved.map(
+    ({ position, pct }) => `${position} ${pct > 0 ? '+' : ''}${pct}%`,
+  );
+  return `Market prices are corrected for it: ${joinWords(phrases)}.`;
+}

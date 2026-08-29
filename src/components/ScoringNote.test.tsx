@@ -153,3 +153,50 @@ describe('ScoringNote — the state a dynasty league is in for most of the year'
     expect(screen.queryByText(/0 of 0/)).not.toBeInTheDocument();
   });
 });
+
+describe('ScoringNote — what the check bought', () => {
+  const premium = {
+    byPosition: { QB: 1.127, TE: 1.109, RB: 0.949, WR: 0.951 },
+    measured: true,
+    season: 2025,
+  };
+
+  it('names the positions whose prices moved, and by how much', () => {
+    render(<ScoringNote fidelity={fidelity()} premium={premium} />);
+
+    const text = screen.getByText(/Market prices are corrected/).textContent ?? '';
+    expect(text).toContain('QB +13%');
+    expect(text).toContain('TE +11%');
+    expect(text).toContain('RB -5%');
+  });
+
+  /**
+   * A league the market already prices correctly gets no correction, and must
+   * not be told it got one.
+   */
+  it('claims no correction where none was applied', () => {
+    render(
+      <ScoringNote
+        fidelity={fidelity()}
+        premium={{ byPosition: {}, measured: false, season: null }}
+      />,
+    );
+
+    expect(screen.queryByText(/Market prices are corrected/)).not.toBeInTheDocument();
+  });
+
+  it('says so even in August, when the check itself cannot have run', () => {
+    // The premium is a ratio between two rulebooks, not a claim about a season,
+    // so it is available before a game is played — and it is the half that
+    // actually changes what the reader sees.
+    render(
+      <ScoringNote
+        fidelity={fidelity({ verdict: 'unchecked', compared: 0, exact: 0 })}
+        premium={premium}
+      />,
+    );
+
+    expect(screen.getByText(/Market prices are corrected/)).toBeInTheDocument();
+    expect(screen.getByText(/No week has been played yet/)).toBeInTheDocument();
+  });
+});

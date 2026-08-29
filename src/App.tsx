@@ -132,6 +132,7 @@ function App() {
     league,
     players,
     scoringFidelity,
+    premium,
     values,
     scarcity,
     summaries,
@@ -311,7 +312,7 @@ function App() {
               same subject one level down: those say what the league does, this
               says how much of it the app can actually reproduce.
             */}
-            <ScoringNote fidelity={scoringFidelity} />
+            <ScoringNote fidelity={scoringFidelity} premium={premium} />
 
             {/*
               A real tablist, not just the roles.
