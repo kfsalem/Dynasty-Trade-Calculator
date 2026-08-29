@@ -48,14 +48,31 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * fails because one request was reset — when the fallback path exists precisely
  * for real outages — is just noise.
  */
+/**
+ * Bodies already downloaded in this run.
+ *
+ * Two datasets reduce `stats_player_week` — opportunity shares and scoring
+ * lines — and without this the build would pull the same 8.6 MB twice. Keyed by
+ * URL and never invalidated, which is correct for a process that runs once and
+ * exits; nothing here is long-lived enough for a stale entry to exist.
+ */
+const bodies = new Map<string, string>();
+
 export async function fetchText(url: string): Promise<string> {
+  const cached = bodies.get(url);
+  if (cached !== undefined) return cached;
+
   let lastError = '';
 
   for (let attempt = 1; attempt <= RETRIES; attempt++) {
     try {
       const res = await fetch(url);
 
-      if (res.ok) return await res.text();
+      if (res.ok) {
+        const body = await res.text();
+        bodies.set(url, body);
+        return body;
+      }
 
       lastError = `HTTP ${res.status}`;
       // 4xx other than rate limiting will not fix itself.

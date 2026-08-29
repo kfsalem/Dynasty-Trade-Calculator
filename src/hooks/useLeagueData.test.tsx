@@ -27,6 +27,7 @@ vi.mock('../data/activity', () => ({
   fetchSnapCounts: vi.fn(async () => null),
   fetchDepthCharts: vi.fn(async () => null),
   fetchOpportunity: vi.fn(async () => null),
+  fetchScoring: vi.fn(async () => null),
   fetchByeWeeks: vi.fn(async () => null),
 }));
 

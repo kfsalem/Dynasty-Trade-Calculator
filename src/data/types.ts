@@ -104,6 +104,96 @@ export interface OpportunityFile extends DatasetMeta {
 }
 
 // ---------------------------------------------------------------------------
+// scoring.json — nflverse stats_player_week, every column a scoring rule reads
+// ---------------------------------------------------------------------------
+
+/**
+ * The stat columns a Sleeper scoring rule can be computed from.
+ *
+ * Separate from `opportunity.json` on purpose. That file answers "how much of
+ * his team's work does this player get", which is a *rate* question about
+ * roles. This one answers "what did he actually do", which is what a league's
+ * own scoring rules multiply. They also cover different players: opportunity is
+ * skill positions only, and a kicker has no target share but does have a
+ * scoring line.
+ *
+ * **The order is load-bearing.** Rows are written with trailing zeros trimmed,
+ * so a column that is zero for most players costs nothing as long as it sits
+ * near the end. Kicking is last because 35 players in the league have any of
+ * it; receptions and yards are first because almost everyone does. Reordering
+ * this list without re-measuring will quietly cost tens of kilobytes of a
+ * budget every visitor pays — the same 37 columns padded rather than trimmed
+ * measured 492 KB against this order's 301 KB.
+ */
+export const SCORING_COLUMNS = [
+  'week',
+  'receptions',
+  'recYards',
+  'recTds',
+  'rushYards',
+  'rushTds',
+  'passYards',
+  'passTds',
+  'passInts',
+  'rec40',
+  'rush40',
+  'pass40',
+  'fumblesLost',
+  'completions',
+  'attempts',
+  'carries',
+  'sacked',
+  'fumbles',
+  'passFirstDowns',
+  'rushFirstDowns',
+  'recFirstDowns',
+  'rec2pt',
+  'rush2pt',
+  'pass2pt',
+  'fumbleRecTds',
+  'specialTeamsTds',
+  'kickReturnYards',
+  'puntReturnYards',
+  'fgMade',
+  'fgMade0_19',
+  'fgMade20_29',
+  'fgMade30_39',
+  'fgMade40_49',
+  'fgMade50_59',
+  'fgMade60',
+  'fgMissed',
+  'patMade',
+  'patMissed',
+] as const;
+
+export type ScoringColumn = (typeof SCORING_COLUMNS)[number];
+
+/**
+ * One player-week, positional and **variable length**.
+ *
+ * Every column after the last non-zero one is dropped at ingest and read back
+ * as zero, which is what makes the file affordable: a receiver carries about a
+ * dozen numbers rather than thirty-seven. A short row is therefore normal, not
+ * corrupt — see `statLine`, which is the only thing that should read one.
+ */
+export type ScoringWeek = number[];
+
+export interface ScoringPlayer {
+  /** Position as nflverse lists it, which is what the TE and RB bonuses key on. */
+  pos: string;
+  /** Team in the most recent week present. */
+  team: string;
+  /** Ascending by week. */
+  weeks: ScoringWeek[];
+}
+
+export interface ScoringFile extends DatasetMeta {
+  columns: typeof SCORING_COLUMNS;
+  /** Keyed by Sleeper player id. */
+  players: Record<string, ScoringPlayer>;
+}
+
+// ---------------------------------------------------------------------------
 // depth.json — nflverse depth_charts, newest snapshot only
 // ---------------------------------------------------------------------------
 
@@ -171,6 +261,7 @@ export interface DataIndex {
 export const DATA_FILES = {
   snaps: 'snaps.json',
   opportunity: 'opportunity.json',
+  scoring: 'scoring.json',
   depth: 'depth.json',
   byes: 'byes.json',
   index: 'index.json',

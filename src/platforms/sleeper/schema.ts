@@ -84,6 +84,16 @@ export const sleeperMatchupSchema = z.object({
   roster_id: z.number(),
   matchup_id: z.number().nullish(),
   points: z.number().nullish(),
+  /**
+   * What Sleeper actually paid each rostered player that week, under this
+   * league's own rules.
+   *
+   * The single most useful field the API publishes and the app ignored: it is
+   * an *oracle* for `engine/scoring`, in every league, for every played week.
+   * It rides along in a response the schedule already fetches, so reading it
+   * costs nothing — see `loadSchedule`.
+   */
+  players_points: z.record(z.string(), z.number()).nullish(),
 });
 
 export const sleeperMatchupsSchema = z.array(sleeperMatchupSchema);

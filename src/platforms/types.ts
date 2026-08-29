@@ -57,6 +57,31 @@ export interface LeagueBundle {
 }
 
 /**
+ * What each platform says it paid each player, by week and then by player id.
+ *
+ * The oracle for `engine/scoring`. Every other number this app produces is a
+ * model that can only be checked against its own intent; this one can be
+ * checked against the league it is running in, because the platform publishes
+ * the answer it actually used.
+ *
+ * Empty before a game has been played, which is the normal state of a league in
+ * August — an absent week is "not yet", never "nobody scored".
+ */
+export type AwardedPoints = Map<number, Map<string, number>>;
+
+/**
+ * A season's fixtures, plus what the platform paid in them.
+ *
+ * One shape rather than two calls because they arrive in one response. Keeping
+ * them apart would mean either fetching every week twice or inventing a cache
+ * to avoid it.
+ */
+export interface Schedule {
+  matchups: Matchup[];
+  awarded: AwardedPoints;
+}
+
+/**
  * The seam that makes this multi-platform.
  *
  * Adding MyFantasyLeague or Fleaflicker means writing one more implementation
@@ -81,5 +106,5 @@ export interface LeagueProvider {
    * nothing else; the alternative is a required method that some provider has
    * to satisfy by lying.
    */
-  loadSchedule?(leagueId: string, throughWeek: number): Promise<Matchup[]>;
+  loadSchedule?(leagueId: string, throughWeek: number): Promise<Schedule>;
 }

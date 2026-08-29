@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { League } from '../types';
+import { pprLabel, scoringBadges } from '../lib/scoringText';
 
 interface Props {
   league: League;
@@ -12,12 +13,6 @@ function Badge({ children }: { children: ReactNode }) {
       {children}
     </span>
   );
-}
-
-function pprLabel(ppr: number): string {
-  if (ppr >= 1) return 'PPR';
-  if (ppr > 0) return `${ppr} PPR`;
-  return 'Standard';
 }
 
 export function LeagueHeader({ league, onReset }: Props) {
@@ -34,6 +29,15 @@ export function LeagueHeader({ league, onReset }: Props) {
           <Badge>{settings.numQbs === 2 ? 'Superflex' : '1QB'}</Badge>
           <Badge>{settings.teamCount}-team</Badge>
           <Badge>{pprLabel(settings.ppr)}</Badge>
+          {/*
+            The rules that move one position against the others, which "PPR" on
+            its own actively hides: the league this was written against is
+            TE-premium with six-point passing touchdowns, and the header claimed
+            only that it counted receptions.
+          */}
+          {scoringBadges(settings.scoring).map((badge) => (
+            <Badge key={badge}>{badge}</Badge>
+          ))}
           <Badge>{league.season}</Badge>
           {settings.taxiSlots > 0 && <Badge>{settings.taxiSlots} taxi</Badge>}
         </div>

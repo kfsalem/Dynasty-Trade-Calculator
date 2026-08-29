@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { LeagueImport } from './components/LeagueImport';
 import { LeagueHeader } from './components/LeagueHeader';
+import { ScoringNote } from './components/ScoringNote';
 import { RosterList } from './components/RosterList';
 import { TradeBuilder, type PendingTrade } from './components/TradeBuilder';
 import { TradeSuggestions } from './components/TradeSuggestions';
@@ -130,6 +131,7 @@ function App() {
   const {
     league,
     players,
+    scoringFidelity,
     values,
     scarcity,
     summaries,
@@ -304,6 +306,12 @@ function App() {
         {ready && (
           <>
             <LeagueHeader league={league} onReset={() => changeLeague(null)} />
+            {/*
+              Under the badges that state the league's rules, because it is the
+              same subject one level down: those say what the league does, this
+              says how much of it the app can actually reproduce.
+            */}
+            <ScoringNote fidelity={scoringFidelity} />
 
             {/*
               A real tablist, not just the roles.
