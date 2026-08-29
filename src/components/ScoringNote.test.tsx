@@ -39,6 +39,19 @@ describe('ScoringNote', () => {
   });
 
   /**
+   * The note reports a *check*, and must not imply the prices on screen come
+   * from it. Nothing values players in league points yet, so "scored in your
+   * league's own rules" would describe a capability as though it were a number
+   * the reader can see.
+   */
+  it('claims a check, not a price', () => {
+    render(<ScoringNote fidelity={fidelity()} />);
+
+    expect(screen.getByText(/Scoring check/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Scored in your league/)).not.toBeInTheDocument();
+  });
+
+  /**
    * Sleeper's key names are identifiers, not English. A manager reading
    * "rec_td_50p" learns nothing; "50+ yard receiving touchdowns" tells him
    * exactly what his league pays for that this app is not counting.
@@ -71,7 +84,7 @@ describe('ScoringNote', () => {
   it('says which numbers it fell back to when it cannot reproduce the league', () => {
     render(<ScoringNote fidelity={fidelity({ verdict: 'unreliable', exact: 300 })} />);
 
-    expect(screen.getByText(/priced off market rankings/)).toBeInTheDocument();
+    expect(screen.getByText(/come from market prices/)).toBeInTheDocument();
   });
 });
 

@@ -19,6 +19,13 @@ const count = (n: number) => n.toLocaleString('en-US');
  * It is deliberately quiet when there is nothing to report. A league this
  * engine scores exactly gets one short line; a league it cannot gets told which
  * rules, in words rather than in Sleeper's key names.
+ *
+ * **It reports the check, not the prices.** Nothing in the app values players
+ * in league points yet — that is the follow-up this issue was split from — so a
+ * note reading "scored in your league's own rules" would be describing a
+ * capability as though it were a number on screen. When replacement level
+ * starts reading `scoringIsUsable`, this copy gains a sentence about pricing
+ * and not before.
  */
 export function ScoringNote({ fidelity }: Props) {
   if (!fidelity) return null;
@@ -39,10 +46,9 @@ export function ScoringNote({ fidelity }: Props) {
   if (verdict === 'unreliable') {
     return (
       <p className="mt-3 rounded-lg border border-caution bg-caution-soft p-3 text-sm text-caution">
-        Values here are priced off market rankings, not this league's scoring.{' '}
-        {checked ? `Only ${checked}, ` : ''}
-        which is too far off to trust — so the app is using the ranking it can stand
-        behind rather than a number it cannot.
+        Scoring check: this app reproduces {checked ?? 'none of your league'} — too far
+        off to price anything on. Player values here come from market prices, which is
+        what they would have done regardless.
       </p>
     );
   }
@@ -50,11 +56,11 @@ export function ScoringNote({ fidelity }: Props) {
   return (
     <p className="mt-3 rounded-lg border border-line bg-raised p-3 text-sm text-muted">
       {verdict === 'exact' ? (
-        <>Scored in your league's own rules — {checked}.</>
+        <>Scoring check: this app reproduces your league's rules exactly — {checked}.</>
       ) : (
         <>
-          Scored in your league's own rules
-          {checked ? `, and ${checked}` : ''}. Not counted:{' '}
+          Scoring check
+          {checked ? `: ${checked}` : ' on your league’s rules'}. Not counted:{' '}
           {joinWords(missing)} — nflverse publishes weekly totals, which cannot say how
           long a touchdown was.
         </>
