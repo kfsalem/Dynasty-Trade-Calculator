@@ -23,12 +23,15 @@ export const sleeperLeagueSchema = z.object({
   /**
    * The league's rules.
    *
-   * Sleeper published 51 keys here for the test league's 2025 season and 47 for
-   * its 2023 — it adds keys over time and without notice, which is the whole
-   * reason this object strips what it does not name instead of failing on it.
-   * Every key below is `nullish` for the same reason in the other direction:
-   * `waiver_bid_min` is documented, is meaningful, and is simply *absent* from
-   * all four seasons of that league.
+   * The count moves between leagues and between seasons of one league: 48 to 52
+   * keys across four seasons of one real league, 47 to 51 across another. Sleeper
+   * adds keys over time and without notice, which is the whole reason this object
+   * strips what it does not name instead of failing on it.
+   *
+   * Every key below is `nullish` for the same reason in the other direction.
+   * `waiver_bid_min` is the one to look at: published in every season of one of
+   * those leagues and absent from every season of the other. Neither "always
+   * there" nor "never there" would have survived contact with the second league.
    */
   settings: z
     .object({

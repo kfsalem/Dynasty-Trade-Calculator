@@ -991,29 +991,57 @@ layer of it that cannot be confidently wrong.
 rest are deterministic facts about how a league works — no model, no inference,
 no shrinkage. They are read or they are not.
 
-### What was verified, and what the issue got wrong
+### Two leagues, because one was not enough
 
-Checked against the test league and the three seasons chained behind it
-(2025 → 2023) rather than against the documentation:
+**Corrected 2026-08-28.** The findings first recorded here were gathered from
+the wrong league. `LeagueImport` carries **Tight Ends Dynasty League**
+(`1235622229488717824`) as its placeholder, and that is what got checked; the
+league every issue in this pass means is **The Eternal Rebuild**
+(`1336802780030988288`), which is the one with 148 scoring rules. Both are real
+leagues and every behaviour shipped in #78 is correct — but three of the stated
+findings described only the placeholder, and two of them contradicted the issue
+in the issue's favour.
 
-- **The key count moves.** 51 keys in 2025, 47 in 2023. Sleeper adds settings
-  without notice, which is why the schema strips what it does not name instead
-  of failing on it.
-- **`waiver_bid_min` is never published.** The issue listed it among the keys
-  available; it is absent from all four seasons. That is exactly why it is
-  `number | null` rather than a number with a zero default — "the minimum bid is
-  $0" and "this league did not say" are different facts, and #47 will need to
-  tell them apart.
-- **`trade_deadline` is 99 in every season**, which is Sleeper's "no deadline".
-  Rather than hardcoding the sentinel, anything past week 18 is read as a
-  deadline that can never arrive. Both readings agree on 99, and this one cannot
-  be wrong about a deadline that could actually bind.
-- **`taxi_years` really does vary** — 1 in 2023 and 2024, 3 in 2025. The fields
-  are not decorative.
-- **Bench depth was never discarded**, contrary to the issue. `roster_positions`
-  reaches `allSlots` intact and `trade.ts` has always counted it into
-  `rosterCap`. What was missing is a *named* figure, which is what `benchSlots`
-  now is: 19 bench spots against 11 starting slots in the test league.
+The corrected picture, from four seasons of each:
+
+| | Eternal Rebuild | Tight Ends |
+|---|---|---|
+| settings keys | 48–52 | 47–51 |
+| scoring keys | 52 → 148 | 43 |
+| `waiver_bid_min` | published every season | absent every season |
+| `trade_deadline` | **13** — a real one | 99 — "no deadline" |
+| `playoff_seed_type` | 1 | 0 |
+| bench spots | 7 | 19 |
+| starting slots | 10 | 11 |
+
+What survives, and what changes:
+
+- **`waiver_bid_min` is not "never published".** It is published in every season
+  of one league and absent from every season of the other. The `number | null`
+  handling is right — and better justified by the split than by the absence,
+  because it is *variance* that makes the distinction load-bearing. The issue was
+  right to list the key; this document was wrong to say otherwise.
+- **`trade_deadline` is not always the 99 sentinel.** The Eternal Rebuild sets a
+  genuine week-13 deadline in all four of its seasons, so the deadline work in
+  #78 binds in the league it was written for rather than being defensive code
+  for a hypothetical. Reading anything past week 18 as "never binds" still
+  handles both leagues correctly.
+- **The playoff codes are not all uniformly `0`.** `playoff_seed_type` is 1 in
+  one league and 0 in the other. Carrying them as raw numbers is still right, and
+  the reason is unchanged: nobody here has checked either value against an actual
+  bracket.
+- **The key count moves**, in both leagues and between seasons of each. Sleeper
+  adds settings without notice, which is why the schema strips what it does not
+  name instead of failing on it.
+- **Bench depth was never discarded**, which remains true and is the one
+  correction in the issue's direction. `roster_positions` reaches `allSlots`
+  intact and `trade.ts` has always counted it into `rosterCap`; what was missing
+  is a *named* figure. `benchSlots` is now it, and the 7-versus-19 spread between
+  these two leagues is what makes it worth naming.
+
+The methodological lesson is cheap and worth keeping: **the placeholder league id
+in the UI is not the league the issues are about.** Check the id before quoting a
+number from it.
 
 ### What changes an answer today
 

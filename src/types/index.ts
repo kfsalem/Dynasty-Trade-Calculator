@@ -237,11 +237,13 @@ export interface LeagueSettings {
   /**
    * Bracket shape, as the platform's own codes.
    *
-   * Carried rather than named. The app has only ever seen `0` for all three —
-   * four seasons of the test league — so translating the other values into
-   * words would be inventing meanings for numbers nobody here has observed.
-   * #52's standings rule needs the raw codes; it can name them when it has a
-   * league that uses one.
+   * Carried rather than named. Two real leagues across seven seasons show `0`
+   * for `playoff_type` and `playoff_round_type` throughout, and `playoff_seed_type`
+   * splitting 0/1 between them — so one code out of three has ever been seen to
+   * vary, and none has been seen alongside a bracket anyone here has checked.
+   * Translating them into words would be inventing meanings for numbers nobody
+   * has observed. #52's standings rule needs the raw codes; it can name them
+   * when it has a bracket to check them against.
    */
   playoffType: number | null;
   playoffRoundType: number | null;
@@ -261,11 +263,12 @@ export interface LeagueSettings {
    * Last week trades are allowed, or null when trading never closes.
    *
    * Null covers both the league that publishes no deadline and the one that
-   * publishes a week past the end of the season — Sleeper stores "no deadline"
-   * as `99`, verified across four seasons of the test league. Rather than
-   * guessing which large numbers are sentinels, any week beyond the NFL
-   * regular season is read as "never binds", which is the same answer for both
-   * and cannot be wrong about a deadline that could actually arrive.
+   * publishes a week past the end of the season. Sleeper stores "no deadline"
+   * as `99` — seen in all four seasons of one real league, while another sets a
+   * genuine week-13 deadline across four of its own. Rather than guessing which
+   * large numbers are sentinels, any week beyond the NFL regular season is read
+   * as "never binds", which is the same answer for both and cannot be wrong
+   * about a deadline that could actually arrive.
    */
   tradeDeadline: number | null;
   /**
@@ -318,9 +321,12 @@ export interface WaiverSettings {
   /** FAAB budget, when the league runs one; null when it does not. */
   budget: number | null;
   /**
-   * Smallest legal bid. Null when absent — and it *is* absent: Sleeper omits
-   * the key entirely in all four seasons of the test league, which is why it
-   * cannot be read as a number with a zero default.
+   * Smallest legal bid, or null when the league does not publish one.
+   *
+   * It really does vary: one real league carries the key in all four of its
+   * seasons, another omits it in all three of its own. That is why it cannot be
+   * a number with a zero default — "the minimum bid is $0" and "this league did
+   * not say" are different facts, and #47 has to tell them apart.
    */
   minBid: number | null;
 }
