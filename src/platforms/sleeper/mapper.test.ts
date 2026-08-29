@@ -52,9 +52,9 @@ describe('mapSettings', () => {
    * The contract that lets every field above be added safely: a league that
    * publishes none of these keys has to come out behaving exactly as it did
    * before the app could read them. Sleeper adds settings keys without notice
-   * and old leagues carry fewer of them — the 2023 season of the test league
-   * publishes 47 against 2025's 51 — so "absent" is the common case, not the
-   * edge one.
+   * and no two leagues carry the same set — 48 to 52 keys across four seasons of
+   * one real league, 47 to 51 across another — so "absent" is the common case,
+   * not the edge one.
    */
   it('defaults every new setting to the permissive reading when the league omits it', () => {
     const settings = mapSettings({ ...baseLeague, settings: null });
@@ -92,9 +92,10 @@ describe('mapSettings', () => {
   });
 
   /**
-   * `99` is what Sleeper stores for "no deadline" — verified against all four
-   * seasons of the test league, every one of which carries it. Read literally
-   * it is a week 81 games past the end of the season.
+   * `99` is what Sleeper stores for "no deadline" — carried by all four seasons
+   * of one real league, while another sets a real week-13 deadline in all four
+   * of its own. Read literally, 99 is a week 81 games past the end of the
+   * season.
    */
   it('reads a deadline that cannot arrive as no deadline at all', () => {
     const deadlineOf = (trade_deadline: number | null | undefined) =>
@@ -131,15 +132,17 @@ describe('mapSettings', () => {
     expect(settings.reserveAllows.out).toBe(true);
     expect(settings.reserveAllows.cov).toBe(true);
     expect(settings.reserveAllows.doubtful).toBe(false);
-    // Never published by the test league, and absent must not read as allowed.
+    // Absent must not read as allowed: claiming a designation may be stashed
+    // when the league never said so overstates how cheap an injured man is to
+    // hold, and that is the direction that costs somebody a roster spot.
     expect(settings.reserveAllows.na).toBe(false);
   });
 
   /**
-   * `waiver_bid_min` is documented and meaningful and simply *absent* from all
-   * four seasons of the test league, which is why it cannot be a number with a
-   * zero default: "the minimum bid is $0" and "this league did not say" are
-   * different facts, and #47 will need to tell them apart.
+   * `waiver_bid_min` is published by one real league in every season and omitted
+   * by another in every season, which is why it cannot be a number with a zero
+   * default: "the minimum bid is $0" and "this league did not say" are different
+   * facts, and #47 will need to tell them apart.
    */
   it('carries waiver settings, including the budget key that is often missing', () => {
     const settings = mapSettings({

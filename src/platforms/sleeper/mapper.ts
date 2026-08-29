@@ -132,11 +132,13 @@ const LAST_POSSIBLE_WEEK = 18;
 /**
  * The week trading closes, or null when it never does.
  *
- * Sleeper stores "no deadline" as `99` — verified across all four seasons of
- * the test league. Rather than hardcoding that sentinel and hoping no league
- * uses a different large number, anything past the end of the NFL regular
- * season is read as "never binds". Both readings agree on 99, and this one
- * cannot be wrong about a deadline that could actually arrive.
+ * Sleeper stores "no deadline" as `99`, which is what one real league carries
+ * in all four of its seasons. Another sets a genuine week-13 deadline across
+ * four of its own, so both branches of this are load-bearing rather than
+ * theoretical. Rather than hardcoding the sentinel and hoping no league uses a
+ * different large number, anything past the end of the NFL regular season is
+ * read as "never binds": both readings agree on 99, and this one cannot be
+ * wrong about a deadline that could actually arrive.
  */
 function mapTradeDeadline(week: number | null | undefined): number | null {
   if (week == null || week <= 0 || week > LAST_POSSIBLE_WEEK) return null;
@@ -169,8 +171,9 @@ export function mapSettings(league: SleeperLeague): LeagueSettings {
     startingSlots,
     allSlots,
     // Counted, not configured: Sleeper expresses bench depth by repeating "BN"
-    // in roster_positions rather than by publishing a number. The test league
-    // carries 19 of them against 11 starting slots.
+    // in roster_positions rather than by publishing a number. Two real leagues
+    // carry 7 and 19 bench spots against 10 and 11 starting slots — which is
+    // the spread that makes the figure worth having at all.
     benchSlots: allSlots.filter((slot) => slot === 'BN').length,
     taxiSlots: settings?.taxi_slots ?? 0,
     taxiYears: settings?.taxi_years ?? 0,
