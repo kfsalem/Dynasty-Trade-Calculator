@@ -49,6 +49,15 @@ vi.mock('./hooks/useLeagueData', () => ({
       retry: () => {},
       retrying: false,
     },
+  // The bench panel's own query. Idle here: these tests are about the shell —
+  // which tab renders what, and what survives a league switch — and the panel
+  // renders nothing at all until a history arrives.
+  useBenchReport: () => ({
+    report: undefined,
+    loading: false,
+    failed: false,
+    truncated: false,
+  }),
 }));
 
 const settings = makeSettings(['QB', 'RB'], { draftRounds: 1, teamCount: 2 });

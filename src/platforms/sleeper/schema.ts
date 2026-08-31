@@ -14,6 +14,16 @@ import { z } from 'zod';
 
 export const sleeperLeagueSchema = z.object({
   league_id: z.string(),
+  /**
+   * The same league, one season earlier. The whole of a dynasty league's
+   * history hangs off this one field.
+   *
+   * Two shapes for "there is no earlier season", both seen live: absent, and
+   * the string `"0"`. The second is the one that bites — it is a perfectly
+   * good league id as far as any type is concerned, and following it answers
+   * 404. Every walk over this field has to stop on both.
+   */
+  previous_league_id: z.string().nullish(),
   name: z.string(),
   season: z.string(),
   status: z.string(),
@@ -94,6 +104,24 @@ export const sleeperMatchupSchema = z.object({
    * costs nothing — see `loadSchedule`.
    */
   players_points: z.record(z.string(), z.number()).nullish(),
+  /**
+   * The lineup this manager actually set that week, in slot order.
+   *
+   * Positional exactly like the roster's own `starters`, `"0"` and all — see
+   * `mapSetLineup`. This is the one on the *week*, which is the only place the
+   * past is recorded: the roster endpoint knows one lineup, the last one set,
+   * and by January that is a week-17 lineup standing in front of seventeen
+   * others nobody can see any more.
+   */
+  starters: z.array(z.string()).nullish(),
+  /**
+   * Everyone on the roster that week, IR and taxi included.
+   *
+   * The roster *as it was*, which is why bench arithmetic reads this and not
+   * the roster endpoint: a man traded away in October is on this list in
+   * September, where he belongs, and gone from the roster feed entirely.
+   */
+  players: z.array(z.string()).nullish(),
 });
 
 export const sleeperMatchupsSchema = z.array(sleeperMatchupSchema);
@@ -112,6 +140,20 @@ export const sleeperRosterSchema = z.object({
       ties: z.number().nullish(),
       fpts: z.number().nullish(),
       fpts_decimal: z.number().nullish(),
+      /**
+       * Sleeper's own season total for the best lineup this roster could have
+       * fielded — its "potential points".
+       *
+       * The oracle for `engine/benchPoints`, and the second one this API has
+       * turned out to publish: `players_points` lets the scoring engine check
+       * itself, and this lets the lineup arithmetic built on top of it do the
+       * same. It rides along in a response the history walk already makes.
+       *
+       * Split across two keys with the decimals as an integer, the same way
+       * `fpts` is — `ppts: 2385, ppts_decimal: 22` is 2385.22.
+       */
+      ppts: z.number().nullish(),
+      ppts_decimal: z.number().nullish(),
     })
     .nullish(),
 });

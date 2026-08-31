@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { mapFreeAgents, mapLeague, mapMatchups, mapPlayer, mapSettings } from './mapper';
+import {
+  mapClaimedTotals,
+  mapFreeAgents,
+  mapLeague,
+  mapMatchups,
+  mapPlayer,
+  mapSeasonManagers,
+  mapSettings,
+  mapWeekLineups,
+} from './mapper';
 import { parseLeagueId, type SlimPlayer } from './client';
 import type {
   SleeperLeague,
@@ -443,5 +452,119 @@ describe('mapFreeAgents', () => {
 
   it('drops players with no NFL team — retired and unsigned are not pickups', () => {
     expect(mapFreeAgents(index, rostered).has('unsigned')).toBe(false);
+  });
+});
+
+describe('mapWeekLineups', () => {
+  const row = (
+    roster_id: number,
+    starters: string[],
+    players: string[],
+    players_points: Record<string, number>,
+  ): SleeperMatchup => ({ roster_id, matchup_id: 1, points: 0, starters, players, players_points });
+
+  it('reads the lineup, the roster and the payments out of one row', () => {
+    const [lineup] = mapWeekLineups(
+      6,
+      [row(3, ['a', 'b'], ['a', 'b', 'c'], { a: 12.4, b: 3, c: 20.1 })],
+      2,
+    );
+
+    expect(lineup.week).toBe(6);
+    expect(lineup.rosterId).toBe(3);
+    expect(lineup.starterIds).toEqual(['a', 'b']);
+    expect(lineup.playerIds).toEqual(['a', 'b', 'c']);
+    expect(lineup.points.get('c')).toBe(20.1);
+  });
+
+  /**
+   * Sleeper publishes the whole structure days before kickoff with every figure
+   * at zero. A bench comparison that read those would report a perfect lineup
+   * for a week nobody has played — the same trap `mapAwardedPoints` documents.
+   */
+  it('returns nothing for a week that has not been played', () => {
+    expect(mapWeekLineups(1, [row(1, ['a'], ['a', 'b'], { a: 0, b: 0 })], 1)).toEqual([]);
+  });
+
+  it('keeps a week where anybody scored anything', () => {
+    expect(mapWeekLineups(1, [row(1, ['a'], ['a', 'b'], { a: 0, b: 0.5 })], 1)).toHaveLength(1);
+  });
+
+  it('keeps an unfilled slot in place rather than compacting the lineup', () => {
+    const [lineup] = mapWeekLineups(
+      2,
+      [row(1, ['a', '0', 'b'], ['a', 'b'], { a: 10, b: 4 })],
+      3,
+    );
+    expect(lineup.starterIds).toEqual(['a', null, 'b']);
+  });
+
+  /**
+   * Starting slots move between seasons, so a lineup is aligned to the slots of
+   * the season it was set in. One that does not fit is reported as no lineup at
+   * all rather than shifted into somebody else's position.
+   */
+  it('refuses a lineup that does not fit the season it is read against', () => {
+    const [lineup] = mapWeekLineups(2, [row(1, ['a', 'b'], ['a', 'b'], { a: 10, b: 4 })], 3);
+    expect(lineup.starterIds).toEqual([]);
+    expect(lineup.playerIds).toEqual(['a', 'b']);
+  });
+});
+
+describe('mapClaimedTotals', () => {
+  const roster = (roster_id: number, settings: SleeperRoster['settings']): SleeperRoster => ({
+    roster_id,
+    owner_id: `u${roster_id}`,
+    players: [],
+    starters: [],
+    settings,
+  });
+
+  it('reassembles the split decimals the way Sleeper stores them', () => {
+    const claimed = mapClaimedTotals([
+      roster(1, { fpts: 2170, fpts_decimal: 10, ppts: 2385, ppts_decimal: 22 }),
+    ]);
+
+    expect(claimed.get(1)).toEqual({ scored: 2170.1, potential: 2385.22 });
+  });
+
+  it('leaves out a roster the platform has not totalled', () => {
+    expect(mapClaimedTotals([roster(1, { wins: 3 })]).has(1)).toBe(false);
+    expect(mapClaimedTotals([roster(1, null)]).has(1)).toBe(false);
+  });
+});
+
+describe('mapSeasonManagers', () => {
+  const user: SleeperUser = {
+    user_id: 'u1',
+    display_name: 'Ann',
+    avatar: null,
+    metadata: { team_name: 'The Ann Show' },
+  };
+
+  it('keys a season on the roster ids of that season, carrying the user id', () => {
+    const managers = mapSeasonManagers(
+      [{ roster_id: 4, owner_id: 'u1', players: [], starters: [], settings: null }],
+      [user],
+    );
+
+    expect(managers.get(4)).toEqual({
+      userId: 'u1',
+      name: 'Ann',
+      teamName: 'The Ann Show',
+    });
+  });
+
+  it('carries an orphan team with no user id rather than dropping it', () => {
+    const managers = mapSeasonManagers(
+      [{ roster_id: 9, owner_id: null, players: [], starters: [], settings: null }],
+      [user],
+    );
+
+    expect(managers.get(9)).toEqual({
+      userId: null,
+      name: 'Orphan team',
+      teamName: 'Orphan team',
+    });
   });
 });

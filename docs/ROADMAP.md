@@ -1276,3 +1276,105 @@ divides two different currencies and teaches a `retained` share the engine never
 computes — the exact failure that panel's own comment warns about. Both ends
 take the premium, and a test pins that a uniform correction cannot move the
 ratio.
+
+## Points left on the bench
+
+**Status:** Shipped — the payoff half of
+[#74](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/74), on top of
+the `players_points` ingestion that landed with #73.
+
+The lineup a manager set against the best one his roster could have fielded,
+scored on what the league itself paid, for every week it has ever played. There
+is no model in it anywhere: the lineup, the roster and the points are all
+published, and the comparison between two lineups over a completed week is
+arithmetic.
+
+### Sleeper publishes the answer, too
+
+`roster.settings.ppts` — "potential points" — is Sleeper's own season total for
+the best lineup each roster could have fielded, and it ships in a response the
+walk already makes. It is the second oracle this API has turned out to hold,
+after `players_points`, and it turns the whole engine from something to argue
+for into something to check:
+
+```
+60 roster-seasons across two real leagues
+  within half a point of Sleeper's own total   46 (77%)
+  aggregate error                              0.12% of potential points
+  worst single roster-season                   +1.31%
+  residuals below zero                         none
+```
+
+The residual is **one-sided by construction**, which is what makes it safe. See
+below.
+
+### The pool is the whole roster, and that was measured rather than assumed
+
+The obvious objection to any bench figure is that it credits the manager with
+players he could not legally have started — a rookie on the taxi squad, a man on
+injured reserve. It is a real effect and a large one: excluding everyone on the
+season's final IR and taxi lists moves the league average from 20.7 to 14.2
+points a week on one test league, a third of the figure.
+
+Three things settle it.
+
+**Per-week parking is not published.** The roster endpoint's `reserve` and `taxi`
+are the state *now* — for a finished season, its final state. Neither list can
+say who was parked in week 9. The transaction feed does not carry it either:
+`status_updates` is empty on all 716 transactions across a full season of the
+test league, which is checked rather than assumed.
+
+**The end-of-season lists are wrong in both directions.** 14 to 22 men on those
+lists *started* games that same season, so excluding them under-counts; and IR
+men average 3.5 to 9.3 points a week across the six league-seasons measured,
+because a player placed on IR in November played all of October. There is no way to use the list that is
+not wrong somewhere.
+
+**Sleeper includes them.** Its own `ppts` is reproduced to 0.12% by a pool that
+holds the whole roster, and not by either narrower pool. So the app agrees with
+the number the league's own site shows its managers, which is the only figure a
+user can check this against.
+
+What remains is the one-sided residual: Sleeper knows who was parked in a given
+week and this app does not, so its figure is at most a little higher than the
+platform's — 0.12% on aggregate, never lower on any roster-season observed.
+
+### Four traps, all found live
+
+**`previous_league_id` is `"0"`, not null, at the head of the chain.** Both test
+leagues end that way. It is a perfectly good league id as far as any type is
+concerned and answers 404, so every walk has to stop on both shapes.
+
+**Starting slots move between seasons.** One test league plays ten starting slots
+in 2023 and eleven in 2025. A lineup is positional, so aligning a 2023 week to
+2026's slots shifts every player after the new slot into somebody else's
+position — the compaction bug `mapSetLineup` documents, one season removed. Each
+season is therefore read with its own settings, not the league's current ones.
+
+**`roster_id` is not stable across seasons; `user_id` is.** Both test leagues
+happen to keep their roster ids, which is exactly why this cannot be relied on —
+the failure it produces, one manager's record shown under another's name, is
+worse than showing nothing. Orphan teams have no `user_id` at all, so their
+seasons are deliberately never joined to each other.
+
+**`custom_points` is a commissioner override.** Week 3 of Westeros 2023: the
+lineup earned 122.58 and the commissioner recorded 136.58. `fpts` carries the
+override and `ppts` does not, which is why the check compares potential against
+potential — and why the panel scores the set lineup from `players_points` rather
+than from the fixture's own total. An adjustment to the standings is not
+something the lineup did.
+
+### Cost
+
+68 requests for a four-season league, about two seconds cold; three requests
+warm, since every season but the current one is finished and cached in
+IndexedDB. Gated on a claimed team and the team tab, so a visitor pricing a
+trade never pays for it. Fourteen of the 68 re-read the current season's weeks
+that `loadSchedule` already fetched — left alone deliberately, since sharing
+them would couple an optional panel to the odds every league load computes.
+
+### What #74 still leaves open
+
+Per-player consistency — floor, ceiling and spike weeks in the league's own
+points — is the third thing that issue asks for and is untouched here. It reads
+the same `players_points` this now walks, so the data is in hand.
