@@ -8,6 +8,11 @@ import type {
   Roster,
   InjuryStatus,
 } from '../../types';
+import type {
+  ClaimedTotals,
+  SeasonManager,
+  WeekLineup,
+} from '../types';
 import type { SlimPlayer } from './client';
 import type {
   SleeperLeague,
@@ -315,7 +320,7 @@ export function mapAwardedPoints(rows: SleeperMatchup[]): Map<string, number> {
  * safe direction to be wrong in: `startSit` then recommends a lineup instead of
  * claiming a mistake nobody made.
  */
-function mapSetLineup(
+export function mapSetLineup(
   starters: string[] | null | undefined,
   slotCount: number,
 ): (string | null)[] {
@@ -365,4 +370,110 @@ export function mapLeague(
     settings,
     rosters: mapped.sort((a, b) => a.rosterId - b.rosterId),
   };
+}
+
+/**
+ * One week of matchup rows, read as what each manager did with his roster.
+ *
+ * The same response `mapMatchups` reassembles into fixtures and
+ * `mapAwardedPoints` reads the oracle out of, asked a third question: who was
+ * on this roster, who did he start, and what did each of them earn. All three
+ * come from one request, which is why a season of history costs a request per
+ * week rather than three.
+ *
+ * `slotCount` is *that season's*, not today's. A league that added a
+ * SUPER_FLEX between seasons has a different lineup shape in each of them, and
+ * aligning a 2023 lineup to a 2026 slot list would shift every player after the
+ * new slot into somebody else's position — the compaction bug `mapSetLineup`
+ * documents, one season removed.
+ *
+ * An unplayed week returns nothing at all. Sleeper publishes the whole
+ * structure — rosters, starters, a points key per player — days before kickoff,
+ * with every figure at zero, and a bench comparison that read those would
+ * report a perfect lineup for a week nobody has played. Same rule and same
+ * reason as `mapAwardedPoints`, which is why the two agree on what "played"
+ * means: somebody, somewhere, scored something.
+ */
+export function mapWeekLineups(
+  week: number,
+  rows: SleeperMatchup[],
+  slotCount: number,
+): WeekLineup[] {
+  const played = rows.some((row) =>
+    Object.values(row.players_points ?? {}).some((points) => points !== 0),
+  );
+  if (!played) return [];
+
+  return rows.map((row) => {
+    const points = new Map<string, number>();
+    for (const [playerId, scored] of Object.entries(row.players_points ?? {})) {
+      if (isRealPlayerId(playerId)) points.set(playerId, scored);
+    }
+
+    return {
+      week,
+      rosterId: row.roster_id,
+      starterIds: mapSetLineup(row.starters, slotCount),
+      playerIds: (row.players ?? []).filter(isRealPlayerId),
+      points,
+    };
+  });
+}
+
+/**
+ * What the platform says each roster scored, and could have scored.
+ *
+ * `ppts` is Sleeper's own potential points — the season total of the best
+ * lineup each roster could have fielded — and it exists to be disagreed with:
+ * `engine/benchPoints` computes the same quantity from the weeks and reports
+ * the residual. Both figures are stored as an integer plus hundredths, the way
+ * `fpts` is.
+ *
+ * A roster with neither is left out rather than entered as a pair of zeros. The
+ * distinction matters to the check that reads this: no answer from the platform
+ * is not the platform answering zero.
+ */
+export function mapClaimedTotals(rosters: SleeperRoster[]): Map<number, ClaimedTotals> {
+  const claimed = new Map<number, ClaimedTotals>();
+
+  for (const roster of rosters) {
+    const settings = roster.settings;
+    if (!settings || (settings.fpts == null && settings.ppts == null)) continue;
+
+    claimed.set(roster.roster_id, {
+      scored: (settings.fpts ?? 0) + (settings.fpts_decimal ?? 0) / 100,
+      potential: (settings.ppts ?? 0) + (settings.ppts_decimal ?? 0) / 100,
+    });
+  }
+
+  return claimed;
+}
+
+/**
+ * Who owned each roster in a season, keyed by that season's roster ids.
+ *
+ * Built per season and never reused across them. `roster_id` is a position in
+ * one season's table; `user_id` is the manager. Attributing a season by roster
+ * id is the trap #52 and #74 both carry, and the failure it produces — one
+ * manager's record shown under another's name — is worse than showing nothing.
+ */
+export function mapSeasonManagers(
+  rosters: SleeperRoster[],
+  users: SleeperUser[],
+): Map<number, SeasonManager> {
+  const usersById = new Map(users.map((u) => [u.user_id, u]));
+  const managers = new Map<number, SeasonManager>();
+
+  for (const roster of rosters) {
+    const user = roster.owner_id ? usersById.get(roster.owner_id) : undefined;
+    const name = user?.display_name ?? 'Orphan team';
+
+    managers.set(roster.roster_id, {
+      userId: roster.owner_id ?? null,
+      name,
+      teamName: user?.metadata?.team_name?.trim() || name,
+    });
+  }
+
+  return managers;
 }

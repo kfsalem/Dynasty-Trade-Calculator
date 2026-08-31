@@ -13,7 +13,7 @@ import { LeagueError } from './components/LeagueError';
 import { ReplacementLevel } from './components/ReplacementLevel';
 import { FreeAgentBoard } from './components/FreeAgentBoard';
 import { EmptyState } from './components/EmptyState';
-import { useLeagueSummaries } from './hooks/useLeagueData';
+import { useBenchReport, useLeagueSummaries } from './hooks/useLeagueData';
 import { useMyRoster } from './hooks/useMyRoster';
 import { decodeTrade, encodeTrade, resolveShare } from './lib/share';
 
@@ -158,6 +158,18 @@ function App() {
     retry,
     retrying,
   } = useLeagueSummaries(leagueId);
+
+  /**
+   * Points left on the bench, and the only query in the app somebody has to ask
+   * for.
+   *
+   * Gated on the team tab being open with a team claimed, because that is the
+   * only place it is read and because it costs a request per week per season —
+   * roughly seventy for a four-year league. A visitor pasting a league id to
+   * price a trade never pays for it; once it has loaded, react-query keeps it
+   * and switching tabs costs nothing.
+   */
+  const bench = useBenchReport(leagueId, tab === 'analysis' && myRosterId !== null);
 
   useEffect(() => {
     try {
@@ -423,6 +435,7 @@ function App() {
                     season={season}
                     freeAgents={freeAgents}
                     activityCurrent={activityCurrent}
+                    bench={bench}
                     onChangeTeam={() => setMyRoster(null)}
                   />
                 ))}

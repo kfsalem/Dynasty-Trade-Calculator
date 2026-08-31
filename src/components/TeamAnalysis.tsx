@@ -9,7 +9,9 @@ import {
 } from '../engine/analysis';
 import type { PositionScarcity } from '../engine/replacement';
 import type { FreeAgentBoard } from '../engine/freeAgents';
+import type { BenchReport } from '../engine/benchPoints';
 import { POSITION_STYLES, formatValue } from '../lib/format';
+import { BenchPoints } from './BenchPoints';
 import { ContentionScatter } from './charts/ContentionScatter';
 import { PositionalStrengthChart } from './charts/PositionalStrengthChart';
 import { ScarcityChart } from './charts/ScarcityChart';
@@ -31,6 +33,20 @@ interface Props {
   freeAgents: FreeAgentBoard | undefined;
   /** Whether the activity data describes the season being played. */
   activityCurrent: boolean;
+  /**
+   * Every season this league has played, reduced to points left on the bench.
+   *
+   * Passed in rather than fetched here, like everything else on this tab: the
+   * app does its loading in one place. Its four fields travel together because
+   * the panel has a different thing to say for each — loading, failed, loaded,
+   * and loaded but truncated are four states, not one nullable value.
+   */
+  bench: {
+    report: BenchReport | undefined;
+    loading: boolean;
+    failed: boolean;
+    truncated: boolean;
+  };
   onChangeTeam: () => void;
 }
 
@@ -52,6 +68,7 @@ export function TeamAnalysis({
   season,
   freeAgents,
   activityCurrent,
+  bench,
   onChangeTeam,
 }: Props) {
   const analysis = analyzeTeam(myRosterId, summaries, league.settings, season);
@@ -162,6 +179,21 @@ export function TeamAnalysis({
           )}
         </div>
       </div>
+
+      {/*
+        After the window, and deliberately not before it. Everything above this
+        point is about a decision still open — the lineup on Sunday, the trades
+        this season is worth making. This is the seasons already played, and it
+        is the one panel on the tab a manager cannot act on.
+      */}
+      <BenchPoints
+        report={bench.report}
+        loading={bench.loading}
+        failed={bench.failed}
+        truncated={bench.truncated}
+        userId={roster.ownerId}
+        bestBall={league.settings.bestBall}
+      />
 
       <ContentionScatter
         contention={contentionPoints}

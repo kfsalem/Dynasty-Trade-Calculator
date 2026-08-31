@@ -11,6 +11,7 @@ import { pricedPositions, valueLeague, type LeagueActivity } from '../engine/rep
 import { snapShares } from '../engine/snapShare';
 import { opportunities } from '../engine/opportunity';
 import { checkScoring, scoringIsUsable } from '../engine/scoringCheck';
+import { benchIsUsable, benchPoints, type BenchReport } from '../engine/benchPoints';
 import { playerRoles } from '../engine/role';
 import { byeTeams as teamsOnBye } from '../engine/byes';
 import { roleTrends } from '../engine/roleTrend';
@@ -88,6 +89,59 @@ export function useSchedule(leagueId: string | null, playoffWeekStart: number | 
     staleTime: 24 * 60 * 60 * 1000,
     retry: 1,
   });
+}
+
+/**
+ * Every season this league has played, walked back through `previous_league_id`.
+ *
+ * The most expensive query in the app — a request per week per season — and the
+ * only one gated on somebody actually wanting it. `enabled` is the whole
+ * policy: nothing here is on the path to a rendered league, and a visitor who
+ * never opens their own team never pays for it.
+ *
+ * An hour of `staleTime` because all of it but the current week is immutable,
+ * and the seasons behind the current one are cached in IndexedDB by the adapter
+ * on top of that — see `loadSeason`.
+ */
+export function useLeagueHistory(leagueId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['history', leagueId],
+    queryFn: () => sleeperProvider.loadHistory!(leagueId as string),
+    enabled: Boolean(leagueId && enabled && sleeperProvider.loadHistory),
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
+  });
+}
+
+/**
+ * Points left on the bench, per manager, across the league's whole history.
+ *
+ * Its own hook rather than another field on `useLeagueSummaries`, because it is
+ * the one thing in the app that is genuinely optional: everything in that hook
+ * is needed to render a league, and none of this is.
+ *
+ * The report is withheld when the engine cannot reproduce the platform's own
+ * potential-points totals. That is `scoringIsUsable`'s rule applied to lineups
+ * — a figure this specific, about a manager's own decisions, has to be one the
+ * league's own site would agree with.
+ */
+export function useBenchReport(leagueId: string | null, enabled: boolean) {
+  const query = useLeagueHistory(leagueId, enabled);
+
+  const report = useMemo<BenchReport | undefined>(() => {
+    if (!query.data) return undefined;
+    const computed = benchPoints(query.data);
+    return benchIsUsable(computed.fidelity) ? computed : undefined;
+  }, [query.data]);
+
+  return {
+    report,
+    /** True while the walk is in flight, so the panel can hold its place. */
+    loading: query.isFetching && !query.data,
+    failed: query.isError,
+    /** Seasons the walk could not reach, so the panel never overclaims its span. */
+    truncated: query.data?.truncated ?? false,
+  };
 }
 
 /**

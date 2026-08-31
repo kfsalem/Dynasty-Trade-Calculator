@@ -1,4 +1,4 @@
-import type { League, Matchup, Player, SeasonPhase } from '../types';
+import type { League, LineupSlot, Matchup, Player, Position, SeasonPhase } from '../types';
 import type { KnownDraftOrder, TradedPickRef } from '../engine/picks';
 
 /**
@@ -82,6 +82,122 @@ export interface Schedule {
 }
 
 /**
+ * One roster's week, as the platform recorded it at the time.
+ *
+ * The past tense is the point. A roster feed knows one lineup — the last one
+ * set — and one set of players: the ones there now. Everything a manager did
+ * before this week is gone from it. This is the same facts per week, which is
+ * the only form in which a season can be re-read.
+ */
+export interface WeekLineup {
+  week: number;
+  rosterId: number;
+  /**
+   * The lineup he set, positional and aligned to that season's starting slots.
+   * `null` is a slot left empty; an empty array is a week that cannot be
+   * aligned to the slots at all. See `mapSetLineup`.
+   */
+  starterIds: (string | null)[];
+  /**
+   * Everyone on the roster that week — IR and taxi included, deliberately.
+   *
+   * This is the pool the platform's own "potential points" is computed over,
+   * measured: matching it is what lets `engine/benchPoints` check itself
+   * against Sleeper's figure instead of asking to be believed. It is also the
+   * only pool the API supports, since no endpoint publishes who was parked in
+   * a given week — see `docs/ROADMAP.md`.
+   */
+  playerIds: string[];
+  /** What each of them was paid that week, under the league's own rules. */
+  points: Map<string, number>;
+}
+
+/**
+ * One season of a league, as its own league.
+ *
+ * A dynasty league is a chain of them — every season is a separate league id on
+ * Sleeper, joined by `previous_league_id`. They are not interchangeable:
+ * starting slots, scoring and even the manager list move between seasons, so
+ * every figure derived here has to be computed against the season it came from
+ * rather than against the league as it stands today.
+ */
+export interface SeasonHistory {
+  leagueId: string;
+  season: string;
+  /** That season's starting slots. They really do change year to year. */
+  startingSlots: LineupSlot[];
+  /**
+   * Who owned each roster that season, keyed by the roster id of *that* season.
+   *
+   * `userId` is the identity that survives across seasons; `rosterId` is not,
+   * and a history keyed on it attributes one manager's season to another the
+   * first time a league reshuffles. Null for an orphan team, which is a real
+   * state — one of the test leagues carries one through a whole season.
+   */
+  managers: Map<number, SeasonManager>;
+  /** Every played week. An unplayed one is absent rather than zeroed. */
+  weeks: WeekLineup[];
+  /**
+   * What the platform says each roster scored and could have scored, for the
+   * season. Sleeper's own answer to the question `engine/benchPoints` asks.
+   */
+  claimed: Map<number, ClaimedTotals>;
+}
+
+export interface SeasonManager {
+  userId: string | null;
+  /** Display name, or a stand-in when the team had no owner. */
+  name: string;
+  teamName: string;
+}
+
+/** As much of a player as reading the past requires. */
+export interface HistoryPlayer {
+  position: Position;
+  name: string;
+}
+
+/** A platform's own season totals: what it paid, and its own best lineup. */
+export interface ClaimedTotals {
+  scored: number;
+  potential: number;
+}
+
+/**
+ * Every season a league can reach, newest first, plus the positions to read it with.
+ *
+ * The positions ride along rather than being looked up by the caller, and that
+ * is load-bearing: a history spans players who have since retired, been cut, or
+ * left for another league, and none of them are in the roster-derived player
+ * map. Resolving them here — out of the player index the adapter already holds
+ * — keeps them out of `LeagueBundle.players`, where an extra body would move
+ * replacement level for the whole app. See `LeagueBundle.freeAgents` for the
+ * same argument made once already.
+ */
+export interface LeagueHistory {
+  seasons: SeasonHistory[];
+  /**
+   * Position and name for everyone the history mentions.
+   *
+   * Deliberately not a `Player`. A history spans men who have retired, been
+   * cut, or been traded away, and the two facts a bench comparison needs of
+   * them — what slot they could fill, and what to call them on screen — are the
+   * two that do not go stale. Anything richer would invite this map to be
+   * merged into the app's real one, which is the leak `freeAgents` exists to
+   * prevent.
+   */
+  players: Map<string, HistoryPlayer>;
+  /**
+   * Seasons the walk could not reach, and why.
+   *
+   * A chain can stop early: a league deleted, a season that predates the
+   * platform, an id that answers 404. The count is carried so the UI can say
+   * "three seasons" rather than implying it read them all.
+   */
+  truncated: boolean;
+}
+
+/**
  * The seam that makes this multi-platform.
  *
  * Adding MyFantasyLeague or Fleaflicker means writing one more implementation
@@ -107,4 +223,17 @@ export interface LeagueProvider {
    * to satisfy by lying.
    */
   loadSchedule?(leagueId: string, throughWeek: number): Promise<Schedule>;
+  /**
+   * Every season this league can reach, walked backwards from today.
+   *
+   * The most expensive call in the app — a request per week per season, some
+   * seventy of them for a four-year league — and the most skippable. Nothing
+   * renders on it, nothing is priced by it, and a platform that has no history
+   * to give costs one panel.
+   *
+   * Optional for the same reason `loadSchedule` is: a provider that cannot
+   * supply this should say so by not implementing it, not by returning
+   * something empty that reads as "this league has never played a game".
+   */
+  loadHistory?(leagueId: string): Promise<LeagueHistory>;
 }
