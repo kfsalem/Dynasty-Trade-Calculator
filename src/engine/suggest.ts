@@ -9,7 +9,9 @@ import {
   type SeasonOdds,
   type TeamAnalysis,
 } from './analysis';
-import { blend } from './learned';
+import { blend, type Learned } from './learned';
+import { countPhrase, type Countable } from '../lib/learnedText';
+import { appetite, managerFor, partnership, type ManagerModel } from './managers';
 import { picksForRoster } from './picks';
 import { tradeWindow } from './tradeWindow';
 import { bestLineup, byValue, valuePlayers, type RosterSummary } from './rosterValue';
@@ -83,6 +85,12 @@ export interface SuggestedTrade {
   myBenefit: SideBenefit;
   theirBenefit: SideBenefit;
   score: number;
+  /**
+   * How much more, or less, than average this partner trades — the factor in
+   * `score`. Null when the league has published no transaction history, where
+   * the ranking is exactly what it was before this existed.
+   */
+  acceptance: Learned<number> | null;
   /** Why this is worth doing for you. */
   rationale: string[];
   /** Why the other manager accepts. The half no major calculator shows. */
@@ -115,6 +123,15 @@ export interface SuggestContext extends TradeContext {
    * a role change must still be able to suggest a trade.
    */
   trends?: RoleTrends;
+  /**
+   * What this league's managers actually do, from its own transaction feed.
+   *
+   * Optional in the same way and for the same reason as `trends`: the walk that
+   * builds it is seventy requests and nothing renders on it, so the engine has
+   * to produce the same suggestions without it — and does, since an absent
+   * model shrinks every acceptance factor to exactly 1.0.
+   */
+  managers?: ManagerModel;
 }
 
 export interface SuggestOptions {
@@ -530,6 +547,7 @@ function explain(
   summary: RosterSummary,
   perspective: 'mine' | 'theirs',
   trends?: RoleTrends,
+  social: string[] = [],
 ): string[] {
   const they = perspective === 'mine' ? 'You' : side.teamName;
   const their = perspective === 'mine' ? 'your' : 'their';
@@ -624,6 +642,14 @@ function explain(
     }
   }
 
+  /*
+    Last before the arithmetic, because it is the only claim on the card that is
+    about a person rather than a roster. Everything above argues that the trade
+    fits their team; this says what they have actually done with offers before,
+    which is the question a manager asks after he is satisfied it fits.
+  */
+  lines.push(...social);
+
   const parts: string[] = [];
   if (benefit.now > 0) parts.push(`+${round(benefit.now)} to ${their} starting lineup`);
   if (benefit.future > 0) parts.push(`+${round(benefit.future)} to ${their} three-year outlook`);
@@ -631,6 +657,73 @@ function explain(
     const share = summary.starterValue > 0 ? benefit.now / summary.starterValue : 0;
     const pct = benefit.now > 0 && share >= 0.01 ? ` (${(share * 100).toFixed(1)}% stronger)` : '';
     lines.push(`Net: ${parts.join(', ')}${pct}.`);
+  }
+
+  return lines;
+}
+
+/**
+ * How far a factor has to sit from 1.0 before it is worth a sentence.
+ *
+ * A display cut and nothing else: `score` always multiplies by the full value,
+ * continuously, so nothing a league does jumps as it crosses this. It exists
+ * because "this manager trades 1.03 times as often as the rest" is noise
+ * dressed as a finding, and a card that says it about every partner teaches a
+ * reader to skip the line that matters.
+ */
+const WORTH_SAYING = 0.15;
+
+const TRADES: Countable = { one: 'trade', many: 'trades' };
+const TIMES: Countable = { one: 'time', many: 'times' };
+
+/**
+ * What the league's own record says about the manager on the other side.
+ *
+ * Two sentences at most, and they are careful about different things. The
+ * appetite line explains a ranking the reader can otherwise only infer, and
+ * says "acted on" rather than "accepted" — the feed publishes completed trades
+ * and never a declined one, so a quiet manager may be asking constantly and
+ * being turned down. The partnership line makes no claim at all beyond a count,
+ * because that signal did not survive the measurement in `engine/managers` and
+ * has no business implying a probability.
+ */
+function socialLines(
+  model: ManagerModel | undefined,
+  myRosterId: number,
+  partnerRosterId: number,
+  acceptance: Learned<number> | null,
+): string[] {
+  if (!model || !acceptance) return [];
+
+  // No manager on the other side is an orphan team, and the league's own record
+  // says nothing about a team nobody owns.
+  const them = managerFor(model, partnerRosterId);
+  if (!them) return [];
+
+  const me = managerFor(model, myRosterId);
+  const lines: string[] = [];
+
+  if (Math.abs(acceptance.value - 1) >= WORTH_SAYING && acceptance.observations > 0) {
+    const average = round(model.meanTrades);
+    const since = them.firstTraded ? ` since ${them.firstTraded}` : '';
+    const record = `${them.name} has completed ${countPhrase(them.trades, TRADES)}${since} against a league average of ${average}`;
+    lines.push(
+      acceptance.value > 1
+        ? `${record}, so an offer here is likelier to be acted on than most.`
+        : `${record}, so this ranks below offers to managers who trade more often.`,
+    );
+  }
+
+  const pair = partnership(model, me?.userId ?? null, them.userId);
+  // One shared trade is a coincidence; two is a habit worth mentioning.
+  if (pair && pair.trades >= 2) {
+    const since = pair.since ? ` since ${pair.since}` : '';
+    const record = `You and ${them.name} have traded ${countPhrase(pair.trades, TIMES)}${since}`;
+    lines.push(
+      pair.strongest
+        ? `${record} — more than any other pair in this league.`
+        : `${record}.`,
+    );
   }
 
   return lines;
@@ -684,7 +777,32 @@ function buildSuggestion(
   // Even trades rank above lopsided ones, and the geometric mean rewards
   // packages that are good for both rather than great for one.
   const balanceFactor = Math.max(0, 1 - analysis.valueDifferencePct);
-  const score = Math.sqrt(my.benefit.total * their.benefit.total) * balanceFactor;
+
+  /*
+    And how much the manager on the other side trades at all.
+
+    This turns the score from "how good is this offer" into "how much good does
+    this offer do", which is the quantity a list of suggestions should be sorted
+    by — an offer nobody acts on is worth nothing however well it fits. The
+    engine weighted every partner identically until now, so a sixth of its
+    output went to the manager who trades twice a year, ranked no lower for it.
+
+    Deliberately *not* a filter. A manager who trades rarely still trades, and
+    the two-sided benefit test above remains the only bar an offer has to clear
+    — this decides ordering among offers that already clear it, which is where a
+    behavioural prior is worth something and a value model is not.
+
+    Shrunk in `engine/managers` against a constant measured on two real leagues,
+    so a league with no history multiplies by exactly 1.0 and is ranked today
+    the way it was yesterday.
+  */
+  const partnerUserId = ctx.managers?.rosters.get(partner.summary.rosterId) ?? null;
+  const acceptance = ctx.managers ? appetite(ctx.managers, partnerUserId) : null;
+
+  const score =
+    Math.sqrt(my.benefit.total * their.benefit.total) *
+    balanceFactor *
+    (acceptance?.value ?? 1);
 
   return {
     id: [...balanced.give, ...balanced.get].map((a) => a.id).sort().join('|'),
@@ -696,6 +814,7 @@ function buildSuggestion(
     myBenefit: my.benefit,
     theirBenefit: their.benefit,
     score,
+    acceptance,
     rationale: explain(
       mySide,
       my.benefit,
@@ -713,6 +832,7 @@ function buildSuggestion(
       partner.summary,
       'theirs',
       ctx.trends,
+      socialLines(ctx.managers, myRosterId, partner.summary.rosterId, acceptance),
     ),
   };
 }

@@ -8,6 +8,7 @@ import type {
   LeagueTransaction,
   Schedule,
   SeasonHistory,
+  SeasonManager,
   TransactionHistory,
 } from '../types';
 import type { KnownDraftOrder, TradedPickRef } from '../../engine/picks';
@@ -201,6 +202,9 @@ export const sleeperProvider: LeagueProvider = {
     return {
       transactions,
       seasons: seasons.filter((s) => s.transactions.length > 0).map((s) => s.season),
+      // Every season's table, not just the ones that traded: a consumer counting
+      // a manager's trades has to be able to see that he made none.
+      managers: new Map(seasons.map((s) => [s.season, s.managers])),
       truncated,
     };
   },
@@ -338,29 +342,51 @@ const LAST_TRANSACTION_WEEK = 17;
 async function loadSeasonTransactions(
   leagueId: string,
   current: boolean,
-): Promise<{ season: string; transactions: LeagueTransaction[]; previous: string | null }> {
+): Promise<{
+  season: string;
+  transactions: LeagueTransaction[];
+  managers: Map<number, SeasonManager>;
+  previous: string | null;
+}> {
   const read = async () => {
     const league = await getLeague(leagueId);
     const weeks = Array.from({ length: LAST_TRANSACTION_WEEK }, (_, i) => i + 1);
 
-    const perWeek = await Promise.all(
-      weeks.map((week) =>
-        getTransactions(leagueId, week)
-          .then((rows) => mapTransactions(league.season, week, rows))
-          .catch(() => []),
+    /*
+      Rosters and users alongside the weeks, and the reason is that without them
+      this feed cannot name anybody. Every row identifies its sides by roster id,
+      which is a position in *this* season's table and not a person — so a walk
+      that reads four seasons and never reads who owned what has four
+      incompatible sets of ids and no way to know it.
+
+      Two requests against the seventeen already going out for the weeks. The
+      alternative was to make each consumer join against `loadHistory`, which
+      would have made a panel about trades pay for every lineup in every season.
+    */
+    const [rosters, users, perWeek] = await Promise.all([
+      getRosters(leagueId),
+      getUsers(leagueId),
+      Promise.all(
+        weeks.map((week) =>
+          getTransactions(leagueId, week)
+            .then((rows) => mapTransactions(league.season, week, rows))
+            .catch(() => []),
+        ),
       ),
-    );
+    ]);
 
     return {
       season: league.season,
       transactions: perWeek.flat(),
+      managers: mapSeasonManagers(rosters, users),
       previous: league.previous_league_id ?? null,
     };
   };
 
+  // v2: the cached shape gained `managers`, and a v1 entry cannot supply it.
   return current
     ? read()
-    : cached(`sleeper:transactions:${leagueId}:v1`, SEASON_TTL, read);
+    : cached(`sleeper:transactions:${leagueId}:v2`, SEASON_TTL, read);
 }
 
 /**

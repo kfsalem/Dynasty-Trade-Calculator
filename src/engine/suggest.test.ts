@@ -8,6 +8,8 @@ import {
 } from './suggest';
 import type { RoleTrend, RoleTrends } from './roleTrend';
 import { analyzeTeam, type ContentionProfile, type SeasonOdds } from './analysis';
+import { modelManagers, type ManagerModel } from './managers';
+import type { LeagueTransaction, SeasonManager } from '../platforms/types';
 import { summarizeRoster, type RosterSummary } from './rosterValue';
 import type {
   DraftPick,
@@ -775,5 +777,232 @@ describe('league rules the engine has to obey', () => {
     const ctx = underRules(world(COMPLEMENTARY, 1200), { tradeDeadline: 1 });
 
     expect(suggestTrades(1, ctx).trades.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Two identical partners, so that nothing about the rosters can break a tie.
+ *
+ * Teams 2 and 3 hold the same aging back and the same nothing else. Every
+ * package the engine can build with one it can build with the other, at the
+ * same value, so any difference in the ordering is the manager and not the
+ * roster.
+ */
+const TWINS: Spec[] = [
+  {
+    rosterId: 1,
+    players: [
+      ['qb', 'QB', 5000, 25],
+      ['wr1', 'WR', 5000, 25],
+      ['wr2', 'WR', 4000, 25],
+      ['wr3', 'WR', 4000, 25],
+      ['rb', 'RB', 500, 25],
+    ],
+  },
+  {
+    rosterId: 2,
+    players: [
+      ['rb', 'RB', 4000, 29],
+      ['qb', 'QB', 500, 30],
+      ['wr', 'WR', 500, 30],
+    ],
+  },
+  {
+    rosterId: 3,
+    players: [
+      ['rb', 'RB', 4000, 29],
+      ['qb', 'QB', 500, 30],
+      ['wr', 'WR', 500, 30],
+    ],
+  },
+  {
+    rosterId: 4,
+    players: [
+      ['qb', 'QB', 2000, 24],
+      ['rb', 'RB', 2000, 24],
+      ['wr', 'WR', 2000, 24],
+    ],
+  },
+];
+
+/** Roster ids to managers, the same four in every season. */
+const OWNERS = new Map<number, SeasonManager>([
+  [1, { userId: 'me', name: 'You', teamName: 'You' }],
+  [2, { userId: 'quiet', name: 'Quiet', teamName: 'Quiet' }],
+  [3, { userId: 'busy', name: 'Busy', teamName: 'Busy' }],
+  [4, { userId: 'other', name: 'Other', teamName: 'Other' }],
+]);
+
+let txId = 0;
+
+/** A completed trade between two rosters, in the shape the feed publishes. */
+const traded = (rosterIds: number[], season = '2025'): LeagueTransaction => ({
+  id: `x${txId++}`,
+  season,
+  week: 3,
+  type: 'trade',
+  succeeded: true,
+  created: txId,
+  rosterIds,
+  adds: new Map(),
+  drops: new Map(),
+  picks: [],
+  budget: [],
+  bid: null,
+});
+
+const feed = (transactions: LeagueTransaction[]): ManagerModel =>
+  modelManagers({
+    transactions,
+    seasons: ['2025'],
+    managers: new Map([['2025', OWNERS]]),
+    truncated: false,
+  });
+
+describe('who the offer is going to', () => {
+  /**
+   * The defect this closes: `suggestTrades` proved a trade helped the other
+   * side and had no idea whether that manager would ever answer the message.
+   * Every partner was weighted identically, so a sixth of the engine's output
+   * went to the manager who trades twice a year, ranked no lower for it.
+   */
+  it('ranks the busier manager first when the offers are otherwise identical', () => {
+    const base = world(TWINS);
+    const model = feed([
+      // Busy has traded five times; Quiet once. Nothing else separates them.
+      traded([3, 4]),
+      traded([3, 4]),
+      traded([3, 4]),
+      traded([3, 4]),
+      traded([3, 4]),
+      traded([2, 4]),
+    ]);
+
+    const blind = suggestTrades(1, base, { maxResults: 10 });
+    const knowing = suggestTrades(1, { ...base, managers: model }, { maxResults: 10 });
+
+    // Without the model the two partners are interchangeable; with it, the one
+    // who actually trades leads.
+    expect(blind.trades[0].score).toBeCloseTo(blind.trades[1].score, 6);
+    expect(knowing.trades[0].partnerRosterId).toBe(3);
+    expect(knowing.trades[0].acceptance!.value).toBeGreaterThan(1);
+  });
+
+  it('leaves the ranking exactly as it was when the league has no history', () => {
+    // The property the feature rests on: a first-season league is ranked today
+    // the way it was before any of this existed.
+    const base = world(COMPLEMENTARY, 1200);
+    const empty = feed([]);
+
+    const blind = suggestTrades(1, base, { maxResults: 10 });
+    const knowing = suggestTrades(1, { ...base, managers: empty }, { maxResults: 10 });
+
+    expect(knowing.trades.map((t) => t.id)).toEqual(blind.trades.map((t) => t.id));
+    for (const [i, trade] of knowing.trades.entries()) {
+      expect(trade.score).toBeCloseTo(blind.trades[i].score, 6);
+      expect(trade.acceptance!.value).toBe(1);
+    }
+  });
+
+  it('is unchanged when no transaction feed was loaded at all', () => {
+    // The walk is seventy requests and gated on a tab. The engine has to work
+    // without it, exactly as it does without role trends.
+    const base = world(COMPLEMENTARY, 1200);
+
+    const withOut = suggestTrades(1, { ...base, managers: undefined }, { maxResults: 10 });
+
+    expect(withOut.trades.length).toBeGreaterThan(0);
+    expect(withOut.trades[0].acceptance).toBeNull();
+  });
+
+  it('never promotes an offer that fails the two-sided bar', () => {
+    /*
+      Appetite reorders; it must not admit. A manager who trades constantly is
+      still never offered a trade that leaves him worse off, or the ranking term
+      would have quietly become a filter running the other way.
+    */
+    const base = world(COMPLEMENTARY, 1200);
+    const busy = feed(Array.from({ length: 40 }, () => traded([2, 3])));
+
+    const { trades } = suggestTrades(1, { ...base, managers: busy }, { maxResults: 20 });
+
+    expect(trades.length).toBeGreaterThan(0);
+    for (const trade of trades) {
+      expect(trade.myBenefit.total).toBeGreaterThan(0);
+      expect(trade.theirBenefit.total).toBeGreaterThan(0);
+    }
+  });
+
+  it('says why an offer to a busy manager is ranked where it is', () => {
+    const base = world(TWINS);
+    const model = feed([
+      traded([3, 4]),
+      traded([3, 4]),
+      traded([3, 4]),
+      traded([3, 4]),
+      traded([3, 4]),
+      traded([2, 4]),
+    ]);
+
+    const { trades } = suggestTrades(1, { ...base, managers: model }, { maxResults: 10 });
+    const toBusy = trades.find((t) => t.partnerRosterId === 3);
+
+    const line = toBusy!.whyTheySayYes.find((l) => l.includes('completed'));
+    expect(line).toContain('Busy has completed 5 trades');
+    // "acted on" and never "accepted": the feed publishes no declined trade, so
+    // the claim has to stay a rate rather than becoming a willingness.
+    expect(line).toContain('likelier to be acted on');
+  });
+
+  it('tells a manager about a partnership he half-knew', () => {
+    const base = world(TWINS);
+    const model = feed([traded([1, 2]), traded([1, 2]), traded([1, 2]), traded([3, 4])]);
+
+    const { trades } = suggestTrades(1, { ...base, managers: model }, { maxResults: 10 });
+    const toPartner = trades.find((t) => t.partnerRosterId === 2);
+
+    expect(
+      toPartner!.whyTheySayYes.some(
+        (l) => l.includes('You and Quiet have traded 3 times') && l.includes('any other pair'),
+      ),
+    ).toBe(true);
+  });
+
+  it('says nothing about a single shared trade', () => {
+    // One trade together is a coincidence. Saying it out loud would teach a
+    // reader to skip the line on the card that means something.
+    const base = world(TWINS);
+    const model = feed([traded([1, 2]), traded([3, 4]), traded([3, 4])]);
+
+    const { trades } = suggestTrades(1, { ...base, managers: model }, { maxResults: 10 });
+
+    for (const trade of trades) {
+      expect(trade.whyTheySayYes.some((l) => l.includes('You and'))).toBe(false);
+    }
+  });
+
+  it('ignores a roster nobody owns rather than guessing at its manager', () => {
+    const base = world(TWINS);
+    const orphaned = modelManagers({
+      transactions: [traded([2, 3])],
+      seasons: ['2025'],
+      managers: new Map([
+        [
+          '2025',
+          new Map<number, SeasonManager>([
+            ...OWNERS,
+            [3, { userId: null, name: 'Orphan team', teamName: 'Orphan team' }],
+          ]),
+        ],
+      ]),
+      truncated: false,
+    });
+
+    const { trades } = suggestTrades(1, { ...base, managers: orphaned }, { maxResults: 10 });
+    const toOrphan = trades.find((t) => t.partnerRosterId === 3);
+
+    // No manager, so no claim: the offer is ranked exactly as it was.
+    expect(toOrphan!.acceptance!.value).toBe(1);
+    expect(toOrphan!.whyTheySayYes.some((l) => l.includes('completed'))).toBe(false);
   });
 });

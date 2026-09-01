@@ -13,7 +13,7 @@ import { LeagueError } from './components/LeagueError';
 import { ReplacementLevel } from './components/ReplacementLevel';
 import { FreeAgentBoard } from './components/FreeAgentBoard';
 import { EmptyState } from './components/EmptyState';
-import { useBenchReport, useLeagueSummaries } from './hooks/useLeagueData';
+import { useBenchReport, useLeagueSummaries, useManagerModel } from './hooks/useLeagueData';
 import { useMyRoster } from './hooks/useMyRoster';
 import { decodeTrade, encodeTrade, resolveShare } from './lib/share';
 
@@ -170,6 +170,12 @@ function App() {
    * and switching tabs costs nothing.
    */
   const bench = useBenchReport(leagueId, tab === 'analysis' && myRosterId !== null);
+  /*
+    Gated on the tab that reads it, the same way the bench walk is. Nothing else
+    in the app ranks a partner, so a visitor who never opens Trade ideas never
+    pays the seventy requests this costs.
+  */
+  const managers = useManagerModel(leagueId, tab === 'ideas' && myRosterId !== null);
 
   useEffect(() => {
     try {
@@ -461,6 +467,7 @@ function App() {
                     trends={trends}
                     odds={season}
                     season={snapsMeta?.season}
+                    managers={managers.model}
                     onOpenInCalculator={(trade) => {
                       seedTrade(trade);
                       setTab('trade');

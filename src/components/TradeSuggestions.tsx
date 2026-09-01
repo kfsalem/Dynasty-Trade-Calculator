@@ -3,6 +3,8 @@ import type { DraftPick, League, Player, PlayerValue } from '../types';
 import type { RosterSummary } from '../engine/rosterValue';
 import { suggestTrades, type SuggestContext, type SuggestedTrade, type TradeAsset } from '../engine/suggest';
 import type { RoleTrends } from '../engine/roleTrend';
+import type { ManagerModel } from '../engine/managers';
+import { countPhrase, type Countable } from '../lib/learnedText';
 import type { SeasonOdds } from '../engine/analysis';
 import { deadlineNotice, tradeWindow } from '../engine/tradeWindow';
 import { RoleTrendPanel } from './RoleTrendPanel';
@@ -27,7 +29,15 @@ interface Props {
   odds?: SeasonOdds;
   /** Season the activity data covers, for labelling an offseason preview. */
   season?: number;
+  /**
+   * What this league's managers have actually done, so offers are ranked by how
+   * much good they do rather than only by how good they are. Absent until the
+   * walk lands, and the list is then exactly the list it always was.
+   */
+  managers?: ManagerModel;
 }
+
+const TRADES: Countable = { one: 'trade', many: 'trades' };
 
 function AssetChip({ asset }: { asset: TradeAsset }) {
   const style =
@@ -203,6 +213,7 @@ export function TradeSuggestions({
   trends,
   odds,
   season,
+  managers,
 }: Props) {
   const result = useMemo(() => {
     const ctx: SuggestContext = {
@@ -213,9 +224,10 @@ export function TradeSuggestions({
       summaries,
       trends,
       season: odds,
+      managers,
     };
     return suggestTrades(myRosterId, ctx);
-  }, [league, players, values, picks, summaries, myRosterId, trends, odds]);
+  }, [league, players, values, picks, summaries, myRosterId, trends, odds, managers]);
 
   /**
    * The deadline, said out loud while there is still time to act on it.
@@ -236,6 +248,20 @@ export function TradeSuggestions({
         Offers where both teams come out ahead — measured in what each team actually
         wants, which is not the same thing for a contender and a rebuilder.
       </p>
+
+      {/* Said once, here, rather than on every card: what the ordering counts,
+          and the one thing the feed behind it cannot see. A reader who knows an
+          offer is ranked partly on who receives it can weigh the list properly;
+          a reader who does not will read the ordering as a claim about value. */}
+      {managers && managers.trades > 0 && (
+        <p className="mt-2 text-sm text-subtle">
+          Ranked by how much good an offer does, which counts how often each manager
+          actually trades — {countPhrase(managers.trades, TRADES)}
+          {managers.seasons[0] ? ` since ${managers.seasons[0]}` : ''}. Only completed
+          trades are published, never a declined one, so a quiet manager may be asking
+          and being turned down.
+        </p>
+      )}
 
       {/* Caution, not a neutral note: this one is about to expire, which is
           the whole reason it is on screen. */}

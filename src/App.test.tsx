@@ -58,6 +58,14 @@ vi.mock('./hooks/useLeagueData', () => ({
     failed: false,
     truncated: false,
   }),
+  // The manager model's walk, idle for the same reason: the suggestion list
+  // renders identically with and without it, and these tests are about the
+  // shell rather than about the ordering inside that list.
+  useManagerModel: () => ({
+    model: undefined,
+    loading: false,
+    failed: false,
+  }),
 }));
 
 const settings = makeSettings(['QB', 'RB'], { draftRounds: 1, teamCount: 2 });
