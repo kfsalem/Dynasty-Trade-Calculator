@@ -7,6 +7,7 @@ import {
   mapPlayer,
   mapSeasonManagers,
   mapSettings,
+  mapTransactions,
   mapWeekLineups,
 } from './mapper';
 import { parseLeagueId, type SlimPlayer } from './client';
@@ -14,6 +15,7 @@ import type {
   SleeperLeague,
   SleeperMatchup,
   SleeperRoster,
+  SleeperTransaction,
   SleeperUser,
 } from './schema';
 
@@ -566,5 +568,127 @@ describe('mapSeasonManagers', () => {
       name: 'Orphan team',
       teamName: 'Orphan team',
     });
+  });
+});
+
+describe('mapTransactions', () => {
+  const row = (over: Partial<SleeperTransaction> = {}): SleeperTransaction => ({
+    transaction_id: 't1',
+    type: 'waiver',
+    status: 'complete',
+    leg: 3,
+    created: 1_700_000_000_000,
+    roster_ids: [4],
+    adds: { '13414': 4 },
+    drops: null,
+    creator: 'u1',
+    consenter_ids: [4],
+    draft_picks: [],
+    waiver_budget: [],
+    settings: { waiver_bid: 12, seq: 0 },
+    ...over,
+  });
+
+  it('reads a waiver claim, bid and all', () => {
+    const [tx] = mapTransactions('2025', 3, [row()]);
+
+    expect(tx).toMatchObject({
+      id: 't1',
+      season: '2025',
+      week: 3,
+      type: 'waiver',
+      succeeded: true,
+      bid: 12,
+      rosterIds: [4],
+    });
+    expect(tx.adds.get('13414')).toBe(4);
+    expect(tx.drops.size).toBe(0);
+  });
+
+  /**
+   * A claim at nothing is a real bid a manager chose to make; a league running
+   * priority waivers publishes none at all. 377 of one test league's 545 bids
+   * are zero, so conflating the two would throw away most of its FAAB signal.
+   */
+  it('tells a bid of zero from no bid at all', () => {
+    expect(mapTransactions('2025', 3, [row({ settings: { waiver_bid: 0 } })])[0].bid).toBe(0);
+    expect(mapTransactions('2025', 3, [row({ settings: null })])[0].bid).toBeNull();
+    expect(mapTransactions('2025', 3, [row({ settings: { seq: 1 } })])[0].bid).toBeNull();
+  });
+
+  /**
+   * Only waivers ever fail, and a losing bid is the only published evidence of
+   * what it took to win. Dropping them here would discard half the signal
+   * before a consumer saw it.
+   */
+  it('keeps a failed claim, and says it failed', () => {
+    const [tx] = mapTransactions('2025', 3, [row({ status: 'failed' })]);
+    expect(tx.succeeded).toBe(false);
+    expect(tx.bid).toBe(12);
+  });
+
+  it('fills in the halves Sleeper nulls out', () => {
+    const [tx] = mapTransactions('2025', 1, [
+      row({ adds: null, drops: { '4892': 4 }, roster_ids: null, consenter_ids: null }),
+    ]);
+
+    expect(tx.adds.size).toBe(0);
+    expect(tx.drops.get('4892')).toBe(4);
+    expect(tx.rosterIds).toEqual([]);
+    expect(tx.picks).toEqual([]);
+    expect(tx.budget).toEqual([]);
+  });
+
+  it('maps a trade with a pick and FAAB in it', () => {
+    const [tx] = mapTransactions('2026', 1, [
+      row({
+        type: 'trade',
+        roster_ids: [4, 5],
+        adds: { '13414': 5 },
+        drops: { '13414': 4 },
+        settings: null,
+        draft_picks: [
+          { season: '2027', round: 3, roster_id: 1, owner_id: 10, previous_owner_id: 1 },
+        ],
+        waiver_budget: [{ amount: 20, sender: 5, receiver: 4 }],
+      }),
+    ]);
+
+    expect(tx.type).toBe('trade');
+    expect(tx.picks).toEqual([
+      {
+        season: '2027',
+        round: 3,
+        originalRosterId: 1,
+        fromRosterId: 1,
+        toRosterId: 10,
+      },
+    ]);
+    expect(tx.budget).toEqual([{ amount: 20, fromRosterId: 5, toRosterId: 4 }]);
+    expect(tx.bid).toBeNull();
+  });
+
+  it('carries a three-way trade rather than assuming a pair', () => {
+    const [tx] = mapTransactions('2025', 5, [
+      row({ type: 'trade', roster_ids: [1, 4, 7] }),
+    ]);
+    expect(tx.rosterIds).toEqual([1, 4, 7]);
+  });
+
+  /**
+   * A type this app has not seen becomes `unknown` rather than one of the four.
+   * A consumer counting free-agent pickups should not quietly start counting
+   * something else the year Sleeper invents it.
+   */
+  it('does not file an unrecognised type as one it knows', () => {
+    expect(mapTransactions('2025', 3, [row({ type: 'auction' })])[0].type).toBe('unknown');
+    expect(mapTransactions('2025', 3, [row({ type: 'commissioner' })])[0].type).toBe(
+      'commissioner',
+    );
+  });
+
+  it('stamps the week the caller asked for', () => {
+    // `leg` says 3 on the row; the request was for week 9.
+    expect(mapTransactions('2025', 9, [row()])[0].week).toBe(9);
   });
 });

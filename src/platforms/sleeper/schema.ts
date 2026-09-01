@@ -158,6 +158,90 @@ export const sleeperRosterSchema = z.object({
     .nullish(),
 });
 
+/**
+ * One roster move: a trade, a waiver claim, a free-agent pickup, or a
+ * commissioner's correction.
+ *
+ * Written against 3,264 live transactions across seven league-seasons of two
+ * real leagues. Every key below is present on every row Sleeper returns — it
+ * emits the whole shape and fills the irrelevant halves with `null`, which is
+ * why so much of this is nullable rather than optional.
+ *
+ * The counts, for what each field is worth:
+ * `free_agent` 1,902 · `waiver` 1,155 · `trade` 163 · `commissioner` 44.
+ */
+export const sleeperTransactionSchema = z.object({
+  transaction_id: z.string(),
+  type: z.string(),
+  /** `complete` or `failed`. Only waivers ever fail — 461 of them. */
+  status: z.string(),
+  /** The week, and it always matches the week asked for. Checked on all 3,264. */
+  leg: z.number().nullish(),
+  /** Milliseconds. The only reliable ordering across a season. */
+  created: z.number().nullish(),
+  /** Rosters involved. Two for a trade — except the one three-way seen live. */
+  roster_ids: z.array(z.number()).nullish(),
+  /** Player id to the roster that received him. Null on a drop-only move. */
+  adds: z.record(z.string(), z.number()).nullish(),
+  /** Player id to the roster that gave him up. Null 1,273 times of 3,264. */
+  drops: z.record(z.string(), z.number()).nullish(),
+  /** The user who initiated it, for a trade's proposing side. */
+  creator: z.string().nullish(),
+  /** Rosters that agreed. Null on every commissioner move. */
+  consenter_ids: z.array(z.number()).nullish(),
+  /**
+   * Picks changing hands in a trade — 135 of the 163 trades carry one.
+   *
+   * `roster_id` is the roster the pick originally belonged to, `owner_id` the
+   * roster taking it and `previous_owner_id` the one giving it up. The same
+   * convention as `traded_picks`, which the app already reads.
+   */
+  draft_picks: z
+    .array(
+      z.object({
+        season: z.string(),
+        round: z.number(),
+        roster_id: z.number().nullish(),
+        owner_id: z.number().nullish(),
+        previous_owner_id: z.number().nullish(),
+      }),
+    )
+    .nullish(),
+  /** FAAB moved as part of a trade. Seen on 17 of them. */
+  waiver_budget: z
+    .array(
+      z.object({
+        amount: z.number(),
+        sender: z.number(),
+        receiver: z.number(),
+      }),
+    )
+    .nullish(),
+  settings: z
+    .object({
+      /**
+       * What was bid on a waiver claim, winning or losing.
+       *
+       * The field #50 was written to verify and could not, because the test
+       * league had no history at the time. It is real: 1,038 of the 1,155
+       * waiver rows carry one, only waivers ever do, and the values run 0 to
+       * 120 with a median of 1.
+       *
+       * **Zero is a real bid.** A claim at $0 and a league that does not run
+       * FAAB both have to survive this schema distinguishably, which is why
+       * this is nullish rather than defaulted.
+       */
+      waiver_bid: z.number().nullish(),
+      /** Priority within one waiver run. */
+      seq: z.number().nullish(),
+      /** 1 when the trade was a counter-offer. Seen 14 times. */
+      is_counter: z.number().nullish(),
+    })
+    .nullish(),
+});
+
+export const sleeperTransactionsSchema = z.array(sleeperTransactionSchema);
+
 export const sleeperUserSchema = z.object({
   user_id: z.string(),
   display_name: z.string().nullish(),
@@ -252,5 +336,6 @@ export type SleeperPlayer = z.infer<typeof sleeperPlayerSchema>;
 export type SleeperTradedPick = z.infer<typeof sleeperTradedPickSchema>;
 export type SleeperState = z.infer<typeof sleeperStateSchema>;
 export type SleeperMatchup = z.infer<typeof sleeperMatchupSchema>;
+export type SleeperTransaction = z.infer<typeof sleeperTransactionSchema>;
 export type SleeperDraft = z.infer<typeof sleeperDraftSchema>;
 export type SleeperAccount = NonNullable<z.infer<typeof sleeperAccountSchema>>;
