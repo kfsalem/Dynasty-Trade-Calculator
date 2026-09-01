@@ -12,6 +12,7 @@ import { snapShares } from '../engine/snapShare';
 import { opportunities } from '../engine/opportunity';
 import { checkScoring, scoringIsUsable } from '../engine/scoringCheck';
 import { benchIsUsable, benchPoints, type BenchReport } from '../engine/benchPoints';
+import { modelManagers } from '../engine/managers';
 import { playerRoles } from '../engine/role';
 import { byeTeams as teamsOnBye } from '../engine/byes';
 import { roleTrends } from '../engine/roleTrend';
@@ -141,6 +142,47 @@ export function useBenchReport(leagueId: string | null, enabled: boolean) {
     failed: query.isError,
     /** Seasons the walk could not reach, so the panel never overclaims its span. */
     truncated: query.data?.truncated ?? false,
+  };
+}
+
+/**
+ * What this league's managers actually do, from its own transaction feed.
+ *
+ * The same policy as `useLeagueHistory` and for the same reasons: it is the
+ * second-most expensive query in the app, nothing on the path to a rendered
+ * league depends on it, and `enabled` is the whole gate — a visitor who never
+ * opens the trade ideas tab never pays for it.
+ *
+ * Its own walk rather than a field on the history one. The two read different
+ * endpoints for different surfaces, and folding them together would make a
+ * panel about trades pay for every lineup in every season the league has played.
+ *
+ * The model is never withheld on thin evidence, which is the difference between
+ * this and `useBenchReport`. That one checks its arithmetic against the
+ * platform's own totals and hides the panel when they disagree; there is
+ * nothing to disagree with here, and a league with two trades in it is handled
+ * by the shrinkage rather than by a gate — a model built from nothing returns a
+ * factor of exactly 1.0 and changes no ranking.
+ */
+export function useManagerModel(leagueId: string | null, enabled: boolean) {
+  const query = useQuery({
+    queryKey: ['transactions', leagueId],
+    queryFn: () => sleeperProvider.loadTransactions!(leagueId as string),
+    enabled: Boolean(leagueId && enabled && sleeperProvider.loadTransactions),
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
+  });
+
+  const model = useMemo(
+    () => (query.data ? modelManagers(query.data) : undefined),
+    [query.data],
+  );
+
+  return {
+    model,
+    /** True while the walk is in flight, so a surface can say so rather than lie. */
+    loading: query.isFetching && !query.data,
+    failed: query.isError,
   };
 }
 

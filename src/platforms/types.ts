@@ -294,6 +294,22 @@ export interface TransactionHistory {
   transactions: LeagueTransaction[];
   /** Seasons that contributed at least one, newest first. */
   seasons: string[];
+  /**
+   * Who owned each roster, per season, keyed season then roster id.
+   *
+   * Every transaction above names rosters, and a roster id is a position in one
+   * season's table rather than a person: keyed on it, the test league's trade
+   * counts read a 5.4x spread between its busiest and quietest manager, and
+   * keyed on `userId` they read 6.1x — because the two are not the same
+   * eleven people. A feed about what managers do is unusable without this, so
+   * it is carried here rather than left for each consumer to join against
+   * `LeagueHistory` and pay for a walk over lineups it does not want.
+   *
+   * Two extra requests per season on a walk of eighteen. `SeasonManager.userId`
+   * is null for an orphan team, and a transaction touching one is evidence
+   * about nobody — see `engine/managers`, which skips rather than guesses.
+   */
+  managers: Map<string, Map<number, SeasonManager>>;
   /** True when the walk could not reach the whole chain. See `LeagueHistory`. */
   truncated: boolean;
 }

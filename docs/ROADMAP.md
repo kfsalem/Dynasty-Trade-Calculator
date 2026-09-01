@@ -1472,9 +1472,11 @@ what stops the quadrant's median-split cliff happening a third time.
 ## The transaction feed, verified
 
 **Status:** Shipped — [#50](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/50).
-The data layer under #76, #77 and the bid half of #47. Nothing reads it yet, by
-design: those three each need it, and the point of gathering it once is that
-they do not each invent their own reading of the same feed.
+The data layer under #76, #77 and the bid half of #47. The point of gathering it
+once is that the three do not each invent their own reading of the same feed.
+#77 is the first to read it — see *Modelling the managers* below, which also
+records the one thing this feed was missing for it: every row names rosters, and
+a roster id is not a person.
 
 #50's first scope item was to **verify `settings.waiver_bid` against a live
 league**, because the issue was written from Sleeper's documentation against a
@@ -1526,3 +1528,137 @@ manager who "never trades": he may be asking constantly and being turned down.
 shared `walkSeasons` helper. Separate because the two are wanted by different
 surfaces at different times and each is around seventy requests — folding them
 together would make a panel about bench points pay for a feed about trades.
+
+## Modelling the managers
+
+**Status:** Shipped — [#77](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/77).
+`engine/managers`, and one factor in `suggest.buildSuggestion`'s score.
+
+The defect: `suggestTrades` proved a trade helped the other side and had no idea
+whether that manager would ever answer the message. Every partner was weighted
+identically, so a sixth of the engine's output went to the manager who trades
+twice a year and was ranked no lower for it.
+
+### What the two leagues actually do
+
+Measured 2026-08-31 through the shipped mappers, keyed on `roster.owner_id`:
+
+| league | seasons | trades | skipped | managers | mean | busiest / quietest |
+|---|---|---|---|---|---|---|
+| The Eternal Rebuild | 2023–2026 | 125 | 12 | 11 | 22.7 | 5.8x |
+| Tight Ends Dynasty | 2023–2025 | 26 | 0 | 11 | 4.7 | 13 vs 0 |
+
+The twelve skipped are the orphan team's, which has no `owner_id` and so is
+evidence about nobody. They are dropped whole rather than credited to the side
+that can be named: the count being built is of trades a manager *made*, and one
+made with a team nobody owned is not one of them.
+
+The issue's own figures were 134 trades, 6.4x and "37 of 45 pairings". Two of
+those needed correcting. The pairing denominator was written for ten managers
+when eleven appear, so it is 40 of 55. And the spread depends on whether the
+manager with no trades at all is counted — Tight Ends has one, `jluck37`, and he
+is invisible to any pass that builds its roll from the transaction feed rather
+than from the season's own roster table. He is the single most informative
+manager in the data, so the model is seeded from the tables.
+
+### Only one of the seven signals earned a place in the score
+
+The issue named seven. The question each was put to: does knowing this from half
+a league's trades predict the other half? Two were testable and one passed.
+
+**Trade appetite predicts, and it replicates.** Out-of-sample Poisson deviance,
+600 random half-splits per league, against assuming every manager trades alike:
+
+| | Eternal Rebuild | Tight Ends |
+|---|---|---|
+| everyone alike | 2.874 | 1.407 |
+| **shrunk own rate** | **1.406** | **1.161** |
+| unshrunk own rate | 1.665 | 1.640 |
+
+Both leagues improve, and both are worse at either extreme — a real minimum
+rather than the edge of a range.
+
+**Partner history does not, enough.** It is real: past pairing predicts future
+pairing beyond what appetite alone explains, r=0.40 (p=0.003) and r=0.26
+(p=0.045). But it buys **0.036** of deviance where appetite buys **1.47**, and
+the best shrinkage constant for it lands at 8 in one league and 50 in the other
+— which is to say it is not identifiable at all. A term nobody can calibrate has
+no business in a ranking, so partner history ships as a *sentence* and never as
+a number. This is the distinction #75 was built to let the app make.
+
+Note that the weaker test disagreed with the stronger one, in the direction that
+would have been easy to accept. A whole-sample variance test says pair
+concentration is significant in the four-season league (p<0.0001) and absent in
+the three-season one — and the headline "the top pair has traded ten times" is
+mostly what appetite alone predicts, since busy managers pair up by chance. The
+predictive split is the test that decides, and it is the one that says the
+effect is real but too small to rank on.
+
+### The half-life, and the form it goes in
+
+`APPETITE_PRIOR = 6`, in trades, and **both leagues independently minimise
+there** — one league finding an optimum is a tuned constant, two finding the
+same one is a property of how managers trade. It shares a number with
+`playoffOdds.SHRINK_HALF_LIFE` and nothing else: that one is measured in weeks
+of football.
+
+The form is `(k + c)/(m + c)` — his trades over what the league's own rate
+predicts for him — and **not** `learn(k / m, 1, k, c)`. The obvious one shrinks
+on the manager's own count, so a manager who has never traded in four seasons
+gets a weight of zero and a factor of exactly 1.0: the clearest evidence in the
+feed, scored as though nothing were known. The evidence about a manager is every
+trade the league made while he sat there not making it, so the weight is built
+from `m` and `k` is only what the reader is shown. `learned.blend` takes the two
+separately, which is what made this expressible without a fourth reinvention.
+
+Both design choices are visible in the live data. `jluck37` reads 0.56 rather
+than 1.0. And the thin league's whole range narrows on its own — 0.56–1.77 at a
+weight of 0.44, against 0.52–2.02 at 0.79 — with no threshold anywhere in it.
+The mean factor is 1.000 in both leagues, so this reorders offers rather than
+inflating every score in a league that happens to trade a lot.
+
+### Where it enters, and what it must not do
+
+```ts
+const score = Math.sqrt(my.benefit.total * their.benefit.total)
+  * balanceFactor
+  * acceptance.value;
+```
+
+That turns the score from "how good is this offer" into "how much good does this
+offer do", which is what a list of suggestions should be sorted by — an offer
+nobody acts on is worth nothing however well it fits.
+
+Deliberately not a filter, and there is a test pinning it: the two-sided benefit
+bar is still the only thing that decides whether an offer appears at all, and
+appetite only orders what has already cleared it. A league with no transaction
+history multiplies by exactly 1.0 and is ranked today the way it was yesterday —
+also pinned, on both the ids and the scores.
+
+### The identity problem, and where it got solved
+
+`roster_id` is a position in one season's table and not a person. Keyed on it
+the Eternal Rebuild's spread reads 5.4x, keyed on `userId` it reads 5.8x, and
+eleven managers appear rather than ten — they are not the same people.
+
+`TransactionHistory` gained a `managers` map, season to roster id to
+`SeasonManager`, filled by the two requests per season that the transaction walk
+was not already making. The alternative was to have every consumer join against
+`loadHistory`, which would have made a panel about trades pay for every lineup in
+every season the league has played. The cached shape changed with it, so the key
+went to `v2`.
+
+### What it still cannot say
+
+Nothing publishes a declined trade. The card says an offer is "likelier to be
+acted on" and never that a manager is likelier to accept, and the panel says the
+same thing once, out loud, above the list: a quiet manager may be asking
+constantly and being turned down.
+
+### Left for #76 and #47
+
+`ManagerRecord` carries `claims`, `picksAcquired` and `picksSpent` — exact counts
+off the same single pass, and the wire-aggression and pick-appetite rows of the
+issue's table. Nothing ranks or renders on them, because neither has been put to
+the split-half test that appetite passed, and shipping an unmeasured signal into
+a score is the failure this whole pass is ordered to avoid.
