@@ -1468,3 +1468,61 @@ along the blend it was. `ScoringModel` now carries its own `weight` for that.
 #76 and #77, which are the two issues that learn a number from a league's own
 record and would otherwise each invent a threshold. Ordering them behind this is
 what stops the quadrant's median-split cliff happening a third time.
+
+## The transaction feed, verified
+
+**Status:** Shipped — [#50](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/50).
+The data layer under #76, #77 and the bid half of #47. Nothing reads it yet, by
+design: those three each need it, and the point of gathering it once is that
+they do not each invent their own reading of the same feed.
+
+#50's first scope item was to **verify `settings.waiver_bid` against a live
+league**, because the issue was written from Sleeper's documentation against a
+test league that was `pre_draft` and returned an empty array for every week.
+That is now measured across **3,264 transactions in seven league-seasons**:
+
+| type | count |
+|---|---|
+| free agent | 1,902 |
+| waiver | 1,155 — 461 of them failed claims |
+| trade | 163 — 135 with picks, 17 with FAAB, one three-way |
+| commissioner | 44 |
+
+`waiver_bid` is real: 1,038 rows carry one, only waivers ever do, and the values
+run 0 to 120 with a median of 1.
+
+### Four things a consumer has to know
+
+**A bid of zero is a real bid.** 377 of one league's 545 bids are exactly zero,
+and a league running priority waivers instead of FAAB publishes no bid at all.
+Reading a missing bid as a zero would turn "this league does not use FAAB" into
+"this league values everyone at nothing", and it would discard two-thirds of the
+other league's signal.
+
+**Week 1 is not a week.** Sleeper files the entire offseason under it: 827 of
+the 3,264 transactions and 85 of the 163 trades. Anything that counts activity
+per week has a first bar that is a different kind of thing from the sixteen
+after it.
+
+**The calendar runs to 17, and it is not `playoff_week_start`.** Weeks 18 and 19
+answer empty in every season of both leagues; week 17 still carries claims. Both
+leagues end their regular season at 14, and three hundred moves happen after it,
+so cutting the walk at the regular season would have dropped them.
+
+**Failed transactions are evidence.** Only waivers ever fail — all 461 of them —
+and a losing bid is the only published record of what it took to win. They are
+kept, with `succeeded` carrying the distinction, rather than filtered at the
+boundary where no consumer could get them back.
+
+### What the feed cannot say
+
+Nothing publishes a *declined* trade. The app can see everything a league agreed
+to and nothing it refused, which bounds what #77 can honestly claim about a
+manager who "never trades": he may be asking constantly and being turned down.
+
+### Sharing the walk
+
+`loadHistory` and `loadTransactions` are separate provider methods over one
+shared `walkSeasons` helper. Separate because the two are wanted by different
+surfaces at different times and each is around seventy requests — folding them
+together would make a panel about bench points pay for a feed about trades.

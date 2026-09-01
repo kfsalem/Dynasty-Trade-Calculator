@@ -198,6 +198,107 @@ export interface LeagueHistory {
 }
 
 /**
+ * What a league did to its rosters: a trade, a claim, a pickup, a correction.
+ *
+ * The record of what these particular managers actually do, as opposed to what
+ * a model says they should. Nothing in the app reads it yet — #76 prices a
+ * league's own habits from it, #77 models who trades with whom, and #47's bid
+ * advice calibrates on the bids in it — and the point of gathering it here is
+ * that those three do not each invent their own reading of the same feed.
+ */
+export interface LeagueTransaction {
+  id: string;
+  season: string;
+  /**
+   * The week it was filed under.
+   *
+   * Week 1 is not a week. Sleeper files the whole offseason there — a quarter
+   * of all transactions and half of all trades, measured — so a consumer
+   * counting activity per week has to know that its first bar is a different
+   * kind of thing from the sixteen after it.
+   */
+  week: number;
+  type: TransactionType;
+  /**
+   * Whether it went through.
+   *
+   * A failed one is still evidence, and the reason this is a field rather than
+   * a filter: only waivers ever fail, and a losing bid says what it took to
+   * beat somebody. That is the other half of the FAAB signal #76 wants.
+   */
+  succeeded: boolean;
+  /** Milliseconds. The only ordering that holds across a whole season. */
+  created: number;
+  /** Every roster involved. Usually two on a trade; a three-way happens. */
+  rosterIds: number[];
+  /** Player id to the roster that received him. */
+  adds: Map<string, number>;
+  /** Player id to the roster that gave him up. */
+  drops: Map<string, number>;
+  /** Picks that changed hands, on the 83% of trades that include one. */
+  picks: TransactionPick[];
+  /** FAAB moved between rosters as part of a trade. */
+  budget: BudgetMove[];
+  /**
+   * What was bid, winning or losing. Null when there was no bid at all.
+   *
+   * Never conflate null with zero here: a $0 claim is a real bid a manager
+   * chose to make, and a league running priority waivers instead of FAAB
+   * publishes no bid at all. They are different facts and #47 needs both.
+   */
+  bid: number | null;
+}
+
+/**
+ * Sleeper's four, plus the one this app has not seen.
+ *
+ * `unknown` rather than a guess, the same way `SeasonPhase` handles it: a type
+ * the platform adds later should survive the mapper as something a consumer can
+ * skip, not be quietly filed as a free-agent pickup.
+ */
+export type TransactionType =
+  | 'trade'
+  | 'waiver'
+  | 'free_agent'
+  | 'commissioner'
+  | 'unknown';
+
+/**
+ * A pick changing hands, in the convention `traded_picks` already uses:
+ * `originalRosterId` owned it to begin with, `fromRosterId` gave it up, and
+ * `toRosterId` holds it after.
+ */
+export interface TransactionPick {
+  season: string;
+  round: number;
+  originalRosterId: number | null;
+  fromRosterId: number | null;
+  toRosterId: number | null;
+}
+
+/** FAAB moving between two rosters inside a trade. */
+export interface BudgetMove {
+  amount: number;
+  fromRosterId: number;
+  toRosterId: number;
+}
+
+/**
+ * Every roster move a league can still account for, newest first.
+ *
+ * Newest first because that is the order every consumer wants: recency is what
+ * makes a habit current, and a league's last twenty trades say more about how
+ * it prices than its first twenty did.
+ */
+export interface TransactionHistory {
+  transactions: LeagueTransaction[];
+  /** Seasons that contributed at least one, newest first. */
+  seasons: string[];
+  /** True when the walk could not reach the whole chain. See `LeagueHistory`. */
+  truncated: boolean;
+}
+
+/**
  * The seam that makes this multi-platform.
  *
  * Adding MyFantasyLeague or Fleaflicker means writing one more implementation
@@ -236,4 +337,14 @@ export interface LeagueProvider {
    * something empty that reads as "this league has never played a game".
    */
   loadHistory?(leagueId: string): Promise<LeagueHistory>;
+  /**
+   * Every roster move the league has made, across every season it can reach.
+   *
+   * The same walk `loadHistory` makes, one endpoint over, and the same policy:
+   * lazy, cached, and nothing renders on it. Separate from `loadHistory`
+   * because the two are wanted by different surfaces at different times, and
+   * folding them together would make a panel about bench points pay for a feed
+   * about trades.
+   */
+  loadTransactions?(leagueId: string): Promise<TransactionHistory>;
 }

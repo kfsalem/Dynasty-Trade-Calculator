@@ -10,7 +10,9 @@ import type {
 } from '../../types';
 import type {
   ClaimedTotals,
+  LeagueTransaction,
   SeasonManager,
+  TransactionType,
   WeekLineup,
 } from '../types';
 import type { SlimPlayer } from './client';
@@ -18,6 +20,7 @@ import type {
   SleeperLeague,
   SleeperMatchup,
   SleeperRoster,
+  SleeperTransaction,
   SleeperUser,
 } from './schema';
 
@@ -476,4 +479,86 @@ export function mapSeasonManagers(
   }
 
   return managers;
+}
+
+/**
+ * Sleeper's transaction types, canonicalised.
+ *
+ * All four it publishes map one-to-one, so this is guarding the fifth case: a
+ * type it adds later. That becomes `unknown` rather than being filed as one of
+ * these — a consumer counting free-agent pickups should not silently start
+ * counting something else the year Sleeper invents it.
+ */
+function mapTransactionType(type: string): TransactionType {
+  switch (type) {
+    case 'trade':
+    case 'waiver':
+    case 'free_agent':
+    case 'commissioner':
+      return type;
+    default:
+      return 'unknown';
+  }
+}
+
+/**
+ * One week of roster moves, in the app's own terms.
+ *
+ * Sleeper emits every key on every row and nulls the halves that do not apply,
+ * so most of this is filling in empties: `adds` is null on a drop-only move
+ * (969 of 3,264), `drops` on an add-only one (1,273), and `consenter_ids` on
+ * every commissioner correction.
+ *
+ * Failed transactions are **kept**. Only waivers ever fail — 461 of them, all
+ * losing claims — and a losing bid is the only published evidence of what it
+ * took to win: filtering them out here would throw away half the FAAB signal
+ * before any consumer got to see it. `succeeded` carries the distinction.
+ *
+ * The week comes from the caller rather than from `leg`, which is the same
+ * number on all 3,264 rows checked. Trusting the request keeps a season's weeks
+ * numbered consistently even if a platform ever disagrees with itself.
+ */
+export function mapTransactions(
+  season: string,
+  week: number,
+  rows: SleeperTransaction[],
+): LeagueTransaction[] {
+  return rows.map((row) => {
+    const adds = new Map<string, number>();
+    for (const [playerId, rosterId] of Object.entries(row.adds ?? {})) {
+      if (isRealPlayerId(playerId)) adds.set(playerId, rosterId);
+    }
+
+    const drops = new Map<string, number>();
+    for (const [playerId, rosterId] of Object.entries(row.drops ?? {})) {
+      if (isRealPlayerId(playerId)) drops.set(playerId, rosterId);
+    }
+
+    return {
+      id: row.transaction_id,
+      season,
+      week,
+      type: mapTransactionType(row.type),
+      succeeded: row.status === 'complete',
+      created: row.created ?? 0,
+      rosterIds: row.roster_ids ?? [],
+      adds,
+      drops,
+      picks: (row.draft_picks ?? []).map((pick) => ({
+        season: pick.season,
+        round: pick.round,
+        originalRosterId: pick.roster_id ?? null,
+        fromRosterId: pick.previous_owner_id ?? null,
+        toRosterId: pick.owner_id ?? null,
+      })),
+      budget: (row.waiver_budget ?? []).map((move) => ({
+        amount: move.amount,
+        fromRosterId: move.sender,
+        toRosterId: move.receiver,
+      })),
+      // `?? null` and never `?? 0`: a claim at nothing and a league with no
+      // FAAB at all are different facts. See `LeagueTransaction.bid`.
+      bid: row.settings?.waiver_bid ?? null,
+    };
+  });
 }

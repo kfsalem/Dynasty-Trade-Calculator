@@ -11,7 +11,9 @@ import {
   sleeperStateSchema,
   sleeperAccountSchema,
   sleeperMatchupsSchema,
+  sleeperTransactionsSchema,
   type SleeperMatchup,
+  type SleeperTransaction,
   type SleeperLeague,
   type SleeperRoster,
   type SleeperUser,
@@ -92,6 +94,24 @@ export function getDraft(draftId: string): Promise<SleeperDraft> {
  */
 export function getMatchups(leagueId: string, week: number): Promise<SleeperMatchup[]> {
   return fetchJson(`${BASE}/league/${leagueId}/matchups/${week}`, sleeperMatchupsSchema);
+}
+
+/**
+ * One week of roster moves.
+ *
+ * Per week and only per week, exactly like `getMatchups`, so a season is this
+ * call seventeen times. Sleeper files the entire offseason under week 1 — 827
+ * of the 3,264 transactions measured, and 85 of the 163 trades — so week 1 is
+ * not a week at all so much as everything before the season started.
+ */
+export function getTransactions(
+  leagueId: string,
+  week: number,
+): Promise<SleeperTransaction[]> {
+  return fetchJson(
+    `${BASE}/league/${leagueId}/transactions/${week}`,
+    sleeperTransactionsSchema,
+  );
 }
 
 /** Current NFL season and phase — decides which draft years are still tradeable. */

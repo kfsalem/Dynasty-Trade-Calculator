@@ -1744,9 +1744,30 @@ The existing `types/index.ts` is genuinely good and survives largely intact. Nee
 
 3. **Superflex — handled, and it falls out of the model rather than being special-cased.** `numQbs` is read from Sleeper's `roster_positions` at import, and `SUPER_FLEX` is a first-class lineup slot in `FLEX_ELIGIBILITY`. Nothing downstream tests for superflex: twenty quarterbacks having to start raises the replacement level on its own, which is the whole argument for deriving starter counts from real lineups. This was carried as an open question long after it stopped being one.
 
+4. **How much history? All of it (#50, #74).** The answer turned out to be the opposite of "a scale-out nicety". A dynasty league is a chain of leagues joined by `previous_league_id`, and walking it is now how the app reads both what every manager scored (`loadHistory`) and everything they ever did to their rosters (`loadTransactions`). Four seasons of a real league is around seventy requests per feed, entirely off the critical path, and every season but the current one is immutable and cached in IndexedDB — so it costs three requests warm.
+
+   What the transaction feed actually contains, measured across **3,264 transactions in seven league-seasons of two real leagues**:
+
+   | | count |
+   |---|---|
+   | free agent | 1,902 |
+   | waiver | 1,155 (461 of them failed claims) |
+   | trade | 163 (135 carrying picks, 17 carrying FAAB, 1 three-way) |
+   | commissioner | 44 |
+
+   `settings.waiver_bid` — the field #50 was raised to verify and could not, because the test league had no history at the time — is **real**: 1,038 waiver rows carry one, only waivers ever do, and the values run 0 to 120 with a median of 1. A bid of zero is a real bid, and 377 of one league's 545 bids are exactly that, so nothing may read a missing bid as a zero.
+
+   Three things about the feed that a consumer has to know:
+
+   - **Week 1 is not a week.** Sleeper files the whole offseason under it — a quarter of all transactions and half of all trades.
+   - **The calendar runs to 17.** Weeks 18 and 19 answer with an empty array in every season of both leagues, while week 17 still carries claims. It is not `playoff_week_start`: the regular season ends at 14 and three hundred moves happen after it.
+   - **Failed transactions are evidence.** Only waivers ever fail, and a losing bid is the only published record of what it took to win one.
+
+   What the feed cannot say: nothing publishes a *declined* trade, so the app can see what a league agreed to and never what it refused.
+
 **Still open:**
 
-4. **How much history?** Sleeper exposes full transaction history. Worth mining for "who trades with whom / who overpays," but it is a scale-out nicety rather than anything the thesis needs.
+Nothing carried from the original list. New questions are raised as issues.
 
 ---
 

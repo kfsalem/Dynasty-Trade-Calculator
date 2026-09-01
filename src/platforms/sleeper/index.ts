@@ -5,8 +5,10 @@ import type {
   LeagueBundle,
   LeagueHistory,
   LeagueProvider,
+  LeagueTransaction,
   Schedule,
   SeasonHistory,
+  TransactionHistory,
 } from '../types';
 import type { KnownDraftOrder, TradedPickRef } from '../../engine/picks';
 import {
@@ -18,6 +20,7 @@ import {
   getRosters,
   getState,
   getTradedPicks,
+  getTransactions,
   getUsers,
   parseLeagueId,
 } from './client';
@@ -31,6 +34,7 @@ import {
   mapPlayer,
   mapSeasonManagers,
   mapSettings,
+  mapTransactions,
   mapWeekLineups,
 } from './mapper';
 import { cached } from '../../lib/cache';
@@ -174,39 +178,77 @@ export const sleeperProvider: LeagueProvider = {
    * load computes.
    */
   async loadHistory(leagueId: string): Promise<LeagueHistory> {
-    const seasons: SeasonHistory[] = [];
-    let truncated = false;
-    let next: string | null = leagueId;
-
-    while (next && next !== NO_EARLIER_SEASON && seasons.length < MAX_SEASONS) {
-      const id: string = next;
-      // The head is live; everything behind it is a season that has finished
-      // and cannot change again. See `loadSeason`.
-      const current = seasons.length === 0;
-
-      let season: SeasonHistory & { previous: string | null };
-      try {
-        season = await loadSeason(id, current);
-      } catch {
-        // A league that has been deleted, or a season that predates what the
-        // platform will answer for. What has been read stays read; the chain
-        // simply stops here and says so.
-        truncated = true;
-        break;
-      }
-
-      seasons.push(season);
-      next = season.previous;
-    }
-
-    // Stopped because the walk hit its own limit rather than the end of the
-    // league. Ten seasons is longer than Sleeper has existed, so this is a
-    // guard against a cycle, not a real horizon.
-    if (next && next !== NO_EARLIER_SEASON && seasons.length >= MAX_SEASONS) truncated = true;
-
+    const { seasons, truncated } = await walkSeasons(leagueId, loadSeason);
     return { seasons, players: await historyPlayers(seasons), truncated };
   },
+
+  /**
+   * Every roster move the league has made, newest first.
+   *
+   * The same walk `loadHistory` makes, reading one endpoint over. Kept separate
+   * so a surface that wants trades does not pay for lineups and the other way
+   * round — the two are wanted at different times, and each is around seventy
+   * requests.
+   */
+  async loadTransactions(leagueId: string): Promise<TransactionHistory> {
+    const { seasons, truncated } = await walkSeasons(leagueId, loadSeasonTransactions);
+
+    const transactions = seasons.flatMap((season) => season.transactions);
+    // One well-defined order, newest first: recency is what makes a habit
+    // current, and every consumer of this wants the recent end.
+    transactions.sort((a, b) => b.created - a.created);
+
+    return {
+      transactions,
+      seasons: seasons.filter((s) => s.transactions.length > 0).map((s) => s.season),
+      truncated,
+    };
+  },
 };
+
+/**
+ * Walk a league back through its own past, reading each season the same way.
+ *
+ * The walk is sequential because it has to be: each league object is where the
+ * id of the one before it comes from. Everything expensive inside a season goes
+ * out in parallel, so a four-season league is a handful of round trips rather
+ * than seventy.
+ *
+ * A season that cannot be read stops the walk rather than failing it. What has
+ * already been read stays read, and `truncated` says the span is short — a
+ * league deleted, or a season older than the platform will answer for.
+ */
+async function walkSeasons<T extends { previous: string | null }>(
+  leagueId: string,
+  read: (leagueId: string, current: boolean) => Promise<T>,
+): Promise<{ seasons: T[]; truncated: boolean }> {
+  const seasons: T[] = [];
+  let next: string | null = leagueId;
+  let truncated = false;
+
+  while (next && next !== NO_EARLIER_SEASON && seasons.length < MAX_SEASONS) {
+    const id: string = next;
+    // The head is live; everything behind it has finished and cannot change.
+    const current = seasons.length === 0;
+
+    let season: T;
+    try {
+      season = await read(id, current);
+    } catch {
+      truncated = true;
+      break;
+    }
+
+    seasons.push(season);
+    next = season.previous;
+  }
+
+  // Stopped on its own limit rather than at the end of the league. Ten seasons
+  // is longer than Sleeper has existed, so this guards a cycle, not a horizon.
+  if (next && next !== NO_EARLIER_SEASON && seasons.length >= MAX_SEASONS) truncated = true;
+
+  return { seasons, truncated };
+}
 
 /**
  * Sleeper's "there is no earlier season", as a string.
@@ -274,6 +316,51 @@ async function loadSeason(
   };
 
   return current ? read() : cached(`sleeper:history:${leagueId}:v1`, SEASON_TTL, read);
+}
+
+/**
+ * The last week Sleeper files transactions under.
+ *
+ * Seventeen, measured: weeks 18 and 19 answer with an empty array in every
+ * season of both test leagues, and week 17 still carries claims. Not derived
+ * from `playoff_week_start` — the regular season ends at 14 in both leagues and
+ * three hundred moves happen after it.
+ */
+const LAST_TRANSACTION_WEEK = 17;
+
+/**
+ * One season's roster moves, and the id of the season before it.
+ *
+ * A week that fails is skipped rather than failing the season, the policy
+ * `loadSchedule` and `loadSeason` both run: a lost week costs the moves in it
+ * and nothing else.
+ */
+async function loadSeasonTransactions(
+  leagueId: string,
+  current: boolean,
+): Promise<{ season: string; transactions: LeagueTransaction[]; previous: string | null }> {
+  const read = async () => {
+    const league = await getLeague(leagueId);
+    const weeks = Array.from({ length: LAST_TRANSACTION_WEEK }, (_, i) => i + 1);
+
+    const perWeek = await Promise.all(
+      weeks.map((week) =>
+        getTransactions(leagueId, week)
+          .then((rows) => mapTransactions(league.season, week, rows))
+          .catch(() => []),
+      ),
+    );
+
+    return {
+      season: league.season,
+      transactions: perWeek.flat(),
+      previous: league.previous_league_id ?? null,
+    };
+  };
+
+  return current
+    ? read()
+    : cached(`sleeper:transactions:${leagueId}:v1`, SEASON_TTL, read);
 }
 
 /**
