@@ -935,6 +935,34 @@ describe('who the offer is going to', () => {
 
   it('says why an offer to a busy manager is ranked where it is', () => {
     const base = world(TWINS);
+    // Enough trades that the claim is worth making at all: at a handful the
+    // shrinkage holds the factor close enough to 1.0 that the card correctly
+    // says nothing, which the test below pins.
+    const model = feed([
+      ...Array.from({ length: 12 }, () => traded([3, 4])),
+      traded([2, 4]),
+      traded([2, 4]),
+    ]);
+
+    const { trades } = suggestTrades(1, { ...base, managers: model }, { maxResults: 10 });
+    const toBusy = trades.find((t) => t.partnerRosterId === 3);
+
+    const line = toBusy!.whyTheySayYes.find((l) => l.includes('completed'));
+    expect(line).toContain('Busy has completed 12 trades');
+    expect(line).toContain('league average of 7');
+    // "acted on" and never "accepted": the feed publishes no declined trade, so
+    // the claim has to stay a rate rather than becoming a willingness.
+    expect(line).toContain('likelier to be acted on');
+  });
+
+  it('says nothing about a manager the record barely distinguishes', () => {
+    /*
+      Five trades in a league averaging three is not a finding. The root
+      transform and the shrinkage together hold the factor inside the band the
+      card stays quiet about, which is the intended behaviour: a sentence about
+      every partner teaches a reader to skip the one that matters.
+    */
+    const base = world(TWINS);
     const model = feed([
       traded([3, 4]),
       traded([3, 4]),
@@ -945,13 +973,11 @@ describe('who the offer is going to', () => {
     ]);
 
     const { trades } = suggestTrades(1, { ...base, managers: model }, { maxResults: 10 });
-    const toBusy = trades.find((t) => t.partnerRosterId === 3);
 
-    const line = toBusy!.whyTheySayYes.find((l) => l.includes('completed'));
-    expect(line).toContain('Busy has completed 5 trades');
-    // "acted on" and never "accepted": the feed publishes no declined trade, so
-    // the claim has to stay a rate rather than becoming a willingness.
-    expect(line).toContain('likelier to be acted on');
+    // Still ranked on it — the score always multiplies by the full value.
+    const toBusy = trades.find((t) => t.partnerRosterId === 3);
+    expect(toBusy!.acceptance!.value).toBeGreaterThan(1);
+    expect(toBusy!.whyTheySayYes.some((l) => l.includes('completed'))).toBe(false);
   });
 
   it('tells a manager about a partnership he half-knew', () => {
