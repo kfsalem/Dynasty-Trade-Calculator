@@ -19,6 +19,7 @@ import type { ActivityAdjustment } from '../engine/activityFactor';
 import { formatValue } from '../lib/format';
 import type { TradeSelection } from '../lib/share';
 import { withStrengths, type OddsContext, type ScoringModel } from '../engine/playoffOdds';
+import { evidenceNote } from '../lib/learnedText';
 import { usePlayoffOdds } from '../hooks/usePlayoffOdds';
 
 /**
@@ -215,7 +216,10 @@ function PlayoffOdds({
    */
   const basis =
     model?.source === 'league'
-      ? `Tuned to ${model.weeks} completed ${model.weeks === 1 ? 'week' : 'weeks'} of this league's own scoring, blended with typical values while the sample is thin.`
+      ? `Tuned to this league's own scoring, blended with typical values in proportion to the evidence. ${evidenceNote(
+          { observations: model.weeks, weight: model.weight },
+          { one: 'completed week', many: 'completed weeks' },
+        )}`
       : 'This league has not played enough weeks to measure its own scoring, so typical values are assumed.';
 
   const points = settled ? Math.round(after * 100) - Math.round(before * 100) : 0;

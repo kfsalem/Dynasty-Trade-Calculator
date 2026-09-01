@@ -9,6 +9,7 @@ import {
   type SeasonOdds,
   type TeamAnalysis,
 } from './analysis';
+import { blend } from './learned';
 import { picksForRoster } from './picks';
 import { tradeWindow } from './tradeWindow';
 import { bestLineup, byValue, valuePlayers, type RosterSummary } from './rosterValue';
@@ -212,7 +213,22 @@ export function windowWeights(contention: ContentionProfile): {
   const fromOdds =
     WINDOW_WEIGHTS.danger.now +
     season.playoffOdds * (WINDOW_WEIGHTS.win_now.now - WINDOW_WEIGHTS.danger.now);
-  const now = (1 - season.weight) * roster + season.weight * fromOdds;
+
+  /*
+    The roster projection is the prior and the standings are the estimate, which
+    is what `engine/learned` exists to express. `blend` rather than `learn`
+    because the evidence here has a known denominator: a season is fourteen
+    weeks long, so six of them played is a proportion and not a sample size to
+    be shrunk against a half-life. See `SeasonOutlook.weight`.
+
+    Note what is *not* routed through it: the bilinear interpolation above.
+    That reads four design constants continuously instead of as a switch, and
+    there is no prior in it and nothing accumulating — a team in the middle of
+    the league is not a team we know less about, it is a team that genuinely
+    wants a middling answer. Putting it behind the same helper would say the two
+    are the same idea when only one of them is about evidence.
+  */
+  const now = blend(fromOdds, roster, season.weight, season.weeksPlayed).value;
 
   return { now, future: 1 - now };
 }
