@@ -119,6 +119,13 @@ export interface SeasonOutlook {
    * Zero before a game is played, where the simulation is a restatement of
    * `starterValue` and blending it in would be the roster projection counted
    * twice.
+   *
+   * A proportion rather than a shrinkage curve, and deliberately: `engine/learned`
+   * shrinks against a half-life because the denominator of a trade count or a
+   * price index is unknown, and here it is not — a fourteen-week season has
+   * fourteen weeks in it. Consumers still blend on it through `learned.blend`,
+   * so the weighting is written once even though the weight is arrived at
+   * differently.
    */
   weight: number;
   /**

@@ -350,6 +350,23 @@ describe('calibrate', () => {
     expect(model.weeks).toBe(6);
   });
 
+  /**
+   * The model carries how much of it is this league's own, so the UI can say
+   * so rather than describing every blend as "while the sample is thin". Six
+   * weeks is the half-life, so half of it is the league's own football.
+   */
+  it('reports how far along the blend it is', () => {
+    const half = calibrate(four, history([120, 110, 100, 90], [-10, 0, 10], 6));
+    expect(half.weight).toBeCloseTo(0.5);
+
+    const most = calibrate(four, history([120, 110, 100, 90], [-10, 0, 10], 16));
+    expect(most.weight).toBeGreaterThan(half.weight);
+    expect(most.weight).toBeLessThan(1);
+
+    // An assumed model contains no league at all, and says so.
+    expect(DEFAULT_MODEL.weight).toBe(0);
+  });
+
   it('reads the weekly spread from how much each team bounces', () => {
     // Every team swings ±10 about its own mean, so the pooled within-team SD is
     // about 8 — well under the assumed 28. Crucially it is *not* the spread of

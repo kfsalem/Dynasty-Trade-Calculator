@@ -1,5 +1,6 @@
 import type { League, Matchup } from '../types';
 import type { RosterSummary } from './rosterValue';
+import { learn, trust } from './learned';
 
 /**
  * What a trade does to your chances of playing in January.
@@ -43,6 +44,16 @@ export interface ScoringModel {
   source: 'league' | 'default';
   /** Completed weeks behind the estimate. Zero when assumed. */
   weeks: number;
+  /**
+   * How much of this model is the league's own football, 0-1.
+   *
+   * The same quantity as `Learned.weight`, carried here because the three
+   * numbers above are shrunk individually and there is no single `Learned` to
+   * hand the UI. `source` says which side of the blend a reader is looking at;
+   * this says how far along it — and without it, "blended while the sample is
+   * thin" is the app declining to say how thin.
+   */
+  weight: number;
 }
 
 /**
@@ -64,6 +75,7 @@ export const DEFAULT_MODEL: ScoringModel = {
   baseline: 110,
   source: 'default',
   weeks: 0,
+  weight: 0,
 };
 
 /**
@@ -77,6 +89,10 @@ const MIN_WEEKS = 3;
 
 /**
  * Weeks at which a measurement carries half the weight, the assumption half.
+ *
+ * The half-life this signal owns. `engine/learned` deliberately has no default
+ * for it — a shared one would be a constant picked by taste wearing the clothes
+ * of arithmetic — and the measurement below is what this one rests on.
  *
  * A hard cutoff was the first design and it was wrong. Run against a synthetic
  * season with known parameters, the raw estimate of `pointsPerSD` swung between
@@ -378,17 +394,21 @@ export function calibrate(teams: TeamState[], played: Matchup[]): ScoringModel {
   const measured = Math.min(Math.max(slope, 0), MAX_POINTS_PER_SD);
 
   // How much the league's own football is believed, against the assumption.
-  const trust = weeks / (weeks + SHRINK_HALF_LIFE);
-  const blend = (own: number, assumed: number) => own * trust + assumed * (1 - trust);
+  // The arithmetic lives in `engine/learned` now; this was where its shape was
+  // first worked out, and #75 lifted it out rather than letting a fourth
+  // consumer write it again.
+  const believed = (own: number, assumed: number) =>
+    learn(own, assumed, weeks, SHRINK_HALF_LIFE).value;
 
   return {
-    pointsPerSD: blend(measured, DEFAULT_MODEL.pointsPerSD),
-    weeklySD: blend(weeklySD, DEFAULT_MODEL.weeklySD),
+    pointsPerSD: believed(measured, DEFAULT_MODEL.pointsPerSD),
+    weeklySD: believed(weeklySD, DEFAULT_MODEL.weeklySD),
     // The baseline sets the level and nothing depends on it, so it is taken as
     // measured — there is no wrong answer to shrink away from.
     baseline,
     source: 'league',
     weeks,
+    weight: trust(weeks, SHRINK_HALF_LIFE),
   };
 }
 

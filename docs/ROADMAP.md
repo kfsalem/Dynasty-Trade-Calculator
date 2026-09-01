@@ -1378,3 +1378,93 @@ them would couple an optional panel to the odds every league load computes.
 Per-player consistency — floor, ceiling and spike weeks in the league's own
 points — is the third thing that issue asks for and is untouched here. It reads
 the same `players_points` this now walks, so the data is in hand.
+
+## Shrinkage: how much a league has actually said
+
+**Status:** Shipped —
+[#75](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/75).
+`src/engine/learned.ts` and `src/lib/learnedText.ts`.
+
+Every number learned from one league's own record is strong in a league with
+four seasons behind it and meaningless in one created last week. The obvious fix
+is a threshold, and a threshold is a cliff: invisible, and it puts two leagues
+one trade apart on opposite sides of a completely different answer. The
+alternative is a shrunk mean.
+
+```
+value = (1 - w) * prior + w * estimate
+w     = observations / (observations + half)
+```
+
+### The count of prior reinventions was right, and the shapes were not
+
+The issue said the app had reached for this twice. It was three times, and only
+one of them was actually this:
+
+| where | what it turned out to be |
+|---|---|
+| `playoffOdds.calibrate` | **exactly this**, written by hand, with a half-life measured against a synthetic season |
+| `analysis.seasonOutlook` | the same blend, a different weight function — and rightly so |
+| `suggest.windowWeights` | not this shape at all |
+
+`calibrate` is the canonical instance and now calls the shared helper. Its
+`SHRINK_HALF_LIFE = 6` stays exactly where it is, which is the point: **`half`
+belongs to the signal, not to the module.** A shared default would be a constant
+picked by taste wearing the clothes of arithmetic, and `calibrate`'s six is the
+only one in the app so far that has been measured — against a synthetic season
+where the raw estimate swung between 2.5 and 11.5 over four to six weeks against
+a true 9.
+
+`seasonOutlook.weight` is `weeksPlayed / weeksTotal`, and that is not a
+shrinkage curve — it is a proportion of a **known denominator**. A fourteen-week
+season has fourteen weeks in it, so there is nothing to estimate about how much
+evidence a full season would be. It keeps its own weight and blends through
+`learned.blend`, which takes a weight computed elsewhere. The weighting is
+written once; the weight is arrived at honestly in each case.
+
+`windowWeights` stays where it is. Its bilinear interpolation reads four design
+constants continuously instead of as a switch, and there is no prior in it and
+nothing accumulating: a team in the middle of the league is not a team we know
+less about, it is a team that genuinely wants a middling answer. Routing it
+through the same helper would assert that the two are the same idea when only
+one of them is about evidence. Its *second* half — correcting the roster
+projection by the standings — is this shape, and does use it.
+
+### The guard is the type
+
+`Learned<T>` carries `value`, `prior`, `observations` and `weight`, and
+deliberately **not** the raw estimate. A consumer cannot reach past the shrunk
+figure to the unshrunk one, so forgetting to shrink is a compile error rather
+than a quiet bias. What the type cannot do is force a consumer to use it at all;
+that part is a convention, and the reason this is written down.
+
+### Saying it out loud
+
+The rule the issue sets — every league-learned number is displayed with the
+evidence behind it — needs one phrasing rather than ten, so `lib/learnedText`
+owns the clause after the claim:
+
+> Your league pays about 18% over market for running backs — from 47 trades
+> since 2023. Moderate confidence.
+
+Three words, cut at the thirds of the blend: below a third the prior still
+supplies more than two-thirds of the answer, and above two-thirds the league's
+own record does. They are properties of the arithmetic rather than opinions
+about it, and — this is the part that matters — **they change only the word.**
+The value moves continuously at every sample size, so nothing the app does jumps
+as a league crosses one. Describing confidence is not thresholding on it.
+
+Zero observations gets its own sentence rather than "low confidence", because a
+number with no league in it is not a number held weakly: the value there *is*
+the prior, and a reader told "low confidence" would think their league had said
+something quiet rather than nothing.
+
+The first surface to use it is the playoff-odds tooltip, which already
+distinguished a measured model from an assumed one but could not say how far
+along the blend it was. `ScoringModel` now carries its own `weight` for that.
+
+### What it is for
+
+#76 and #77, which are the two issues that learn a number from a league's own
+record and would otherwise each invent a threshold. Ordering them behind this is
+what stops the quadrant's median-split cliff happening a third time.
