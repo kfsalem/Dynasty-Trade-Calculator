@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-08-29T00:51:36.138Z",
+  "generatedAt": "2026-09-01T11:06:57.552Z",
   "datasets": {
     "snaps": {
       "file": "snaps.json",
-      "generatedAt": "2026-08-29T00:51:36.138Z",
+      "generatedAt": "2026-09-01T11:06:57.552Z",
       "season": 2025,
       "throughWeek": 18,
       "rows": 634,
@@ -11,7 +11,7 @@
     },
     "opportunity": {
       "file": "opportunity.json",
-      "generatedAt": "2026-08-29T00:51:36.138Z",
+      "generatedAt": "2026-09-01T11:06:57.552Z",
       "season": 2025,
       "throughWeek": 18,
       "rows": 612,
@@ -19,7 +19,7 @@
     },
     "scoring": {
       "file": "scoring.json",
-      "generatedAt": "2026-08-29T00:51:36.138Z",
+      "generatedAt": "2026-09-01T11:06:57.552Z",
       "season": 2025,
       "throughWeek": 18,
       "rows": 624,
@@ -27,15 +27,15 @@
     },
     "depth": {
       "file": "depth.json",
-      "generatedAt": "2026-08-29T00:51:36.138Z",
+      "generatedAt": "2026-09-01T11:06:57.552Z",
       "season": 2026,
       "throughWeek": null,
-      "rows": 807,
+      "rows": 653,
       "fresh": true
     },
     "byes": {
       "file": "byes.json",
-      "generatedAt": "2026-08-29T00:51:36.138Z",
+      "generatedAt": "2026-09-01T11:06:57.552Z",
       "season": 2026,
       "throughWeek": 18,
       "rows": 32,
