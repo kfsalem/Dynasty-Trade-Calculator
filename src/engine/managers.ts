@@ -301,13 +301,14 @@ function nameOf(
 }
 
 /**
- * How much more, or less, than the league's own average this manager trades.
+ * How much likelier than average this manager is to act on an offer.
  *
- * A shrunk Poisson rate, `(k + c)/(m + c)`, where `k` is his completed trades
- * and `m` is what the league's rate alone predicts for him. One multiplier
- * around 1.0: a manager who completes twice as many trades as the rest is twice
- * as likely to act on an offer, which is the honest reading of a completed-trade
- * count — a rate, and not a willingness.
+ * Two steps, and they answer different questions.
+ *
+ * **The rate**, `(k + c)/(m + c)`, where `k` is his completed trades and `m` is
+ * what the league's own rate alone predicts for him. This is the measured half
+ * — what the constant above was fitted against, and what the split-half test
+ * showed predicts.
  *
  * The form matters more than it looks. The obvious `learn(k / m, 1, k, c)`
  * shrinks on the manager's *own* count, and so hands a manager who has never
@@ -318,8 +319,32 @@ function nameOf(
  * is what the reader is shown. `blend` takes the two separately, for exactly
  * this kind of reason.
  *
- * A league with no trades at all gives `(0 + c)/(0 + c)` — one, exactly, for
- * everybody, which is the app as it was before this existed.
+ * **The transform**, a square root, and this one is a modelling choice rather
+ * than a measurement — the honest place where this engine stops knowing.
+ *
+ * A completed-trade count is the product of two things: how often a manager is
+ * *asked*, and how often he says yes. The score needs only the second, and no
+ * published field separates them, because nothing publishes a declined trade.
+ * Two readings bracket the answer:
+ *
+ * - **Linear** — the whole gap is willingness. A manager who completes twice as
+ *   many trades accepts twice as readily.
+ * - **Square root** — engagement lifts both alike, so a manager asked `e` times
+ *   as often who says yes `e` times as readily completes `e²` of them, and his
+ *   acceptance rate is the root of his trade rate.
+ *
+ * The root is taken, deliberately conservatively. Measured across both leagues,
+ * linear promotes an offer worth 36% less in two-sided benefit into a team's
+ * top slot; the root drops the marginal reorderings and keeps the decisive
+ * ones. Where the evidence runs out the smaller claim is the one to make — and
+ * note that it is the *transform* being assumed here, never the rate.
+ *
+ * Applied after the shrinkage and never before it. The constant was measured
+ * against rates, so shrinking a rooted estimate toward 1.0 would be applying a
+ * calibration to a quantity it was never calibrated on.
+ *
+ * A league with no trades at all gives `sqrt((0 + c)/(0 + c))` — one, exactly,
+ * for everybody, which is the app as it was before this existed.
  */
 export function appetite(model: ManagerModel, userId: string | null): Learned<number> {
   if (!userId) return unlearned(1);
@@ -329,8 +354,10 @@ export function appetite(model: ManagerModel, userId: string | null): Learned<nu
 
   const estimate = record.trades / model.meanTrades;
   const weight = model.meanTrades / (model.meanTrades + APPETITE_PRIOR);
+  const rate = blend(estimate, 1, weight, record.trades);
 
-  return blend(estimate, 1, weight, record.trades);
+  // `prior` survives the transform unchanged, the root of one being one.
+  return { ...rate, value: Math.sqrt(rate.value) };
 }
 
 /** The manager holding a roster this season, or null for an orphan team. */

@@ -670,6 +670,11 @@ function explain(
  * because "this manager trades 1.03 times as often as the rest" is noise
  * dressed as a finding, and a card that says it about every partner teaches a
  * reader to skip the line that matters.
+ *
+ * Read against the rooted factor in `engine/managers`, so 0.15 is a manager who
+ * completes about a third more trades than his league's average, or a quarter
+ * fewer. Measured over the two test leagues it names three managers of eleven
+ * and three of seven — the clear ends of each roll, and nobody in the middle.
  */
 const WORTH_SAYING = 0.15;
 

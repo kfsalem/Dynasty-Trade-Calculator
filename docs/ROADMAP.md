@@ -1611,18 +1611,49 @@ trade the league made while he sat there not making it, so the weight is built
 from `m` and `k` is only what the reader is shown. `learned.blend` takes the two
 separately, which is what made this expressible without a fourth reinvention.
 
-Both design choices are visible in the live data. `jluck37` reads 0.56 rather
-than 1.0. And the thin league's whole range narrows on its own — 0.56–1.77 at a
-weight of 0.44, against 0.52–2.02 at 0.79 — with no threshold anywhere in it.
-The mean factor is 1.000 in both leagues, so this reorders offers rather than
-inflating every score in a league that happens to trade a lot.
+Both design choices are visible in the live data. `jluck37`'s rate reads 0.56
+rather than 1.0. And the thin league's whole range narrows on its own —
+0.56–1.77 at a weight of 0.44, against 0.52–2.02 at 0.79 — with no threshold
+anywhere in it. After the root below, the factors those become are 0.75–1.33 and
+0.72–1.42. The mean rate is 1.000 in both leagues, so this reorders offers
+rather than inflating every score in a league that happens to trade a lot.
+
+### Where the engine stops knowing
+
+The rate is measured. The step from a rate to a *probability of accepting this
+offer* is not, and cannot be from this feed.
+
+A completed-trade count is the product of how often a manager is asked and how
+often he says yes. The score needs only the second, and nothing published
+separates them — because nothing publishes a declined trade. Two readings
+bracket it: **linear**, where the whole gap is willingness, and **square root**,
+where engagement lifts asks and yeses alike, so a manager asked `e` times as
+often who says yes `e` times as readily completes `e²` of them.
+
+The root is taken. Measured across both leagues, the *membership* of a team's
+list barely moves either way — 0.1 of 6 suggestions change in one league and 0.3
+of 6 in the other — but the top slot is another matter. Under linear, three of
+seven teams have their #1 replaced, one of them by an offer worth **36% less**
+in two-sided benefit. The root drops the marginal reorderings and keeps the
+decisive ones: 36% to 0% for one team and 14% to 0% for another, while a genuine
+28% displacement survives under both readings.
+
+Where the evidence runs out, the smaller claim is the one to make. Note what is
+assumed and what is not: the *transform* is a modelling choice, the rate under
+it is measured, and the two are separate steps in the code so that a later
+source about offer volume changes one line rather than the model.
+
+The display cut on the sentence reads against the rooted factor, so it names a
+manager who completes about a third more trades than his league's average or a
+quarter fewer — three of eleven managers in one league and three of seven in the
+other, the clear ends of each roll and nobody in the middle.
 
 ### Where it enters, and what it must not do
 
 ```ts
 const score = Math.sqrt(my.benefit.total * their.benefit.total)
   * balanceFactor
-  * acceptance.value;
+  * acceptance.value;   // the rooted rate; see above
 ```
 
 That turns the score from "how good is this offer" into "how much good does this
