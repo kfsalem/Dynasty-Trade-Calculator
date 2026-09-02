@@ -83,6 +83,17 @@ describe('TradeSuggestions, while the manager walk is out', () => {
     expect(screen.getByText(/9 trades since 2024/)).toBeInTheDocument();
   });
 
+  it('says when the span behind the figure is short', () => {
+    // The walk stops at MAX_SEASONS or at the first season Sleeper has dropped,
+    // and the trade count is then a floor. The bench panel says so for the same
+    // walk; this one quoted the figure flat.
+    renderPanel({ managers: { ...landed, truncated: true } });
+
+    expect(
+      screen.getByText(/as far back as Sleeper still publishes/),
+    ).toBeInTheDocument();
+  });
+
   it('says nothing at all when the walk was never asked for', () => {
     // The tab is gated, and a visitor who has not opened it is not waiting on
     // anything. An idle query is not a loading one.

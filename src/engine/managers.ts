@@ -157,9 +157,14 @@ export interface ManagerModel {
    */
   tradesPerSeason: number;
   /**
-   * What a manager of typical tenure in this roll has completed. Used for one
-   * thing: the expectation to hold an *unowned* roster to, which has no tenure
-   * of its own to scale by.
+   * What a manager of typical tenure *still in this league* is expected to have
+   * completed. Used for one thing: the expectation to hold an *unowned* roster
+   * to, which has no tenure of its own to scale by.
+   *
+   * Current managers and not the whole roll, which is seeded from every season
+   * walked. A four-season league that has turned over six of eighteen names
+   * averages a tenure nobody currently in it has, and the orphan — a roster in
+   * the league right now — would be measured against it.
    */
   meanTrades: number;
   /** Seasons that contributed a trade, oldest first. */
@@ -350,6 +355,14 @@ export function modelManagers(history: TransactionHistory | undefined): ManagerM
   const roll = [...records.values()];
   const participations = roll.reduce((total, record) => total + record.trades, 0);
   const managerSeasons = roll.reduce((total, record) => total + record.seasons, 0);
+  const tradesPerSeason = managerSeasons > 0 ? participations / managerSeasons : 0;
+
+  // The tenure an unowned roster is held to: what the managers actually here
+  // have behind them. For a roll with no turnover this is the whole roll, and
+  // `tradesPerSeason * meanTenure` is `participations / roll.length` exactly.
+  const tenures = [...rosters.values()].map((userId) => records.get(userId)?.seasons ?? 0);
+  const meanTenure =
+    tenures.length > 0 ? tenures.reduce((total, n) => total + n, 0) / tenures.length : 0;
 
   return {
     managers: records,
@@ -357,8 +370,8 @@ export function modelManagers(history: TransactionHistory | undefined): ManagerM
     orphans,
     trades,
     unattributed,
-    tradesPerSeason: managerSeasons > 0 ? participations / managerSeasons : 0,
-    meanTrades: roll.length > 0 ? participations / roll.length : 0,
+    tradesPerSeason,
+    meanTrades: tradesPerSeason * meanTenure,
     seasons: [...tradedSeasons].sort(),
     truncated: history.truncated,
   };

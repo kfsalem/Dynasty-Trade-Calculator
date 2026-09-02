@@ -720,8 +720,14 @@ function socialLines(
       A team nobody owns, and the one thing the league's own table does say
       about it. Saying nothing here left the largest demotion in the list with
       a blank explanation beside it.
+
+      Behind the same display cut as the line below, and for the same reason.
+      In a thin league an orphan is demoted by four percent, and this is the
+      strongest claim any card makes — printing it for an effect that small is
+      the noise `WORTH_SAYING` exists to keep off the card.
     */
-    return model.orphans.has(partnerRosterId) && acceptance.weight > 0
+    return model.orphans.has(partnerRosterId) &&
+      Math.abs(acceptance.value - 1) >= WORTH_SAYING
       ? ['No manager holds this roster in the league table, so there may be nobody to answer an offer.']
       : [];
   }

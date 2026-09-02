@@ -263,7 +263,11 @@ export function TradeSuggestions({
         <p className="mt-2 text-sm text-subtle">
           Ranked by how much good an offer does, which counts how often each manager
           actually trades — {countPhrase(managers.trades, TRADES)}
-          {managers.seasons[0] ? ` since ${managers.seasons[0]}` : ''}. Only completed
+          {managers.seasons[0] ? ` since ${managers.seasons[0]}` : ''}
+          {/* The walk stops at `MAX_SEASONS` or at the first season Sleeper has
+              dropped, and the figure is then a floor rather than a total. Said
+              in the same words the bench panel uses for the same walk. */}
+          {managers.truncated ? ', as far back as Sleeper still publishes' : ''}. Only completed
           trades are published, never a declined one, so a quiet manager may be asking
           and being turned down.
         </p>

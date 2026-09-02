@@ -359,6 +359,45 @@ describe('appetiteFor', () => {
     expect(appetiteFor(model, 9).value).toBeLessThan(appetiteFor(model, 3).value);
   });
 
+  it('holds an unowned roster to the tenure of a manager still in the league', () => {
+    /*
+      The roll is seeded from every season walked, so it carries managers who
+      have left. Averaging their tenure into the figure an orphan is measured
+      against holds a roster that is in the league right now to a span nobody
+      in it has — and the orphan is then demoted less than the model says.
+    */
+    const model = modelManagers({
+      transactions: [trade([1, 2], '2026'), trade([1, 2], '2026')],
+      seasons: ['2023', '2026'],
+      managers: new Map([
+        [
+          '2023',
+          new Map<number, SeasonManager>([
+            [1, { userId: 'u1', name: 'Ada', teamName: 'Ada' }],
+            [2, { userId: 'u2', name: 'Ben', teamName: 'Ben' }],
+            [3, { userId: 'gone', name: 'Gus', teamName: 'Gus' }],
+          ]),
+        ],
+        [
+          '2026',
+          new Map<number, SeasonManager>([
+            [1, { userId: 'u1', name: 'Ada', teamName: 'Ada' }],
+            [2, { userId: 'u2', name: 'Ben', teamName: 'Ben' }],
+            [9, { userId: null, name: 'Orphan team', teamName: 'Orphan team' }],
+          ]),
+        ],
+      ]),
+      truncated: false,
+    });
+
+    // Four participations over five manager-seasons, and the two managers
+    // still here have two seasons each. The headcount figure — four over the
+    // three records — is a tenure neither of them has.
+    expect(model.tradesPerSeason).toBeCloseTo(4 / 5, 6);
+    expect(model.meanTrades).toBeCloseTo((4 / 5) * 2, 6);
+    expect(appetiteFor(model, 9).value).toBeCloseTo(Math.sqrt(6 / (1.6 + 6)), 6);
+  });
+
   it('resolves an owned roster to its manager', () => {
     const model = modelManagers(history(Array.from({ length: 8 }, () => trade([1, 2]))));
 

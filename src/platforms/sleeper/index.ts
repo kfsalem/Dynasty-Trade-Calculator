@@ -202,9 +202,17 @@ export const sleeperProvider: LeagueProvider = {
     return {
       transactions,
       seasons: seasons.filter((s) => s.transactions.length > 0).map((s) => s.season),
-      // Every season's table, not just the ones that traded: a consumer counting
-      // a manager's trades has to be able to see that he made none.
-      managers: new Map(seasons.map((s) => [s.season, s.managers])),
+      /*
+        Every season's table, not just the ones that traded: a consumer counting
+        a manager's trades has to be able to see that he made none.
+
+        Built oldest-first so that the newest wins. `seasons` is newest-first and
+        `new Map` lets the last write stand, so a chain carrying two leagues that
+        report the same season — a league re-created mid-year — would otherwise
+        resolve the current season's roster ids against the older league's owner
+        table, and show one manager's record under another's name.
+      */
+      managers: new Map([...seasons].reverse().map((s) => [s.season, s.managers])),
       truncated,
     };
   },

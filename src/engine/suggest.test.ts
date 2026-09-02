@@ -1064,6 +1064,39 @@ describe('who the offer is going to', () => {
     expect(line).toContain('league average of 0.5 per manager per season');
   });
 
+  it('says nothing about an unowned roster the record barely distinguishes', () => {
+    /*
+      Same display cut as the manager line, and the same reason for it. A thin
+      league demotes an orphan by ten percent, and "there may be nobody to
+      answer an offer" is the strongest claim any card makes — printing it for
+      an effect that small teaches a reader to skip the line that matters.
+    */
+    const base = world(TWINS);
+    const thin = modelManagers({
+      transactions: [traded([1, 2]), traded([1, 2])],
+      seasons: ['2025'],
+      managers: new Map([
+        [
+          '2025',
+          new Map<number, SeasonManager>([
+            ...OWNERS,
+            [3, { userId: null, name: 'Orphan team', teamName: 'Orphan team' }],
+          ]),
+        ],
+      ]),
+      truncated: false,
+    });
+
+    const { trades } = suggestTrades(1, { ...base, managers: thin }, { maxResults: 10 });
+    const toOrphan = trades.find((t) => t.partnerRosterId === 3);
+
+    // Still ranked on it — the score always multiplies by the full value.
+    expect(toOrphan!.acceptance!.value).toBeLessThan(1);
+    expect(
+      toOrphan!.whyTheySayYes.some((l) => l.includes('No manager holds this roster')),
+    ).toBe(false);
+  });
+
   it('ranks a roster nobody owns below a manager who does answer', () => {
     /*
       An unowned team is not an unknown one. Handing it the prior ranked it at
