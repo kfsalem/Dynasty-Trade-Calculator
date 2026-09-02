@@ -468,6 +468,8 @@ function App() {
                     odds={season}
                     season={snapsMeta?.season}
                     managers={managers.model}
+                    managersLoading={managers.loading}
+                    managersFailed={managers.failed}
                     onOpenInCalculator={(trade) => {
                       seedTrade(trade);
                       setTab('trade');

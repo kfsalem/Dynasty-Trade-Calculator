@@ -1686,6 +1686,71 @@ acted on" and never that a manager is likelier to accept, and the panel says the
 same thing once, out loud, above the list: a quiet manager may be asking
 constantly and being turned down.
 
+### What a review of the shipped code corrected
+
+Eight defects, found reading the branch back rather than in use. Two changed a
+ranking, three changed a claim the card was making, three were presentation.
+
+**An unowned roster was ranked as an average manager.** `rosters` holds only
+rosters with an `owner_id`, so an orphan resolved to `null`, took the prior,
+and multiplied by exactly 1.0 — above every real manager in the league who
+trades below average. Unknown and unowned are not the same state: the table
+saying nobody owns a team is evidence, not the absence of it. `appetiteFor`
+now tells the three cases apart by roster id — owned, unowned, and never seen
+by this walk — and holds the orphan to the arithmetic of a manager who has
+completed nothing. Still not a filter: orphan teams do trade, twelve times in
+one of the test leagues, and whoever is running one may well answer.
+
+**The largest demotion had the only blank explanation.** The sentence was gated
+on `observations`, which is the manager's own trade count, so it was silent for
+exactly the manager the factor exists to describe — `jluck37`, whose factor is
+0.56 and who got no sentence saying why. It reads `weight` now, which is what
+the evidence behind this factor actually is.
+
+**A count was measured against a span the manager had not been here for.**
+`k / meanTrades` compared a lifetime count against a multi-season total, so a
+manager who joined this year and had already made six trades — the busiest
+trader of the current season — measured 6 against four seasons of everybody
+else, was demoted 36% for it, and was told on the card that he trades less often
+than his league does. `ManagerRecord` now carries the seasons the league's own
+tables name him in, `ManagerModel.tradesPerSeason` is a rate per manager-season,
+and `expectedTrades` scales it by tenure. For a roll with no turnover the two
+are the same number exactly — `P/(N·S) · S = P/N` — so every figure measured
+above stands; it differs precisely where a manager's tenure differs from his
+league's span, which is the case the old form got wrong.
+
+**The same headcount denominator moved with turnover.** `meanTrades` divided by
+the number of records, and `named()` is reached from the claims and pick loops
+too, so a manager who left after one season and won a single waiver entered the
+roll as a `trades: 0` and pulled the mean down as hard as a manager who had been
+there throughout. That figure is printed to the reader as "a league average",
+and because the factor is affine in the estimate it also moved the ratios the
+global sort compares. Manager-seasons is the denominator that survives turnover.
+
+**A partnership was dated from a season the pair may never have traded in.**
+`since` was the later of the two managers' league-wide `firstTraded` seasons,
+because `partners` stored only a count. Two managers who each traded with other
+people in 2023 and first traded with each other in 2026 read as "you and Ben
+have traded 2 times since 2023" — a claim about their shared history the data
+never made. `PartnerRecord` carries the pair's own first season now.
+
+**A thin league's rate printed as zero.** The formatter was `Math.round`, so a
+league averaging 0.4 trades per manager per season told a manager who had
+completed three that the league average was 0. Rates get a decimal; values keep
+the whole number.
+
+**The demotion sentence was about our ordering, under a heading about theirs.**
+"…so this ranks below offers to managers who trade more often" is a fact about
+this app, and it sat in the bulleted list under "Why {partner} says yes". Both
+branches are claims about the manager now, and both keep the "acted on" hedge.
+
+**`loading` and `failed` were computed and never passed.** `useManagerModel`
+returned both from the start — the comment on `loading` even says it is there
+"so a surface can say so rather than lie" — and `App` passed only `model`. The
+walk is seventy-odd requests, so the list rendered with every partner weighted
+alike and re-sorted a couple of seconds later under whatever the reader was
+about to click. The panel says which of the two states it is in.
+
 ### Left for #76 and #47
 
 `ManagerRecord` carries `claims`, `picksAcquired` and `picksSpent` — exact counts

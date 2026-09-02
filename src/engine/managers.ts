@@ -93,9 +93,32 @@ export interface ManagerRecord {
   picksAcquired: number;
   picksSpent: number;
   /** Trades with each other manager, keyed by their `userId`. */
-  partners: Map<string, number>;
+  partners: Map<string, PartnerRecord>;
   /** Earliest season he traded in. Null when he never has. */
   firstTraded: string | null;
+  /**
+   * Seasons the league's own tables name him in, traded or not.
+   *
+   * Tenure, and the reason `appetite` can weigh a manager who joined this year
+   * against one who has been here four. Counted from the roster tables rather
+   * than from `firstTraded`, which is silent about exactly the manager the
+   * model most needs to get right: the one who has been in this league for
+   * years and never traded once.
+   */
+  seasons: number;
+}
+
+/**
+ * What one pair has done together.
+ *
+ * The season here is the pair's own. Each manager's `firstTraded` says when
+ * *he* started trading, which is a different fact and not one a sentence about
+ * the two of them is entitled to borrow.
+ */
+export interface PartnerRecord {
+  trades: number;
+  /** Earliest season the pair traded with each other in. */
+  since: string;
 }
 
 export interface ManagerModel {
@@ -106,6 +129,14 @@ export interface ManagerModel {
    * a manager without having to know that the two are different kinds of thing.
    */
   rosters: Map<number, string>;
+  /**
+   * Current-season roster ids the league's own table gives no owner.
+   *
+   * Held apart from a roster the walk simply never saw, because the two are
+   * different states of knowledge: this one is the table saying nobody owns the
+   * team, and `appetiteFor` is entitled to act on it.
+   */
+  orphans: Set<number>;
   /** Completed trades every side of which could be attributed to somebody. */
   trades: number;
   /**
@@ -115,8 +146,20 @@ export interface ManagerModel {
    */
   unattributed: number;
   /**
-   * Mean trades per manager: the rate at which a manager is unremarkable, and
+   * Mean trades per manager *per season* — the rate at which one season of one
+   * manager is unremarkable, and what `expectedTrades` scales by tenure to get
    * the `m` in `(k + c)/(m + c)`.
+   *
+   * Per season rather than per manager, because the denominator has to survive
+   * turnover. A manager who joined this year has not had four seasons in which
+   * to make four seasons' worth of trades, and measuring him against a total
+   * that spans them reads the busiest trader in the league as a quiet one.
+   */
+  tradesPerSeason: number;
+  /**
+   * What a manager of typical tenure in this roll has completed. Used for one
+   * thing: the expectation to hold an *unowned* roster to, which has no tenure
+   * of its own to scale by.
    */
   meanTrades: number;
   /** Seasons that contributed a trade, oldest first. */
@@ -130,15 +173,17 @@ export interface Partnership {
   trades: number;
   /** No pair in this league has traded more often. A tie counts as strongest. */
   strongest: boolean;
-  /** Earliest season both had traded by. Null when the pair never has. */
-  since: string | null;
+  /** Earliest season the pair traded with each other in. */
+  since: string;
 }
 
 const EMPTY: ManagerModel = {
   managers: new Map(),
   rosters: new Map(),
+  orphans: new Set(),
   trades: 0,
   unattributed: 0,
+  tradesPerSeason: 0,
   meanTrades: 0,
   seasons: [],
   truncated: false,
@@ -182,7 +227,7 @@ export function modelManagers(history: TransactionHistory | undefined): ManagerM
   if (!history) return EMPTY;
 
   const records = new Map<string, ManagerRecord>();
-  const named = (userId: string, name: string): ManagerRecord => {
+  const named = (userId: string, name = userId): ManagerRecord => {
     const existing = records.get(userId);
     if (existing) return existing;
     const record: ManagerRecord = {
@@ -194,6 +239,7 @@ export function modelManagers(history: TransactionHistory | undefined): ManagerM
       picksSpent: 0,
       partners: new Map(),
       firstTraded: null,
+      seasons: 0,
     };
     records.set(userId, record);
     return record;
@@ -207,16 +253,28 @@ export function modelManagers(history: TransactionHistory | undefined): ManagerM
     the roll from transactions alone would leave him out and his appetite
     unstated rather than low. He is the clearest evidence the feed contains.
 
-    Named from the newest season, because that is who is in the league now.
+    Every season, not only the newest, because tenure is what `appetite`
+    measures a manager's count against and a manager who left after 2024 still
+    took his seasons' worth of the league's trading with him. Newest first, so
+    the name a record carries is the one he goes by now.
   */
   const newestFirst = [...history.managers.keys()].sort().reverse();
   const rosters = new Map<number, string>();
+  const orphans = new Set<number>();
   const current = newestFirst[0];
   if (current) {
     for (const [rosterId, manager] of history.managers.get(current) ?? []) {
-      if (!manager.userId) continue;
-      rosters.set(rosterId, manager.userId);
-      named(manager.userId, manager.name);
+      if (manager.userId) rosters.set(rosterId, manager.userId);
+      else orphans.add(rosterId);
+    }
+  }
+
+  for (const season of newestFirst) {
+    const counted = new Set<string>();
+    for (const manager of history.managers.get(season)?.values() ?? []) {
+      if (!manager.userId || counted.has(manager.userId)) continue;
+      counted.add(manager.userId);
+      named(manager.userId, manager.name).seasons++;
     }
   }
 
@@ -255,15 +313,29 @@ export function modelManagers(history: TransactionHistory | undefined): ManagerM
     tradedSeasons.add(transaction.season);
 
     for (const userId of sides) {
-      const record = named(userId, nameOf(table, userId) ?? userId);
+      const record = named(userId);
       record.trades++;
-      // Oldest wins: the evidence clause says how far back the record goes.
+      /*
+        Oldest wins. Recorded and not currently rendered: the card used to
+        date a manager's count from it, which paired a lifetime figure with a
+        season and read as a claim about tenure. `seasons` is the tenure now,
+        and this stays for the same reason `claims` and the pick counts do —
+        it is an exact count off a pass already being made.
+      */
       if (!record.firstTraded || transaction.season < record.firstTraded) {
         record.firstTraded = transaction.season;
       }
       for (const other of sides) {
         if (other === userId) continue;
-        record.partners.set(other, (record.partners.get(other) ?? 0) + 1);
+        const pair = record.partners.get(other);
+        // Oldest wins here too, and the season kept is the pair's own — the
+        // first time these two traded with each other, whatever either of them
+        // was doing with the rest of the league before that.
+        if (!pair) record.partners.set(other, { trades: 1, since: transaction.season });
+        else {
+          pair.trades++;
+          if (transaction.season < pair.since) pair.since = transaction.season;
+        }
       }
     }
 
@@ -277,27 +349,19 @@ export function modelManagers(history: TransactionHistory | undefined): ManagerM
 
   const roll = [...records.values()];
   const participations = roll.reduce((total, record) => total + record.trades, 0);
+  const managerSeasons = roll.reduce((total, record) => total + record.seasons, 0);
 
   return {
     managers: records,
     rosters,
+    orphans,
     trades,
     unattributed,
+    tradesPerSeason: managerSeasons > 0 ? participations / managerSeasons : 0,
     meanTrades: roll.length > 0 ? participations / roll.length : 0,
     seasons: [...tradedSeasons].sort(),
     truncated: history.truncated,
   };
-}
-
-/** A manager's display name in one season's table, if it names him at all. */
-function nameOf(
-  table: Map<number, SeasonManager> | undefined,
-  userId: string,
-): string | null {
-  for (const manager of table?.values() ?? []) {
-    if (manager.userId === userId) return manager.name;
-  }
-  return null;
 }
 
 /**
@@ -309,6 +373,14 @@ function nameOf(
  * what the league's own rate alone predicts for him. This is the measured half
  * — what the constant above was fitted against, and what the split-half test
  * showed predicts.
+ *
+ * `m` is his own, not the league's, and that is what `expectedTrades` is for.
+ * A rate compared against a multi-season total is a claim about tenure wearing
+ * a claim about appetite: a manager who joined this year and has already made
+ * six trades — the busiest trader of the current season — measures 6 against
+ * four seasons of everyone else and is demoted for it, and the card then says
+ * out loud that he trades less than his league does. Scaling the expectation by
+ * the seasons he has actually been here is the whole of the fix.
  *
  * The form matters more than it looks. The obvious `learn(k / m, 1, k, c)`
  * shrinks on the manager's *own* count, and so hands a manager who has never
@@ -350,13 +422,53 @@ export function appetite(model: ManagerModel, userId: string | null): Learned<nu
   if (!userId) return unlearned(1);
 
   const record = model.managers.get(userId);
-  if (!record || model.meanTrades <= 0) return unlearned(1);
+  if (!record) return unlearned(1);
 
-  const estimate = record.trades / model.meanTrades;
-  const weight = model.meanTrades / (model.meanTrades + APPETITE_PRIOR);
-  const rate = blend(estimate, 1, weight, record.trades);
+  const expected = expectedTrades(model, record);
+  if (expected <= 0) return unlearned(1);
+
+  const weight = expected / (expected + APPETITE_PRIOR);
+  const rate = blend(record.trades / expected, 1, weight, record.trades);
 
   // `prior` survives the transform unchanged, the root of one being one.
+  return { ...rate, value: Math.sqrt(rate.value) };
+}
+
+/**
+ * Trades a manager of this tenure is expected to have made — the `m` above.
+ *
+ * Exported because the card has to be able to say what the count was measured
+ * against. A sentence that quotes `k` and a denominator the reader cannot see
+ * is not an explanation.
+ */
+export function expectedTrades(model: ManagerModel, record: ManagerRecord): number {
+  return model.tradesPerSeason * record.seasons;
+}
+
+/**
+ * The factor to rank an offer to a *roster* by, unowned teams included.
+ *
+ * Three states, and they are genuinely different. A roster with an owner is his
+ * record. A roster this walk never saw is nothing known, and gets the prior.
+ * And a roster the league's own table names and gives no owner is not an
+ * unknown at all — it is a team with nobody reading the message, and ranking it
+ * at the league's average acceptance put it above every real manager who trades
+ * below that average, which is the one ordering this data will not support.
+ *
+ * So the orphan is held to the same arithmetic as a manager who has completed
+ * nothing, against the expectation of a manager of typical tenure here. A
+ * demotion and not a filter, for the reason every other term here is one:
+ * orphan teams do trade — one test league's carries twelve of that league's —
+ * and whoever is running it may well answer. They are simply not evidence of an
+ * average appetite, and the model should stop implying that they are.
+ */
+export function appetiteFor(model: ManagerModel, rosterId: number): Learned<number> {
+  const userId = model.rosters.get(rosterId);
+  if (userId) return appetite(model, userId);
+  if (!model.orphans.has(rosterId) || model.meanTrades <= 0) return unlearned(1);
+
+  const weight = model.meanTrades / (model.meanTrades + APPETITE_PRIOR);
+  const rate = blend(0, 1, weight, 0);
   return { ...rate, value: Math.sqrt(rate.value) };
 }
 
@@ -387,24 +499,21 @@ export function partnership(
   const other = model.managers.get(b);
   if (!record || !other) return null;
 
-  const trades = record.partners.get(b) ?? 0;
-  if (trades === 0) return null;
+  const pair = record.partners.get(b);
+  if (!pair || pair.trades === 0) return null;
 
   let most = 0;
   for (const manager of model.managers.values()) {
-    for (const count of manager.partners.values()) most = Math.max(most, count);
+    for (const theirs of manager.partners.values()) most = Math.max(most, theirs.trades);
   }
 
   /*
-    The pair's own span, not the league's. Two managers who first traded in 2025
-    have not been trading "since 2023" whatever the league has been doing, so
-    this is the later of the two first seasons — the point from which both were
-    around to trade with each other at all.
+    The pair's own first season, carried on the pair record itself. Deriving it
+    from the two managers' `firstTraded` — the later of the two, on the theory
+    that it is when both were around — dates the pair from a season they may
+    never have traded in: two managers who each traded with other people in
+    2023 and first traded with each other in 2026 rendered as "since 2023",
+    which is a claim about their shared history the data never made.
   */
-  const since =
-    record.firstTraded && other.firstTraded
-      ? (record.firstTraded > other.firstTraded ? record.firstTraded : other.firstTraded)
-      : (record.firstTraded ?? other.firstTraded);
-
-  return { trades, strongest: trades >= most, since };
+  return { trades: pair.trades, strongest: pair.trades >= most, since: pair.since };
 }

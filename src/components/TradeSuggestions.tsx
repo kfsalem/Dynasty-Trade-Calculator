@@ -35,6 +35,10 @@ interface Props {
    * walk lands, and the list is then exactly the list it always was.
    */
   managers?: ManagerModel;
+  /** The walk is in flight, so the order on screen is not the final one yet. */
+  managersLoading?: boolean;
+  /** The walk lost a request. Every partner is weighted the same, as before. */
+  managersFailed?: boolean;
 }
 
 const TRADES: Countable = { one: 'trade', many: 'trades' };
@@ -214,6 +218,8 @@ export function TradeSuggestions({
   odds,
   season,
   managers,
+  managersLoading,
+  managersFailed,
 }: Props) {
   const result = useMemo(() => {
     const ctx: SuggestContext = {
@@ -260,6 +266,28 @@ export function TradeSuggestions({
           {managers.seasons[0] ? ` since ${managers.seasons[0]}` : ''}. Only completed
           trades are published, never a declined one, so a quiet manager may be asking
           and being turned down.
+        </p>
+      )}
+
+      {/*
+        The walk is seventy-odd requests and the list re-sorts when it lands.
+        Told nothing, a reader watches the card he was about to click move under
+        the cursor; told this, he knows to give it a moment. Said here and not
+        as a spinner because the list below is real and usable meanwhile — it is
+        the ordering that is provisional, not the offers.
+      */}
+      {!managers && managersLoading && (
+        <p className="mt-2 text-sm text-subtle">
+          Reading this league's trade history. These are ranked on value alone until
+          it lands, and will re-order once it does.
+        </p>
+      )}
+
+      {/* Same cost as the bench walk failing: this panel and nothing else. */}
+      {!managers && managersFailed && (
+        <p className="mt-2 text-sm text-subtle">
+          This league's trade history didn't load, so these are ranked on value alone
+          — every manager is weighted the same. Nothing else on this page is affected.
         </p>
       )}
 
