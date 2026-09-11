@@ -33,16 +33,27 @@ export function requireColumns(
   return row;
 }
 
+/**
+ * The failure for a source that parsed into almost nothing.
+ *
+ * Returned rather than thrown so a caller that has already decided it has
+ * nothing usable can `throw` it without a condition the compiler cannot see
+ * through — one message, both shapes of call.
+ */
+export function emptyDataset(dataset: string, count: number, minimum: number): IngestError {
+  return new IngestError(
+    'schema',
+    `${dataset}: reduced to ${count} players, expected at least ${minimum}. ` +
+      `The source parsed but produced almost nothing. A season that has only just ` +
+      `kicked off is not this — the caller falls back to the season before it — so ` +
+      `every season it could reach came up short. Check for a changed id column, ` +
+      `position code, or season-type filter.`,
+  );
+}
+
 /** Fail rather than ship an empty dataset that reads as "the season hasn't started". */
 export function requireRows(dataset: string, count: number, minimum: number): void {
-  if (count < minimum) {
-    throw new IngestError(
-      'schema',
-      `${dataset}: reduced to ${count} players, expected at least ${minimum}. ` +
-        `The source parsed but produced almost nothing — check for a changed id ` +
-        `column, position code, or season-type filter.`,
-    );
-  }
+  if (count < minimum) throw emptyDataset(dataset, count, minimum);
 }
 
 /** nflverse writes `NA` for missing values; everything else is a number or blank. */
