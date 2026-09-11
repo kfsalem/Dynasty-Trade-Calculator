@@ -25,8 +25,8 @@ import type { LeagueSettings, Position, Roster } from '../types';
  *
  * ```
  *                        blind    shrunk    gain
- *   Eternal Rebuild     0.08695   0.07812   10.4%   (n=321)
- *   Tight Ends          0.13198   0.11867   10.2%   (n=297)
+ *   Eternal Rebuild     0.08695   0.07812   10.2%   (n=321)
+ *   Tight Ends          0.13198   0.11867   10.1%   (n=297)
  * ```
  *
  * ## The half-life, and how firm it is
@@ -35,8 +35,9 @@ import type { LeagueSettings, Position, Roster } from '../types';
  * on the same minimum; this one is weaker than that and the difference is worth
  * stating plainly. Eternal minimises at 3 and Tight Ends at 12 — but both
  * curves are flat between them, and every constant in 3–12 is within 0.6% of
- * each league's own best. Seven is where the two normalised curves cross, not a
- * figure either league insisted on.
+ * each league's own best — 10.4% and 10.2% there against the 10.2% and 10.1%
+ * above. Seven is where the two normalised curves cross, not a figure either
+ * league insisted on.
  *
  * ## What is deliberately absent
  *

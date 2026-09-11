@@ -1856,10 +1856,13 @@ Drop the market-value denominator and predict the bid from position alone, and
 it holds in both leagues at the same shrinkage constant — n=321 and n=297,
 800 half-splits, bids as a share of the budget they were spent from:
 
-| | blind | shrunk | gain |
+| | blind | shrunk at `half=7` | gain |
 |---|---|---|---|
-| Eternal Rebuild | 0.08695 | 0.07812 | **10.4%** |
-| Tight Ends | 0.13198 | 0.11867 | **10.2%** |
+| Eternal Rebuild | 0.08695 | 0.07812 | **10.2%** |
+| Tight Ends | 0.13198 | 0.11867 | **10.1%** |
+
+At each league's own best constant the gains are 10.4% and 10.2%; the table is
+at the one that shipped.
 
 That is not a local price. It carries no player value in the arithmetic
 anywhere, so it cannot multiply an asset or balance a package — it is what a
