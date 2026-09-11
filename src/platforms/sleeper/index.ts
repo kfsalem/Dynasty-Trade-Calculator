@@ -1,4 +1,4 @@
-import type { Matchup, Player, SeasonPhase } from '../../types';
+import type { Matchup, Player, Position, SeasonPhase, WaiverSettings } from '../../types';
 import type {
   AwardedPoints,
   HistoryPlayer,
@@ -25,6 +25,7 @@ import {
   getUsers,
   parseLeagueId,
 } from './client';
+import type { PlayerIndex } from './client';
 import type { SleeperMatchup } from './schema';
 import {
   mapAwardedPoints,
@@ -33,6 +34,7 @@ import {
   mapLeague,
   mapMatchups,
   mapPlayer,
+  mapPosition,
   mapSeasonManagers,
   mapSettings,
   mapTransactions,
@@ -192,7 +194,15 @@ export const sleeperProvider: LeagueProvider = {
    * requests.
    */
   async loadTransactions(leagueId: string): Promise<TransactionHistory> {
-    const { seasons, truncated } = await walkSeasons(leagueId, loadSeasonTransactions);
+    // The walk is sequential and slow; the player index is one cached request
+    // the app has usually already made for the league itself. Started together
+    // so it costs nothing, and allowed to fail on its own: a history without
+    // positions is still every count and every date, and the one consumer that
+    // needs them says nothing rather than guessing.
+    const [{ seasons, truncated }, playerIndex] = await Promise.all([
+      walkSeasons(leagueId, loadSeasonTransactions),
+      getPlayers().catch((): PlayerIndex => ({})),
+    ]);
 
     const transactions = seasons.flatMap((season) => season.transactions);
     // One well-defined order, newest first: recency is what makes a habit
@@ -213,10 +223,37 @@ export const sleeperProvider: LeagueProvider = {
         table, and show one manager's record under another's name.
       */
       managers: new Map([...seasons].reverse().map((s) => [s.season, s.managers])),
+      // Same oldest-first build and the same reason: the newest league to claim
+      // a season is the one whose rules that season ran under.
+      waivers: new Map([...seasons].reverse().map((s) => [s.season, s.waivers])),
+      positions: mapPositions(transactions, playerIndex),
       truncated,
     };
   },
 };
+
+/**
+ * The position of every player named anywhere in this history.
+ *
+ * Drops as well as adds: a consumer pricing what a league gave up needs the man
+ * who left, and the table costs the same either way. Players the index no
+ * longer carries are simply absent — `Map.get` returning undefined is the same
+ * "the platform does not say" every other lookup here means by it.
+ */
+function mapPositions(
+  transactions: LeagueTransaction[],
+  index: PlayerIndex,
+): Map<string, Position> {
+  const positions = new Map<string, Position>();
+  for (const t of transactions) {
+    for (const id of [...t.adds.keys(), ...t.drops.keys()]) {
+      if (positions.has(id)) continue;
+      const position = mapPosition(index[id]?.position);
+      if (position) positions.set(id, position);
+    }
+  }
+  return positions;
+}
 
 /**
  * Walk a league back through its own past, reading each season the same way.
@@ -354,6 +391,7 @@ async function loadSeasonTransactions(
   season: string;
   transactions: LeagueTransaction[];
   managers: Map<number, SeasonManager>;
+  waivers: WaiverSettings;
   previous: string | null;
 }> {
   const read = async () => {
@@ -387,14 +425,19 @@ async function loadSeasonTransactions(
       season: league.season,
       transactions: perWeek.flat(),
       managers: mapSeasonManagers(rosters, users),
+      // Off the league object this function already holds. A season's bids are
+      // only interpretable against the budget that season ran on.
+      waivers: mapSettings(league).waivers,
       previous: league.previous_league_id ?? null,
     };
   };
 
-  // v2: the cached shape gained `managers`, and a v1 entry cannot supply it.
+  // v3: the cached shape gained `waivers`; v2 gained `managers`. Neither an
+  // older entry can supply, and a missing budget reads as a league that runs no
+  // FAAB — a wrong answer rather than a slow one.
   return current
     ? read()
-    : cached(`sleeper:transactions:${leagueId}:v2`, SEASON_TTL, read);
+    : cached(`sleeper:transactions:${leagueId}:v3`, SEASON_TTL, read);
 }
 
 /**

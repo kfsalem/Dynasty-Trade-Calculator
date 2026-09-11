@@ -407,6 +407,23 @@ export interface Roster {
   setLineup: (string | null)[];
   taxiIds: string[];
   reserveIds: string[];
+  /**
+   * FAAB spent so far, or null in a league that publishes no budget at all.
+   *
+   * Spent, not lost: budget moves between rosters in trades, so this goes
+   * negative for a manager who has acquired some. One roster of the four-season
+   * test league reads -20 against a $150 league — $170 to spend. Remaining
+   * budget is `waivers.budget - faabUsed`, and it may legitimately exceed the
+   * league's own budget; see `engine/bids`.
+   */
+  faabUsed: number | null;
+  /**
+   * Place in the rolling waiver order, or null when the platform does not say.
+   *
+   * Published even by leagues running FAAB, where it is the tiebreaker rather
+   * than the mechanism. It is what a non-FAAB league has *instead* of a bid.
+   */
+  waiverPosition: number | null;
 }
 
 export interface League {

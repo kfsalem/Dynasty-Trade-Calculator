@@ -5,6 +5,7 @@ import type {
   TransactionHistory,
   TransactionType,
 } from '../platforms/types';
+import { makeHistory } from './testFixtures';
 import {
   appetite,
   appetiteFor,
@@ -56,12 +57,11 @@ function history(
   transactions: LeagueTransaction[],
   seasons = ['2025'],
 ): TransactionHistory {
-  return {
+  return makeHistory({
     transactions,
     seasons,
     managers: new Map(seasons.map((s) => [s, TABLE(s)])),
-    truncated: false,
-  };
+  });
 }
 
 describe('modelManagers', () => {
@@ -86,7 +86,7 @@ describe('modelManagers', () => {
   it('keys identity on the manager, not the roster he happened to hold', () => {
     // Ada is roster 1 in both seasons here, but the model must never be reading
     // the roster id — swapping the table proves which one it used.
-    const swapped: TransactionHistory = {
+    const swapped: TransactionHistory = makeHistory({
       transactions: [trade([1, 2], '2024'), trade([2, 3], '2025')],
       seasons: ['2024', '2025'],
       managers: new Map([
@@ -100,8 +100,7 @@ describe('modelManagers', () => {
         ],
         ['2025', TABLE('2025')],
       ]),
-      truncated: false,
-    };
+    });
 
     const model = modelManagers(swapped);
 
@@ -197,15 +196,14 @@ describe('modelManagers', () => {
       and left pulled the league's rate down as hard as one who played both —
       and that rate is the denominator every other manager is measured against.
     */
-    const model = modelManagers({
+    const model = modelManagers(makeHistory({
       transactions: [trade([1, 2], '2024'), trade([1, 2], '2025')],
       seasons: ['2024', '2025'],
       managers: new Map([
         ['2024', owned('u1', 'u2', 'gone')],
         ['2025', owned('u1', 'u2', 'u3')],
       ]),
-      truncated: false,
-    });
+      }));
 
     expect(model.managers.get('gone')?.seasons).toBe(1);
     expect(model.managers.get('u1')?.seasons).toBe(2);
@@ -317,7 +315,7 @@ describe('appetite', () => {
       trade([1, 2], season),
       trade([1, 3], season),
     ]);
-    const model = modelManagers({
+    const model = modelManagers(makeHistory({
       transactions: [
         ...veterans,
         ...Array.from({ length: 3 }, () => trade([1, 4], '2026')),
@@ -329,8 +327,7 @@ describe('appetite', () => {
         ['2025', owned('u1', 'u2', 'u3')],
         ['2026', owned('u1', 'u2', 'u3', 'u4')],
       ]),
-      truncated: false,
-    });
+      }));
 
     expect(model.managers.get('u2')?.trades).toBe(3);
     expect(model.managers.get('u4')?.trades).toBe(3);
@@ -366,7 +363,7 @@ describe('appetiteFor', () => {
       against holds a roster that is in the league right now to a span nobody
       in it has — and the orphan is then demoted less than the model says.
     */
-    const model = modelManagers({
+    const model = modelManagers(makeHistory({
       transactions: [trade([1, 2], '2026'), trade([1, 2], '2026')],
       seasons: ['2023', '2026'],
       managers: new Map([
@@ -387,8 +384,7 @@ describe('appetiteFor', () => {
           ]),
         ],
       ]),
-      truncated: false,
-    });
+      }));
 
     // Four participations over five manager-seasons, and the two managers
     // still here have two seasons each. The headcount figure — four over the
@@ -425,15 +421,14 @@ describe('managerFor', () => {
   });
 
   it('resolves against the newest season, whatever order the map arrives in', () => {
-    const model = modelManagers({
+    const model = modelManagers(makeHistory({
       transactions: [],
       seasons: [],
       managers: new Map([
         ['2023', new Map([[1, { userId: 'old', name: 'Old', teamName: 'Old' }]])],
         ['2026', new Map([[1, { userId: 'now', name: 'Now', teamName: 'Now' }]])],
       ]),
-      truncated: false,
-    });
+      }));
 
     expect(managerFor(model, 1)?.userId).toBe('now');
   });

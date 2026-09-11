@@ -154,6 +154,22 @@ export const sleeperRosterSchema = z.object({
        */
       ppts: z.number().nullish(),
       ppts_decimal: z.number().nullish(),
+      /**
+       * FAAB this roster has spent, which is not the same as FAAB it has lost.
+       *
+       * It goes **negative** when a manager acquires budget in a trade: one
+       * roster in the four-season test league reads `-20` against a $150
+       * league, meaning $170 to spend. So remaining budget is `budget - used`
+       * and nothing may clamp `used` at zero or assume the remainder fits
+       * inside the league's own budget — see `engine/bids`.
+       */
+      waiver_budget_used: z.number().nullish(),
+      /**
+       * Rolling-waiver order, published by both test leagues even though both
+       * run FAAB. It is what a non-FAAB league has instead of a bid, and #47
+       * shows it there rather than inventing a price.
+       */
+      waiver_position: z.number().nullish(),
     })
     .nullish(),
 });

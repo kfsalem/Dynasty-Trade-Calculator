@@ -16,6 +16,7 @@ import { ContentionScatter } from './charts/ContentionScatter';
 import { PositionalStrengthChart } from './charts/PositionalStrengthChart';
 import { ScarcityChart } from './charts/ScarcityChart';
 import { WeeklyLineup } from './WeeklyLineup';
+import type { BidModel } from '../engine/bids';
 
 interface Props {
   league: League;
@@ -47,6 +48,12 @@ interface Props {
     failed: boolean;
     truncated: boolean;
   };
+  /**
+   * What a waiver claim costs in this league. Undefined until the walk lands,
+   * and in every league that does not run FAAB — the lineup panel simply says
+   * nothing about price until it has one.
+   */
+  bids: BidModel | undefined;
   onChangeTeam: () => void;
 }
 
@@ -69,6 +76,7 @@ export function TeamAnalysis({
   freeAgents,
   activityCurrent,
   bench,
+  bids,
   onChangeTeam,
 }: Props) {
   const analysis = analyzeTeam(myRosterId, summaries, league.settings, season);
@@ -131,6 +139,7 @@ export function TeamAnalysis({
             byeTeams={byeTeams}
             board={freeAgents}
             activityCurrent={activityCurrent}
+            bids={bids}
           />
         </div>
       )}

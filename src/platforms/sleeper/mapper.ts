@@ -70,6 +70,17 @@ function mapInjury(status: string | null): InjuryStatus | undefined {
   return { status: KNOWN_STATUS[normalized] ?? 'unknown', description: status };
 }
 
+/**
+ * A platform position string, if this app recognises it.
+ *
+ * The same gate `mapPlayer` applies, reachable without a whole player: the
+ * transaction history names men the index may have dropped, and one place
+ * deciding what counts as a position keeps that answer identical everywhere.
+ */
+export function mapPosition(position: string | null | undefined): Position | null {
+  return position && POSITIONS.has(position as Position) ? (position as Position) : null;
+}
+
 export function mapPlayer(p: SlimPlayer): Player | null {
   if (!POSITIONS.has(p.position as Position)) return null;
   return {
@@ -360,6 +371,11 @@ export function mapLeague(
       setLineup: mapSetLineup(r.starters, startingSlots.length),
       taxiIds: (r.taxi ?? []).filter(isRealPlayerId),
       reserveIds: (r.reserve ?? []).filter(isRealPlayerId),
+      // `?? null` rather than `?? 0`: a league that publishes no budget and a
+      // manager who has spent none of his are different facts, and the bid
+      // model has to tell them apart before it offers anyone a number.
+      faabUsed: r.settings?.waiver_budget_used ?? null,
+      waiverPosition: r.settings?.waiver_position ?? null,
     };
   });
 

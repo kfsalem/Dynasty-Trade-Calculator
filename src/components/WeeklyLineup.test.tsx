@@ -4,8 +4,18 @@ import userEvent from '@testing-library/user-event';
 import { WeeklyLineup } from './WeeklyLineup';
 import { summarizeRoster } from '../engine/rosterValue';
 import { makePlayer, makeRoster, makeSettings, makeValue } from '../engine/testFixtures';
-import type { InjuryStatus, Player, PlayerValue, Roster, SeasonPhase } from '../types';
+import type {
+  InjuryStatus,
+  Player,
+  PlayerValue,
+  Roster,
+  SeasonPhase,
+  WaiverSettings,
+} from '../types';
 import type { FreeAgent, FreeAgentBoard } from '../engine/freeAgents';
+import { modelBids, type BidModel } from '../engine/bids';
+import { makeHistory } from '../engine/testFixtures';
+import type { LeagueTransaction } from '../platforms/types';
 
 const freeAgent = (id: string, position: 'QB' | 'WR', winNow: number): FreeAgent => ({
   player: { ...makePlayer(id, position), team: 'KC' },
@@ -63,6 +73,8 @@ function panel(
     byeTeams = null as ReadonlySet<string> | null,
     board = undefined as FreeAgentBoard | undefined,
     values: overrideValues = values as Map<string, PlayerValue>,
+    bids = undefined as BidModel | undefined,
+    faabUsed = null as number | null,
   } = {},
 ) {
   const withInjuries = new Map(players);
@@ -73,7 +85,7 @@ function panel(
     withInjuries.set(id, { ...(withInjuries.get(id) as Player), team });
   }
 
-  const target = roster(setLineup);
+  const target = { ...roster(setLineup), faabUsed };
   const summary = summarizeRoster(target, withInjuries, overrideValues, settings);
 
   return render(
@@ -85,6 +97,7 @@ function panel(
       currentWeek={week}
       byeTeams={byeTeams}
       board={board}
+      bids={bids}
     />,
   );
 }
@@ -313,5 +326,86 @@ describe('WeeklyLineup — best ball', () => {
     panel(['qb1', 'rb1', 'wr1', 'wr2']);
 
     expect(screen.queryByText(/Best ball/)).not.toBeInTheDocument();
+  });
+});
+
+describe('WeeklyLineup — what a claim costs', () => {
+  const FAAB: WaiverSettings = { type: 2, budget: 100, minBid: null };
+
+  /** A league whose managers have paid `dollars` for a quarterback, `n` times. */
+  const paidForQbs = (dollars: number, n = 10): BidModel => {
+    const claims: LeagueTransaction[] = Array.from({ length: n }, (_, i) => ({
+      id: `t${i}`,
+      season: '2025',
+      week: 3,
+      type: 'waiver',
+      succeeded: true,
+      created: i,
+      rosterIds: [1],
+      adds: new Map([[`claimed${i}`, 1]]),
+      drops: new Map(),
+      picks: [],
+      budget: [],
+      bid: dollars,
+    }));
+    return modelBids(
+      makeHistory({
+        transactions: claims,
+        waivers: new Map([['2025', FAAB]]),
+        positions: new Map(claims.map((_, i) => [`claimed${i}`, 'QB' as const])),
+      }),
+      makeSettings(['QB', 'RB', 'WR', 'FLEX'], { waivers: FAAB }),
+    );
+  };
+
+  it('says what the position has gone for, with the evidence behind it', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], {
+      board: wire(freeAgent('purdy', 'QB', 2000)),
+      bids: paidForQbs(18),
+    });
+
+    expect(screen.getByText(/QB claims here go for about \$18/)).toBeInTheDocument();
+    expect(screen.getByText(/From 10 claims since 2025/)).toBeInTheDocument();
+  });
+
+  it('states the budget once, at the top, rather than on every row', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], {
+      board: wire(freeAgent('purdy', 'QB', 2000)),
+      bids: paidForQbs(18),
+      faabUsed: 40,
+    });
+
+    expect(screen.getByText(/\$60 of your \$100 waiver budget left/)).toBeInTheDocument();
+  });
+
+  it('credits a manager who acquired budget in a trade with more than the league gives', () => {
+    // `faabUsed` goes negative when FAAB comes back in a trade, and one roster
+    // of the real test league does exactly this.
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], {
+      board: wire(freeAgent('purdy', 'QB', 2000)),
+      bids: paidForQbs(18),
+      faabUsed: -20,
+    });
+
+    expect(screen.getByText(/\$120 of your \$100 waiver budget left/)).toBeInTheDocument();
+  });
+
+  it('says the price is past what is left, rather than lowering it to fit', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], {
+      board: wire(freeAgent('purdy', 'QB', 2000)),
+      bids: paidForQbs(40),
+      faabUsed: 95,
+    });
+
+    expect(screen.getByText(/go for about \$40, which is more than your \$5/)).toBeInTheDocument();
+  });
+
+  it('says nothing about price in a league with no bid model', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], {
+      board: wire(freeAgent('purdy', 'QB', 2000)),
+    });
+
+    expect(screen.getByText(/beats your lineup/)).toBeInTheDocument();
+    expect(screen.queryByText(/go for about/)).not.toBeInTheDocument();
   });
 });
