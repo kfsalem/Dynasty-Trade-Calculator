@@ -1758,3 +1758,173 @@ off the same single pass, and the wire-aggression and pick-appetite rows of the
 issue's table. Nothing ranks or renders on them, because neither has been put to
 the split-half test that appetite passed, and shipping an unmeasured signal into
 a score is the failure this whole pass is ordered to avoid.
+
+## What a league pays, and what it does not
+
+**Status:** #76 measured and **not built**; the bid model of
+[#47](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/47) shipped in
+its place. Measured 2026-09-10 against both test leagues through the shipped
+mappers.
+
+[#76](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/76) proposed a
+third column beside market and league-adjusted value: **local price**, what
+*these eleven people* have actually paid for players like him. A coarse
+multiplier per position, learned from completed trades and from FAAB spend,
+shrunk per #75, used to construct and rank offers and never to value a held
+asset.
+
+The mechanism does not survive the data. What the same data does support is a
+different feature, and it was already on the board.
+
+### The trade-priced index cannot be fit
+
+The issue estimated "roughly 47 recent trades as an honest sample" from the
+share of traded players FantasyCalc still ranks. That count does not survive
+picks being counted, and **81% of this league's trades include a pick**:
+
+| | trades | no picks | all players priced | **priceable** | usable |
+|---|---|---|---|---|---|
+| Eternal Rebuild | 137 | 26 | 103 | **22** | **15** |
+| Tight Ends | 26 | 2 | 13 | **1** | **1** |
+
+*Priceable* is every asset having a price today: every player still ranked, and
+every pick for a draft that has not happened yet. A pick for a draft that has
+since happened is neither priceable now nor contemporaneously — it is a player,
+and what he is worth today measures how the pick *aged*. *Usable* narrows to
+two-sided trades carrying at least two players.
+
+Fifteen trades, in the better-documented league, holding **RB=18, WR=15, TE=4
+and no quarterback at all**. There is no four-position index in that.
+
+### FAAB is inflation-proof and still cannot price a player
+
+The issue's strongest claim was that FAAB is "the best-behaved price signal in
+the entire API" — a dollar out of 150 means in 2026 what it meant in 2023, with
+no drift to correct. The dollars are indeed stable. The problem is the other
+half of the ratio:
+
+```
+spearman(winning bid, market value)   -0.036   Eternal      n=179
+                                      +0.055   Tight Ends   n=86
+```
+
+Within each position separately, in the four-season league: WR -0.001,
+RB -0.083, TE +0.027, QB -0.035. **What a manager bids does not track what the
+player is worth.** Local price as #76 defines it is dollars per unit of market
+value — a ratio whose denominator carries no information about its numerator.
+
+Two further limits on the same signal. Only **56% and 29%** of bid-on players
+carry a current value at all, because waiver adds are marginal men who mostly
+never enter FantasyCalc's 423; and **K and DEF are 13-16% of all bids and are
+entirely unpriced**, so the positions the value model cannot see are a sixth of
+the evidence.
+
+Put through the split-half test #77 made every signal pass — 600 splits,
+position-blind against shrunk per-position price:
+
+| | blind | best shrunk | gain | best half-life |
+|---|---|---|---|---|
+| Eternal | 27.51 | 27.45 | **0.2%** | 50 |
+| Tight Ends | 30.67 | 29.44 | 4.0% | 10 |
+
+Different constants in the two leagues. That is the "not identifiable" verdict
+#77 reached about partner history, which shipped as a sentence and never as a
+number.
+
+### The confound behind the one large effect
+
+The biggest positional figure in either league is Tight Ends paying **3.1x** the
+league rate per unit of market value for quarterbacks. That league is
+**superflex** — `numQbs: 2`, a `SUPER_FLEX` slot — and those market values were
+already fetched at `numQbs=2`.
+
+Strip K and DEF and re-run the position model and the picture is plain: the
+1QB league's positional gain falls from 10.3% to **2.1%**, while the superflex
+league holds **7.9%**. Most of what replicates is *kickers and defenses go
+cheap, and quarterbacks go dear where two of them start* — both of which the app
+reads straight off `startingSlots` with no statistics at all.
+
+This is the league-native pass's own ordering note coming true. The
+deterministic layer was sequenced first "because being right about a league's
+rules costs nothing in confidence"; having shipped #78, #73 and #82, the
+statistical layer on top of it is substantially re-measuring the rules with
+noise.
+
+### What replicates, and what it is for
+
+Drop the market-value denominator and predict the bid from position alone, and
+it holds in both leagues at the same shrinkage constant — n=321 and n=297,
+800 half-splits, bids as a share of the budget they were spent from:
+
+| | blind | shrunk at `half=7` | gain |
+|---|---|---|---|
+| Eternal Rebuild | 0.08695 | 0.07812 | **10.2%** |
+| Tight Ends | 0.13198 | 0.11867 | **10.1%** |
+
+At each league's own best constant the gains are 10.4% and 10.2%; the table is
+at the one that shipped.
+
+That is not a local price. It carries no player value in the arithmetic
+anywhere, so it cannot multiply an asset or balance a package — it is what a
+*claim* costs, by position, which is the bid model #47 has been blocked on since
+it was written. It shipped there: `engine/bids`, on the lineup panel's wire
+rows.
+
+**`BID_PRIOR = 7`, and it is softer than #77's constant.** Eternal minimises at
+3 and Tight Ends at 12. Both curves are flat between them — every constant in
+3-12 is within 0.6% of each league's own best — so seven is where the two
+normalised curves cross rather than a figure either league insisted on. Worth
+stating plainly: #77's appetite constant was pinned by both leagues landing on
+the same minimum, and this one is not.
+
+### Three things the walk had to learn first
+
+**A budget is not a constant of a league.** The Eternal Rebuild ran rolling
+waivers on $100 in 2023 and FAAB on $150 from 2024, under two different names.
+Normalising four seasons of bids against today's budget would silently rescale
+every one of them, so `TransactionHistory.waivers` now carries each season's own
+rules — free, off a league object the walk already fetches — and the 2023 season
+drops out of the model entirely rather than contributing bids it never had.
+
+**`waiver_budget_used` goes negative.** One roster of the four-season league
+reads **-20** against a $150 budget, because FAAB moves between rosters in
+trades: that manager has $170. Remaining budget is `budget - used` with no clamp
+at either end, and the panel says $170 of $150 rather than reporting a manager's
+own money as not his.
+
+**Positions cannot be read off the bundle.** `LeagueBundle` holds rostered
+players and free agents on an NFL team, which is 88% and 76% of the men these
+leagues have ever bid on. The missing quarter is players who have since left the
+league — and a player who washed out was a cheaper claim than one who stuck, so
+reading positions off the bundle would bias every learned price upward by
+dropping exactly the cheap end. `TransactionHistory.positions` is built from the
+platform's own index, which the app already fetches and caches.
+
+### What was deliberately not shipped
+
+**The week.** #47 argues FAAB has no salvage value, so a claim should cost more
+early. Eternal pays 7.1% of budget in the offseason, 5.2% in weeks 5-12 and 7.0%
+from week 13; Tight Ends climbs from 1.6% to 9.2% across the same span. One
+league contradicts the premise and the other reverses it — no factor.
+
+**Competition.** #47 wants the bid scaled by how many rivals have a hole at that
+position and budget left. Both halves are now readable — `waiver_budget_used` per
+roster, and the positional need `analysis` already computes — and neither has
+been measured against anything. It is the strongest remaining idea in the issue
+and it is not in this branch.
+
+**Anything about the player.** Not an omission but the finding itself: a bid
+does not track a player's value, so a model that scaled its answer by his price
+would be inventing the one relationship the data says is absent. The panel says
+what the position costs; the row above it already says why this man is worth it.
+
+### Where #76 stands
+
+Rescoped rather than closed. What it cannot have is the positional multiplier
+and anything built on it — `balancePackage` still balances on market value,
+which remains the terms the other manager checks an offer in. What survives is
+its FAAB half, which has shipped under #47, and its third source — draft
+position against market rank — which is **unverified**: `/draft/{id}/picks` is
+not implemented, and the contemporaneous ranking a draft would have to be scored
+against has the same hard limit that sank the trade index. #48 is the issue for
+a cross-league source, and one league is far too thin for it.

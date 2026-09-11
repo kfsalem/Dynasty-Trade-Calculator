@@ -9,6 +9,8 @@ import { isGameWeek } from '../engine/season';
 import { injuryNote } from '../engine/availability';
 import { formatInjury, formatSlot, formatValue, POSITION_STYLES } from '../lib/format';
 import { changeAction, describeChange } from '../lib/lineupText';
+import { adviseBid, budgetLeft, type BidModel } from '../engine/bids';
+import { evidenceNote } from '../lib/learnedText';
 
 interface Props {
   roster: Roster;
@@ -29,6 +31,14 @@ interface Props {
   board?: FreeAgentBoard;
   /** Whether the activity data describes the season being played. */
   activityCurrent?: boolean;
+  /**
+   * What a claim costs in this league, learned from its own winning bids.
+   *
+   * Undefined in a league that does not run FAAB, and until the walk lands. The
+   * panel is complete without it — a price is an extra sentence on a row that
+   * already says what to do.
+   */
+  bids?: BidModel;
 }
 
 /**
@@ -55,6 +65,7 @@ export function WeeklyLineup({
   byeTeams,
   board,
   activityCurrent = false,
+  bids,
 }: Props) {
   const [showLineup, setShowLineup] = useState(false);
 
@@ -180,7 +191,14 @@ export function WeeklyLineup({
 
       {plan.marginal.length > 0 && <Marginal changes={plan.marginal} />}
 
-      {wire.length > 0 && <Wire upgrades={wire} activityCurrent={activityCurrent} />}
+      {wire.length > 0 && (
+        <Wire
+          upgrades={wire}
+          activityCurrent={activityCurrent}
+          bids={bids}
+          roster={roster}
+        />
+      )}
 
       {plan.watch.length > 0 && (
         <p className="mt-4 border-t border-line pt-3 text-xs text-muted">
@@ -302,10 +320,15 @@ function Marginal({ changes }: { changes: LineupChange[] }) {
 function Wire({
   upgrades,
   activityCurrent,
+  bids,
+  roster,
 }: {
   upgrades: WireUpgrade[];
   activityCurrent: boolean;
+  bids?: BidModel;
+  roster: Roster;
 }) {
+  const remaining = bids ? budgetLeft(bids, roster) : null;
   return (
     <section className="mt-4 rounded-lg border border-accent bg-accent-soft/60 p-4">
       <h4 className="text-sm font-semibold text-accent">
@@ -314,6 +337,15 @@ function Wire({
       <p className="mt-1 text-xs text-accent/90">
         Unrostered, and priced against this league's replacement levels — so these
         numbers mean the same thing as everyone else's.
+        {/*
+          The budget is a fact about this manager and belongs once, at the top,
+          rather than repeated on every row. `remaining` can exceed the league's
+          own budget: FAAB moves in trades, and a manager who has acquired some
+          really does have more than $150 of a $150 budget.
+        */}
+        {remaining !== null && bids?.budget
+          ? ` You have $${remaining} of your $${bids.budget} waiver budget left.`
+          : ''}
       </p>
 
       <ul className="mt-3 space-y-3">
@@ -350,11 +382,58 @@ function Wire({
                   ? ` Drop ${upgrade.drop.player.name} for him.`
                   : ' Nothing on your roster is obviously spare, so the claim costs you a choice.'}
               </p>
+              <BidLine upgrade={upgrade} bids={bids} roster={roster} />
             </li>
           );
         })}
       </ul>
     </section>
+  );
+}
+
+/**
+ * What this league has paid for a claim at this position.
+ *
+ * A price and its evidence, and nothing that pretends to be more. The figure is
+ * the league's own mean for the position, shrunk toward its overall rate — it
+ * does not move with how good the player is, because measured across both test
+ * leagues a bid does not track a player's market value at all (see
+ * `engine/bids`). So this says what the position costs here, and the row above
+ * says why this man is worth it.
+ *
+ * Silent in three cases, all of which are the honest answer rather than a
+ * missing feature: a league that does not run FAAB, one that has never recorded
+ * a claim, and a wire upgrade whose price the walk has not landed for yet.
+ */
+function BidLine({
+  upgrade,
+  bids,
+  roster,
+}: {
+  upgrade: WireUpgrade;
+  bids?: BidModel;
+  roster: Roster;
+}) {
+  const advice = bids ? adviseBid(bids, upgrade.add.player.position, roster) : null;
+  if (!advice) return null;
+
+  const position = upgrade.add.player.position;
+  const since = bids?.seasons.at(-1);
+
+  return (
+    <p className="mt-0.5 pl-14 text-xs text-muted">
+      {/*
+        Price and shortfall in one emphasised span, because they are one claim:
+        the shortfall is stated rather than the bid quietly lowered to fit. A
+        manager with $5 left is being told the going rate is $40, which is the
+        useful thing to know; a $5 recommendation would look like a price.
+      */}
+      <span className={advice.beyondBudget ? 'font-medium text-caution' : 'font-medium text-ink'}>
+        {position} claims here go for about ${advice.dollars}
+        {advice.beyondBudget ? `, which is more than your $${advice.remaining}` : ''}.
+      </span>{' '}
+      {evidenceNote(advice.learned, { one: 'claim', many: 'claims' }, since)}
+    </p>
   );
 }
 

@@ -21,6 +21,7 @@ import type {
   Roster,
 } from '../types';
 import {
+  makeHistory,
   makeLeague,
   makePick,
   makePlayer,
@@ -852,12 +853,11 @@ const traded = (rosterIds: number[], season = '2025'): LeagueTransaction => ({
 });
 
 const feed = (transactions: LeagueTransaction[]): ManagerModel =>
-  modelManagers({
+  modelManagers(makeHistory({
     transactions,
     seasons: ['2025'],
     managers: new Map([['2025', OWNERS]]),
-    truncated: false,
-  });
+    }));
 
 describe('who the offer is going to', () => {
   /**
@@ -1043,7 +1043,7 @@ describe('who the offer is going to', () => {
       [2, OWNERS.get(2)!],
       [4, OWNERS.get(4)!],
     ]);
-    const model = modelManagers({
+    const model = modelManagers(makeHistory({
       transactions: Array.from({ length: 3 }, () => traded([1, 3], '2026')),
       seasons: ['2023', '2024', '2025', '2026'],
       managers: new Map([
@@ -1052,8 +1052,7 @@ describe('who the offer is going to', () => {
         ['2025', veterans],
         ['2026', OWNERS],
       ]),
-      truncated: false,
-    });
+      }));
 
     const { trades } = suggestTrades(1, { ...base, managers: model }, { maxResults: 10 });
     const toBusy = trades.find((t) => t.partnerRosterId === 3);
@@ -1072,7 +1071,7 @@ describe('who the offer is going to', () => {
       an effect that small teaches a reader to skip the line that matters.
     */
     const base = world(TWINS);
-    const thin = modelManagers({
+    const thin = modelManagers(makeHistory({
       transactions: [traded([1, 2]), traded([1, 2])],
       seasons: ['2025'],
       managers: new Map([
@@ -1084,8 +1083,7 @@ describe('who the offer is going to', () => {
           ]),
         ],
       ]),
-      truncated: false,
-    });
+      }));
 
     const { trades } = suggestTrades(1, { ...base, managers: thin }, { maxResults: 10 });
     const toOrphan = trades.find((t) => t.partnerRosterId === 3);
@@ -1104,7 +1102,7 @@ describe('who the offer is going to', () => {
       reading the message above every real manager trading below that average.
     */
     const base = world(TWINS);
-    const orphaned = modelManagers({
+    const orphaned = modelManagers(makeHistory({
       transactions: [...Array.from({ length: 8 }, () => traded([1, 4])), traded([2, 4])],
       seasons: ['2025'],
       managers: new Map([
@@ -1116,8 +1114,7 @@ describe('who the offer is going to', () => {
           ]),
         ],
       ]),
-      truncated: false,
-    });
+      }));
 
     const { trades } = suggestTrades(1, { ...base, managers: orphaned }, { maxResults: 10 });
     const toOrphan = trades.find((t) => t.partnerRosterId === 3);

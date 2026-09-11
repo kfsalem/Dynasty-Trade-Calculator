@@ -9,7 +9,7 @@ import {
   makeSettings,
   makeValue,
 } from './engine/testFixtures';
-import type { DraftPick, League, Player, PlayerValue } from './types';
+import type { DraftPick, League, LeagueSettings, Player, PlayerValue } from './types';
 
 /**
  * `App` is mounted against a stubbed data hook rather than a stubbed network.
@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   states: {} as Record<string, unknown>,
   /** Every `enabled` the manager walk was asked for, in order. */
   managerWalk: [] as boolean[],
+  /** The same, for the bid model, which shares the walk and not the gate. */
+  bidWalk: [] as boolean[],
 }));
 
 vi.mock('./hooks/useLeagueData', () => ({
@@ -66,6 +68,12 @@ vi.mock('./hooks/useLeagueData', () => ({
   useManagerModel: (_leagueId: string | null, enabled: boolean) => {
     mocks.managerWalk.push(enabled);
     return { model: undefined, loading: false, failed: false };
+  },
+  // Same walk, different reading and a different gate. Idle for the same
+  // reason: the lineup panel renders its rows with or without a price.
+  useBidModel: (_leagueId: string | null, _settings: unknown, enabled: boolean) => {
+    mocks.bidWalk.push(enabled);
+    return undefined;
   },
 }));
 
@@ -149,6 +157,7 @@ async function openAt(url: string) {
 beforeEach(() => {
   mocks.states = {};
   mocks.managerWalk = [];
+  mocks.bidWalk = [];
   localStorage.clear();
   window.history.replaceState(null, '', '/');
 });
@@ -400,5 +409,55 @@ describe('App — a league that does not trade', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'Trade ideas' }));
 
     await waitFor(() => expect(mocks.managerWalk.some(Boolean)).toBe(true));
+  });
+});
+
+describe('App — the walk that prices a claim', () => {
+  /**
+   * The same gate lesson the manager walk already carries, on a different rule.
+   *
+   * The bid model reads the transaction walk — seventy-odd requests — to say
+   * what a waiver claim costs. A league running rolling waivers has no bid to
+   * give at all, so gating on the tab alone would buy the whole walk for a
+   * panel that could only ever stay silent.
+   */
+  const withWaivers = (id: string, waivers: LeagueSettings['waivers']) => {
+    const league = {
+      ...leagueWithRosters(id, 1, 2),
+      settings: makeSettings(['QB', 'RB'], { draftRounds: 1, teamCount: 2, waivers }),
+    };
+    mocks.states[id] = ready(league, [1, 2]);
+    localStorage.setItem('dynasty:leagueId', id);
+    localStorage.setItem(`dynasty:myRoster:${id}`, '1');
+    return id;
+  };
+
+  it('does not pay for it in a league that runs no FAAB', async () => {
+    withWaivers('70', { type: 0, budget: 100, minBid: null });
+    await openAt('/');
+
+    await screen.findByRole('tab', { name: 'My team' });
+
+    expect(mocks.bidWalk.some(Boolean)).toBe(false);
+  });
+
+  it('does not pay for it in a FAAB league with no budget published', async () => {
+    // Type alone is not enough: a budget of zero prices nothing, and the model
+    // and the gate have to agree on that — both ask `runsFaab`.
+    withWaivers('71', { type: 2, budget: 0, minBid: null });
+    await openAt('/');
+
+    await screen.findByRole('tab', { name: 'My team' });
+
+    expect(mocks.bidWalk.some(Boolean)).toBe(false);
+  });
+
+  it('pays for it on the team tab of a league that does bid', async () => {
+    withWaivers('72', { type: 2, budget: 100, minBid: 1 });
+    await openAt('/');
+
+    await screen.findByRole('tab', { name: 'My team' });
+
+    await waitFor(() => expect(mocks.bidWalk.some(Boolean)).toBe(true));
   });
 });

@@ -1,4 +1,12 @@
-import type { League, LineupSlot, Matchup, Player, Position, SeasonPhase } from '../types';
+import type {
+  League,
+  LineupSlot,
+  Matchup,
+  Player,
+  Position,
+  SeasonPhase,
+  WaiverSettings,
+} from '../types';
 import type { KnownDraftOrder, TradedPickRef } from '../engine/picks';
 
 /**
@@ -310,6 +318,37 @@ export interface TransactionHistory {
    * about nobody — see `engine/managers`, which skips rather than guesses.
    */
   managers: Map<string, Map<number, SeasonManager>>;
+  /**
+   * The position of every player this history names, for the ones the platform
+   * still knows.
+   *
+   * Carried here because the alternative loses observations and does not lose
+   * them at random. `LeagueBundle` holds rostered players and free agents on an
+   * NFL team, which is 88% and 76% of the players these two leagues have ever
+   * bid on — the missing quarter is men who have since left the league, and a
+   * player who washed out was a cheaper claim than one who stuck. Reading
+   * positions off the bundle would bias every learned price upward by dropping
+   * exactly the cheap end.
+   *
+   * The platform's own player index is where these come from, and it is a
+   * request the app already makes and caches for the league itself, so this
+   * costs nothing but the join.
+   */
+  positions: Map<string, Position>;
+  /**
+   * The waiver rules each season actually ran under, keyed by season.
+   *
+   * A bid is a number of dollars out of a budget, and neither the budget nor
+   * the mechanism is a constant of a league. The Eternal Rebuild ran rolling
+   * waivers on a $100 budget in 2023 and FAAB on $150 from 2024 — same chain,
+   * same managers, a different currency. Normalising four seasons of bids
+   * against whatever the league charges *today* would silently rescale every
+   * one of them, so the season's own budget is carried with them.
+   *
+   * Free: the walk already fetches each season's league object to find the one
+   * before it.
+   */
+  waivers: Map<string, WaiverSettings>;
   /** True when the walk could not reach the whole chain. See `LeagueHistory`. */
   truncated: boolean;
 }

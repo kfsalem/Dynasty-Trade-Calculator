@@ -1,3 +1,4 @@
+import type { TransactionHistory } from '../platforms/types';
 import type {
   DraftPick,
   InjuryStatus,
@@ -99,6 +100,8 @@ export function makeRoster(rosterId: number, playerIds: string[]): Roster {
     setLineup: [],
     taxiIds: [],
     reserveIds: [],
+    faabUsed: null,
+    waiverPosition: null,
   };
 }
 
@@ -160,5 +163,27 @@ export function makeLeague(rosters: Roster[], settings: LeagueSettings): League 
     avatar: null,
     settings,
     rosters,
+  };
+}
+
+/**
+ * A `TransactionHistory` with everything a test does not care about filled in.
+ *
+ * The envelope has grown four fields across three issues, and every one of them
+ * broke every literal in every test that had ever built one. What a test is
+ * actually saying is "these transactions, under these owners"; the rest is
+ * ceremony, and ceremony repeated in nine places is nine places to update.
+ */
+export function makeHistory(
+  overrides: Partial<TransactionHistory> = {},
+): TransactionHistory {
+  return {
+    transactions: [],
+    seasons: ['2025'],
+    managers: new Map(),
+    waivers: new Map(),
+    positions: new Map(),
+    truncated: false,
+    ...overrides,
   };
 }

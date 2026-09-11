@@ -13,6 +13,7 @@ import { opportunities } from '../engine/opportunity';
 import { checkScoring, scoringIsUsable } from '../engine/scoringCheck';
 import { benchIsUsable, benchPoints, type BenchReport } from '../engine/benchPoints';
 import { modelManagers } from '../engine/managers';
+import { modelBids } from '../engine/bids';
 import { playerRoles } from '../engine/role';
 import { byeTeams as teamsOnBye } from '../engine/byes';
 import { roleTrends } from '../engine/roleTrend';
@@ -165,13 +166,7 @@ export function useBenchReport(leagueId: string | null, enabled: boolean) {
  * factor of exactly 1.0 and changes no ranking.
  */
 export function useManagerModel(leagueId: string | null, enabled: boolean) {
-  const query = useQuery({
-    queryKey: ['transactions', leagueId],
-    queryFn: () => sleeperProvider.loadTransactions!(leagueId as string),
-    enabled: Boolean(leagueId && enabled && sleeperProvider.loadTransactions),
-    staleTime: 60 * 60 * 1000,
-    retry: 1,
-  });
+  const query = useTransactions(leagueId, enabled);
 
   const model = useMemo(
     () => (query.data ? modelManagers(query.data) : undefined),
@@ -184,6 +179,48 @@ export function useManagerModel(leagueId: string | null, enabled: boolean) {
     loading: query.isFetching && !query.data,
     failed: query.isError,
   };
+}
+
+/**
+ * The walk itself, shared by every reading of it.
+ *
+ * One query key, so the seventy-odd requests happen once however many surfaces
+ * ask: `TransactionHistory` exists precisely so that the manager model, the bid
+ * model and whatever reads it next do not each fetch and interpret the same
+ * feed. The two callers below differ only in what they compute from it.
+ */
+function useTransactions(leagueId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['transactions', leagueId],
+    queryFn: () => sleeperProvider.loadTransactions!(leagueId as string),
+    enabled: Boolean(leagueId && enabled && sleeperProvider.loadTransactions),
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
+  });
+}
+
+/**
+ * What a waiver claim costs in this league, from the same walk.
+ *
+ * Gated the same way and for the same reason — it is the same seventy requests
+ * — but on a different surface: the lineup panel is the first thing a visitor
+ * sees, so this is enabled only once that panel has something to price, which
+ * is a wire upgrade to recommend.
+ *
+ * `modelBids` handles a thin league by itself. A league with no FAAB history
+ * yields no price rather than a small one, so there is no gate here either.
+ */
+export function useBidModel(
+  leagueId: string | null,
+  settings: LeagueSettings | undefined,
+  enabled: boolean,
+) {
+  const query = useTransactions(leagueId, enabled);
+
+  return useMemo(
+    () => (query.data && settings ? modelBids(query.data, settings) : undefined),
+    [query.data, settings],
+  );
 }
 
 /**

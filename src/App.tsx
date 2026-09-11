@@ -13,7 +13,13 @@ import { LeagueError } from './components/LeagueError';
 import { ReplacementLevel } from './components/ReplacementLevel';
 import { FreeAgentBoard } from './components/FreeAgentBoard';
 import { EmptyState } from './components/EmptyState';
-import { useBenchReport, useLeagueSummaries, useManagerModel } from './hooks/useLeagueData';
+import {
+  useBenchReport,
+  useBidModel,
+  useLeagueSummaries,
+  useManagerModel,
+} from './hooks/useLeagueData';
+import { runsFaab } from './engine/bids';
 import { useMyRoster } from './hooks/useMyRoster';
 import { decodeTrade, encodeTrade, resolveShare } from './lib/share';
 
@@ -183,6 +189,20 @@ function App() {
   const managers = useManagerModel(
     leagueId,
     tab === 'ideas' && myRosterId !== null && !league?.settings.tradesDisabled,
+  );
+
+  /*
+    The same walk the manager model makes, read for a different answer — one
+    query key, so whichever tab is opened first pays and the other does not.
+
+    Gated on the tab that shows it *and* on the rule that decides whether there
+    is anything to show: a league running rolling waivers has no bid to give, so
+    the seventy requests would buy a panel that says nothing.
+  */
+  const bids = useBidModel(
+    leagueId,
+    league?.settings,
+    tab === 'analysis' && myRosterId !== null && runsFaab(league?.settings),
   );
 
   useEffect(() => {
@@ -450,6 +470,7 @@ function App() {
                     freeAgents={freeAgents}
                     activityCurrent={activityCurrent}
                     bench={bench}
+                    bids={bids}
                     onChangeTeam={() => setMyRoster(null)}
                   />
                 ))}
