@@ -21,6 +21,8 @@ import type { DraftPick, League, Player, PlayerValue } from './types';
  */
 const mocks = vi.hoisted(() => ({
   states: {} as Record<string, unknown>,
+  /** Every `enabled` the manager walk was asked for, in order. */
+  managerWalk: [] as boolean[],
 }));
 
 vi.mock('./hooks/useLeagueData', () => ({
@@ -61,11 +63,10 @@ vi.mock('./hooks/useLeagueData', () => ({
   // The manager model's walk, idle for the same reason: the suggestion list
   // renders identically with and without it, and these tests are about the
   // shell rather than about the ordering inside that list.
-  useManagerModel: () => ({
-    model: undefined,
-    loading: false,
-    failed: false,
-  }),
+  useManagerModel: (_leagueId: string | null, enabled: boolean) => {
+    mocks.managerWalk.push(enabled);
+    return { model: undefined, loading: false, failed: false };
+  },
 }));
 
 const settings = makeSettings(['QB', 'RB'], { draftRounds: 1, teamCount: 2 });
@@ -147,6 +148,7 @@ async function openAt(url: string) {
 
 beforeEach(() => {
   mocks.states = {};
+  mocks.managerWalk = [];
   localStorage.clear();
   window.history.replaceState(null, '', '/');
 });
@@ -367,5 +369,36 @@ describe('App — a league that does not trade', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'Trade calculator' }));
 
     expect(screen.queryByText("This league doesn't do trades")).not.toBeInTheDocument();
+  });
+
+  it('does not pay for the manager walk in a league that shows no offers', async () => {
+    /*
+      The walk is around seventy requests and it ranks a list this tab is not
+      going to render — the rule below replaces the offers entirely. Gating it
+      on the tab alone bought the whole walk for a reader who cannot act on any
+      of it.
+    */
+    const id = noTrades('59');
+    localStorage.setItem('dynasty:leagueId', id);
+    // A team is chosen, so the only thing holding the walk back is the rule.
+    localStorage.setItem(`dynasty:myRoster:${id}`, '1');
+    await openAt('/');
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Trade ideas' }));
+    await screen.findByText("This league doesn't do trades");
+
+    expect(mocks.managerWalk.some(Boolean)).toBe(false);
+  });
+
+  it('pays for it on the ideas tab of a league that does trade', async () => {
+    // The control for the test above: same tab, same chosen team, no rule.
+    mocks.states['60'] = ready(leagueWithRosters('60', 1, 2), [1, 2]);
+    localStorage.setItem('dynasty:leagueId', '60');
+    localStorage.setItem('dynasty:myRoster:60', '1');
+    await openAt('/');
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Trade ideas' }));
+
+    await waitFor(() => expect(mocks.managerWalk.some(Boolean)).toBe(true));
   });
 });

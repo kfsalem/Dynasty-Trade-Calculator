@@ -5,7 +5,20 @@ import type {
   TransactionHistory,
   TransactionType,
 } from '../platforms/types';
-import { appetite, managerFor, modelManagers, partnership } from './managers';
+import {
+  appetite,
+  appetiteFor,
+  expectedTrades,
+  managerFor,
+  modelManagers,
+  partnership,
+} from './managers';
+
+/** A season table naming exactly these managers, roster ids in order from 1. */
+const owned = (...userIds: string[]): Map<number, SeasonManager> =>
+  new Map<number, SeasonManager>(
+    userIds.map((userId, i) => [i + 1, { userId, name: userId, teamName: userId }]),
+  );
 
 /** Four managers, stable across seasons, plus an orphan roster nobody owns. */
 const TABLE = (season: string): Map<number, SeasonManager> =>
@@ -117,8 +130,8 @@ describe('modelManagers', () => {
 
     expect(model.trades).toBe(1);
     expect(model.managers.get('u1')?.trades).toBe(1);
-    expect(model.managers.get('u1')?.partners.get('u2')).toBe(1);
-    expect(model.managers.get('u1')?.partners.get('u3')).toBe(1);
+    expect(model.managers.get('u1')?.partners.get('u2')?.trades).toBe(1);
+    expect(model.managers.get('u1')?.partners.get('u3')?.trades).toBe(1);
   });
 
   it('counts wire claims from adds, and never from a drop', () => {
@@ -163,11 +176,50 @@ describe('modelManagers', () => {
     expect(model.seasons).toEqual(['2023', '2025']);
   });
 
+  it('counts every season a manager was here, traded or not', () => {
+    const model = modelManagers(history([trade([1, 2])], ['2023', '2024', '2025']));
+
+    expect(model.managers.get('u1')?.seasons).toBe(3);
+    // Dee has never traded, and three seasons of not trading is the evidence.
+    expect(model.managers.get('u4')?.seasons).toBe(3);
+  });
+
+  it('names the rosters the league table gives no owner', () => {
+    const model = modelManagers(history([]));
+
+    expect([...model.orphans]).toEqual([9]);
+    expect(model.rosters.has(9)).toBe(false);
+  });
+
+  it('measures the league in manager-seasons, not by headcount', () => {
+    /*
+      The roll used to be a headcount, so a manager who played one season of two
+      and left pulled the league's rate down as hard as one who played both —
+      and that rate is the denominator every other manager is measured against.
+    */
+    const model = modelManagers({
+      transactions: [trade([1, 2], '2024'), trade([1, 2], '2025')],
+      seasons: ['2024', '2025'],
+      managers: new Map([
+        ['2024', owned('u1', 'u2', 'gone')],
+        ['2025', owned('u1', 'u2', 'u3')],
+      ]),
+      truncated: false,
+    });
+
+    expect(model.managers.get('gone')?.seasons).toBe(1);
+    expect(model.managers.get('u1')?.seasons).toBe(2);
+    // Four participations over six manager-seasons — not over four managers,
+    // which would have read this league as trading half again as often.
+    expect(model.tradesPerSeason).toBeCloseTo(4 / 6, 6);
+  });
+
   it('is empty and harmless with no history at all', () => {
     const model = modelManagers(undefined);
 
     expect(model.trades).toBe(0);
     expect(model.meanTrades).toBe(0);
+    expect(model.tradesPerSeason).toBe(0);
     expect(appetite(model, 'u1').value).toBe(1);
   });
 });
@@ -250,6 +302,117 @@ describe('appetite', () => {
     expect(appetite(model, 'nobody').value).toBe(1);
     expect(appetite(model, null).value).toBe(1);
   });
+
+  it('measures a manager against his own tenure, not the whole league span', () => {
+    /*
+      Ben and Dee have completed exactly three trades each. Ben took four
+      seasons over it and Dee did it in one, having joined this year — she is
+      the busiest trader in the league right now and he is its quietest.
+
+      Against a four-season total they are the same number, and Dee was demoted
+      for having arrived late: three trades against a mean of 4.5 reads as
+      two-thirds of average, and the card then told her so out loud.
+    */
+    const veterans = ['2023', '2024', '2025'].flatMap((season) => [
+      trade([1, 2], season),
+      trade([1, 3], season),
+    ]);
+    const model = modelManagers({
+      transactions: [
+        ...veterans,
+        ...Array.from({ length: 3 }, () => trade([1, 4], '2026')),
+      ],
+      seasons: ['2023', '2024', '2025', '2026'],
+      managers: new Map([
+        ['2023', owned('u1', 'u2', 'u3')],
+        ['2024', owned('u1', 'u2', 'u3')],
+        ['2025', owned('u1', 'u2', 'u3')],
+        ['2026', owned('u1', 'u2', 'u3', 'u4')],
+      ]),
+      truncated: false,
+    });
+
+    expect(model.managers.get('u2')?.trades).toBe(3);
+    expect(model.managers.get('u4')?.trades).toBe(3);
+    // Thirteen manager-seasons behind eighteen participations, and Dee is
+    // measured against one season of that rate rather than four.
+    expect(expectedTrades(model, model.managers.get('u4')!)).toBeCloseTo(18 / 13, 6);
+    expect(appetite(model, 'u4').value).toBeGreaterThan(1);
+    expect(appetite(model, 'u2').value).toBeLessThan(1);
+  });
+});
+
+describe('appetiteFor', () => {
+  it('ranks a roster nobody owns below a manager who does answer', () => {
+    /*
+      An unowned team is not an unknown one. Handing it the prior ranked it at
+      the league's average acceptance, which put the team that may have nobody
+      reading the message above every real manager who trades below average.
+    */
+    const model = modelManagers(
+      history([...Array.from({ length: 8 }, () => trade([1, 2])), trade([1, 3])]),
+    );
+
+    expect(appetiteFor(model, 9).value).toBeLessThan(1);
+    // Cy has traded once in a league averaging four and a half. Once is more
+    // than nobody.
+    expect(appetiteFor(model, 9).value).toBeLessThan(appetiteFor(model, 3).value);
+  });
+
+  it('holds an unowned roster to the tenure of a manager still in the league', () => {
+    /*
+      The roll is seeded from every season walked, so it carries managers who
+      have left. Averaging their tenure into the figure an orphan is measured
+      against holds a roster that is in the league right now to a span nobody
+      in it has — and the orphan is then demoted less than the model says.
+    */
+    const model = modelManagers({
+      transactions: [trade([1, 2], '2026'), trade([1, 2], '2026')],
+      seasons: ['2023', '2026'],
+      managers: new Map([
+        [
+          '2023',
+          new Map<number, SeasonManager>([
+            [1, { userId: 'u1', name: 'Ada', teamName: 'Ada' }],
+            [2, { userId: 'u2', name: 'Ben', teamName: 'Ben' }],
+            [3, { userId: 'gone', name: 'Gus', teamName: 'Gus' }],
+          ]),
+        ],
+        [
+          '2026',
+          new Map<number, SeasonManager>([
+            [1, { userId: 'u1', name: 'Ada', teamName: 'Ada' }],
+            [2, { userId: 'u2', name: 'Ben', teamName: 'Ben' }],
+            [9, { userId: null, name: 'Orphan team', teamName: 'Orphan team' }],
+          ]),
+        ],
+      ]),
+      truncated: false,
+    });
+
+    // Four participations over five manager-seasons, and the two managers
+    // still here have two seasons each. The headcount figure — four over the
+    // three records — is a tenure neither of them has.
+    expect(model.tradesPerSeason).toBeCloseTo(4 / 5, 6);
+    expect(model.meanTrades).toBeCloseTo((4 / 5) * 2, 6);
+    expect(appetiteFor(model, 9).value).toBeCloseTo(Math.sqrt(6 / (1.6 + 6)), 6);
+  });
+
+  it('resolves an owned roster to its manager', () => {
+    const model = modelManagers(history(Array.from({ length: 8 }, () => trade([1, 2]))));
+
+    expect(appetiteFor(model, 1).value).toBe(appetite(model, 'u1').value);
+  });
+
+  it('is 1.0 for a roster this walk never saw, and in a league with no trades', () => {
+    // A roster missing from the table is nothing known; an unowned one in a
+    // league that has never traded has nothing to be demoted against.
+    const busy = modelManagers(history(Array.from({ length: 8 }, () => trade([1, 2]))));
+    const quiet = modelManagers(history([]));
+
+    expect(appetiteFor(busy, 99).value).toBe(1);
+    expect(appetiteFor(quiet, 9).value).toBe(1);
+  });
 });
 
 describe('managerFor', () => {
@@ -309,5 +472,28 @@ describe('partnership', () => {
 
     // Ada goes back to 2023, but she and Ben have only been trading since 2025.
     expect(partnership(model, 'u1', 'u2')?.since).toBe('2025');
+  });
+
+  it('dates a pair from their own first trade, not from when both had started', () => {
+    /*
+      Both were trading in 2023 — with other people. Taking the later of the two
+      first-traded seasons dated the pair from a season they never traded in,
+      and the card stated it as a fact about their shared history.
+    */
+    const model = modelManagers(
+      history(
+        [
+          trade([1, 3], '2023'),
+          trade([2, 4], '2023'),
+          trade([1, 2], '2026'),
+          trade([1, 2], '2026'),
+        ],
+        ['2023', '2026'],
+      ),
+    );
+
+    expect(model.managers.get('u1')?.firstTraded).toBe('2023');
+    expect(model.managers.get('u2')?.firstTraded).toBe('2023');
+    expect(partnership(model, 'u1', 'u2')?.since).toBe('2026');
   });
 });

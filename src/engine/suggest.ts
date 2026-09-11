@@ -11,7 +11,7 @@ import {
 } from './analysis';
 import { blend, type Learned } from './learned';
 import { countPhrase, type Countable } from '../lib/learnedText';
-import { appetite, managerFor, partnership, type ManagerModel } from './managers';
+import { appetiteFor, managerFor, partnership, type ManagerModel } from './managers';
 import { picksForRoster } from './picks';
 import { tradeWindow } from './tradeWindow';
 import { bestLineup, byValue, valuePlayers, type RosterSummary } from './rosterValue';
@@ -680,6 +680,17 @@ const WORTH_SAYING = 0.15;
 
 const TRADES: Countable = { one: 'trade', many: 'trades' };
 const TIMES: Countable = { one: 'time', many: 'times' };
+const SEASONS: Countable = { one: 'season', many: 'seasons' };
+
+/**
+ * A league rate, to one decimal.
+ *
+ * `round` is for values — points, and the odd trade count — where a decimal is
+ * noise. A per-season rate is not one of those: a thin league can average 0.3
+ * trades a manager a season, and rounding that to a whole number prints "a
+ * league average of 0" beside a manager who has completed three.
+ */
+const rate = (n: number): string => n.toLocaleString('en-US', { maximumFractionDigits: 1 });
 
 /**
  * What the league's own record says about the manager on the other side.
@@ -691,6 +702,9 @@ const TIMES: Countable = { one: 'time', many: 'times' };
  * being turned down. The partnership line makes no claim at all beyond a count,
  * because that signal did not survive the measurement in `engine/managers` and
  * has no business implying a probability.
+ *
+ * A roster nobody owns gets one line of its own instead of both, since there is
+ * no manager to have a record or a history with.
  */
 function socialLines(
   model: ManagerModel | undefined,
@@ -700,30 +714,57 @@ function socialLines(
 ): string[] {
   if (!model || !acceptance) return [];
 
-  // No manager on the other side is an orphan team, and the league's own record
-  // says nothing about a team nobody owns.
   const them = managerFor(model, partnerRosterId);
-  if (!them) return [];
+  if (!them) {
+    /*
+      A team nobody owns, and the one thing the league's own table does say
+      about it. Saying nothing here left the largest demotion in the list with
+      a blank explanation beside it.
+
+      Behind the same display cut as the line below, and for the same reason.
+      In a thin league an orphan is demoted by four percent, and this is the
+      strongest claim any card makes — printing it for an effect that small is
+      the noise `WORTH_SAYING` exists to keep off the card.
+    */
+    return model.orphans.has(partnerRosterId) &&
+      Math.abs(acceptance.value - 1) >= WORTH_SAYING
+      ? ['No manager holds this roster in the league table, so there may be nobody to answer an offer.']
+      : [];
+  }
 
   const me = managerFor(model, myRosterId);
   const lines: string[] = [];
 
-  if (Math.abs(acceptance.value - 1) >= WORTH_SAYING && acceptance.observations > 0) {
-    const average = round(model.meanTrades);
-    const since = them.firstTraded ? ` since ${them.firstTraded}` : '';
-    const record = `${them.name} has completed ${countPhrase(them.trades, TRADES)}${since} against a league average of ${average}`;
+  /*
+    Gated on `weight` and never on `observations`. The evidence behind this
+    factor is the league's exposure rather than the manager's own count — that
+    is the whole argument in `engine/managers` for the form it takes — so
+    gating on his count silenced the sentence for precisely the manager it was
+    written for: the one who has never traded, who carries the largest demotion
+    of anybody and had the only unexplained one.
+  */
+  if (Math.abs(acceptance.value - 1) >= WORTH_SAYING && acceptance.weight > 0) {
+    const average = `against a league average of ${rate(model.tradesPerSeason)} per manager per season`;
+    const tenure = countPhrase(them.seasons, SEASONS);
+    const record =
+      them.trades > 0
+        ? `${them.name} has completed ${countPhrase(them.trades, TRADES)} in ${tenure} here, ${average}`
+        : `${them.name} has not traded in ${tenure} here, ${average}`;
+    // Both branches are claims about the manager rather than about our own
+    // ordering, which is what the heading over them promises the reader.
     lines.push(
       acceptance.value > 1
         ? `${record}, so an offer here is likelier to be acted on than most.`
-        : `${record}, so this ranks below offers to managers who trade more often.`,
+        : `${record}, so an offer here is less likely to be acted on than most.`,
     );
   }
 
   const pair = partnership(model, me?.userId ?? null, them.userId);
   // One shared trade is a coincidence; two is a habit worth mentioning.
   if (pair && pair.trades >= 2) {
-    const since = pair.since ? ` since ${pair.since}` : '';
-    const record = `You and ${them.name} have traded ${countPhrase(pair.trades, TIMES)}${since}`;
+    // `since` is the pair's own first season, carried on the pair record rather
+    // than derived from when each of them started trading with anybody.
+    const record = `You and ${them.name} have traded ${countPhrase(pair.trades, TIMES)} since ${pair.since}`;
     lines.push(
       pair.strongest
         ? `${record} — more than any other pair in this league.`
@@ -800,9 +841,14 @@ function buildSuggestion(
     Shrunk in `engine/managers` against a constant measured on two real leagues,
     so a league with no history multiplies by exactly 1.0 and is ranked today
     the way it was yesterday.
+
+    By roster and not by manager, because a roster the league gives no owner is
+    a third case and not the same as an unknown one: `appetiteFor` is where the
+    three are told apart.
   */
-  const partnerUserId = ctx.managers?.rosters.get(partner.summary.rosterId) ?? null;
-  const acceptance = ctx.managers ? appetite(ctx.managers, partnerUserId) : null;
+  const acceptance = ctx.managers
+    ? appetiteFor(ctx.managers, partner.summary.rosterId)
+    : null;
 
   const score =
     Math.sqrt(my.benefit.total * their.benefit.total) *

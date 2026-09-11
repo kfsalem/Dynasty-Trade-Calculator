@@ -216,6 +216,42 @@ describe('loadTransactions', () => {
     expect(history.truncated).toBe(true);
   });
 
+  it('keeps the newer table when a chain reports one season twice', async () => {
+    /*
+      A league re-created mid-year puts two leagues in the chain under the same
+      season string. The tables were keyed by season into a `new Map`, which
+      lets the last write stand, and the walk runs newest-first — so the older
+      league's roster-to-owner table won, and the current season's roster ids
+      then resolved against ownership that had moved on.
+    */
+    client.getLeague.mockImplementation((id: string) =>
+      Promise.resolve(
+        id === 'L2026'
+          ? league('2026', 'LOLD')
+          : { ...league('2026', '0'), league_id: 'LOLD' },
+      ),
+    );
+    client.getRosters.mockImplementation((id: string) =>
+      Promise.resolve([
+        {
+          roster_id: 1,
+          owner_id: id === 'L2026' ? 'now' : 'before',
+          players: ['a'],
+          starters: ['a'],
+          settings: { ppts: 30 },
+        },
+      ]),
+    );
+    client.getUsers.mockResolvedValue([
+      { user_id: 'now', display_name: 'Now', avatar: null },
+      { user_id: 'before', display_name: 'Before', avatar: null },
+    ]);
+
+    const history = await sleeperProvider.loadTransactions!('L2026');
+
+    expect(history.managers.get('2026')?.get(1)?.userId).toBe('now');
+  });
+
   it('reports a league with no moves as a league with no moves', async () => {
     client.getTransactions.mockResolvedValue([]);
 

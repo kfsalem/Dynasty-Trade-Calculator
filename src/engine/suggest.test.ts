@@ -1007,10 +1007,105 @@ describe('who the offer is going to', () => {
     }
   });
 
-  it('ignores a roster nobody owns rather than guessing at its manager', () => {
+  it('says why an offer to a manager who has never traded is ranked where it is', () => {
+    /*
+      The largest demotion the model makes, and the only one that used to carry
+      no sentence at all. The guard read the manager's own count, which is zero
+      for precisely the manager this factor exists to describe — his evidence is
+      every trade the league made while he sat there not making one.
+    */
+    const base = world(TWINS);
+    const model = feed(Array.from({ length: 12 }, () => traded([3, 4])));
+
+    const { trades } = suggestTrades(1, { ...base, managers: model }, { maxResults: 10 });
+    const toNever = trades.find((t) => t.partnerRosterId === 2);
+
+    expect(toNever!.acceptance!.value).toBeLessThan(1);
+    const line = toNever!.whyTheySayYes.find((l) => l.includes('has not traded'));
+    expect(line).toContain('Quiet has not traded in 1 season here');
+    // A claim about the manager, under a heading that promises one. The old
+    // wording — "this ranks below offers to managers who trade more often" —
+    // was a statement about our own ordering sitting in a list of his reasons.
+    expect(line).toContain('less likely to be acted on');
+    expect(toNever!.whyTheySayYes.some((l) => l.includes('ranks below'))).toBe(false);
+  });
+
+  it('measures a newcomer against his own season, and quotes a thin rate honestly', () => {
+    /*
+      Busy joined this year and has made every trade the league has made. A
+      lifetime count against a four-season total read him as ordinary, and the
+      whole-number formatter printed the rate he was being compared against as
+      "a league average of 0".
+    */
+    const base = world(TWINS);
+    const veterans = new Map<number, SeasonManager>([
+      [1, OWNERS.get(1)!],
+      [2, OWNERS.get(2)!],
+      [4, OWNERS.get(4)!],
+    ]);
+    const model = modelManagers({
+      transactions: Array.from({ length: 3 }, () => traded([1, 3], '2026')),
+      seasons: ['2023', '2024', '2025', '2026'],
+      managers: new Map([
+        ['2023', veterans],
+        ['2024', veterans],
+        ['2025', veterans],
+        ['2026', OWNERS],
+      ]),
+      truncated: false,
+    });
+
+    const { trades } = suggestTrades(1, { ...base, managers: model }, { maxResults: 10 });
+    const toBusy = trades.find((t) => t.partnerRosterId === 3);
+
+    expect(toBusy!.acceptance!.value).toBeGreaterThan(1);
+    const line = toBusy!.whyTheySayYes.find((l) => l.includes('completed'));
+    expect(line).toContain('Busy has completed 3 trades in 1 season here');
+    expect(line).toContain('league average of 0.5 per manager per season');
+  });
+
+  it('says nothing about an unowned roster the record barely distinguishes', () => {
+    /*
+      Same display cut as the manager line, and the same reason for it. A thin
+      league demotes an orphan by ten percent, and "there may be nobody to
+      answer an offer" is the strongest claim any card makes — printing it for
+      an effect that small teaches a reader to skip the line that matters.
+    */
+    const base = world(TWINS);
+    const thin = modelManagers({
+      transactions: [traded([1, 2]), traded([1, 2])],
+      seasons: ['2025'],
+      managers: new Map([
+        [
+          '2025',
+          new Map<number, SeasonManager>([
+            ...OWNERS,
+            [3, { userId: null, name: 'Orphan team', teamName: 'Orphan team' }],
+          ]),
+        ],
+      ]),
+      truncated: false,
+    });
+
+    const { trades } = suggestTrades(1, { ...base, managers: thin }, { maxResults: 10 });
+    const toOrphan = trades.find((t) => t.partnerRosterId === 3);
+
+    // Still ranked on it — the score always multiplies by the full value.
+    expect(toOrphan!.acceptance!.value).toBeLessThan(1);
+    expect(
+      toOrphan!.whyTheySayYes.some((l) => l.includes('No manager holds this roster')),
+    ).toBe(false);
+  });
+
+  it('ranks a roster nobody owns below a manager who does answer', () => {
+    /*
+      An unowned team is not an unknown one. Handing it the prior ranked it at
+      the league's average acceptance, which put the team that may have nobody
+      reading the message above every real manager trading below that average.
+    */
     const base = world(TWINS);
     const orphaned = modelManagers({
-      transactions: [traded([2, 3])],
+      transactions: [...Array.from({ length: 8 }, () => traded([1, 4])), traded([2, 4])],
       seasons: ['2025'],
       managers: new Map([
         [
@@ -1026,9 +1121,14 @@ describe('who the offer is going to', () => {
 
     const { trades } = suggestTrades(1, { ...base, managers: orphaned }, { maxResults: 10 });
     const toOrphan = trades.find((t) => t.partnerRosterId === 3);
+    const toQuiet = trades.find((t) => t.partnerRosterId === 2);
 
-    // No manager, so no claim: the offer is ranked exactly as it was.
-    expect(toOrphan!.acceptance!.value).toBe(1);
-    expect(toOrphan!.whyTheySayYes.some((l) => l.includes('completed'))).toBe(false);
+    expect(toOrphan!.acceptance!.value).toBeLessThan(1);
+    // Quiet has completed one trade. One is more than nobody, and the team with
+    // nobody on it no longer outranks him.
+    expect(toOrphan!.acceptance!.value).toBeLessThan(toQuiet!.acceptance!.value);
+    expect(
+      toOrphan!.whyTheySayYes.some((l) => l.includes('No manager holds this roster')),
+    ).toBe(true);
   });
 });

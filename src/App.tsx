@@ -174,8 +174,16 @@ function App() {
     Gated on the tab that reads it, the same way the bench walk is. Nothing else
     in the app ranks a partner, so a visitor who never opens Trade ideas never
     pays the seventy requests this costs.
+
+    And on the rule that decides whether the tab renders a list at all: a league
+    with trading switched off shows the explanation below instead of any offers,
+    so the walk would have bought seventy requests' worth of a ranking nothing
+    was going to display.
   */
-  const managers = useManagerModel(leagueId, tab === 'ideas' && myRosterId !== null);
+  const managers = useManagerModel(
+    leagueId,
+    tab === 'ideas' && myRosterId !== null && !league?.settings.tradesDisabled,
+  );
 
   useEffect(() => {
     try {
@@ -468,6 +476,8 @@ function App() {
                     odds={season}
                     season={snapsMeta?.season}
                     managers={managers.model}
+                    managersLoading={managers.loading}
+                    managersFailed={managers.failed}
                     onOpenInCalculator={(trade) => {
                       seedTrade(trade);
                       setTab('trade');
