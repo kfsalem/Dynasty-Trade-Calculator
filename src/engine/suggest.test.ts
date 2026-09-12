@@ -1330,3 +1330,127 @@ describe('uneven packages, the other direction and the edges', () => {
     expect(consolidation.whyTheySayYes.join(' ')).toContain('lands on their weakest slot');
   });
 });
+
+/**
+ * Claims a card makes that the same card's arithmetic has to support.
+ *
+ * Written as invariants over whatever the search produces rather than against
+ * one hand-built package, because both defects here were *generated* text: the
+ * fixtures that existed all happened to be shapes in which the false line was
+ * accidentally true, which is exactly how they survived. A rule that holds over
+ * every card cannot be dodged by picking a different one.
+ */
+describe('the card cannot contradict its own numbers', () => {
+  const WORLDS = [COMPLEMENTARY, WITH_BENCH, CONSOLIDATION, TWINS, FUTURE_BUY];
+
+  /**
+   * Every card in every world, with the benefit it is describing.
+   *
+   * Both pick settings, because they produce different *shapes*: with picks
+   * available the search balances one-for-one and the consolidation that
+   * triggers the duplicate-slot claim never gets built. Sweeping only the
+   * priced world made an earlier draft of these tests pass against both bugs.
+   */
+  const allCards = () =>
+    WORLDS.flatMap((spec) =>
+      [0, 1200].flatMap((pickValue) =>
+        [1, 2, 3, 4].flatMap((rosterId) =>
+          suggestTrades(rosterId, world(spec, pickValue)).trades.flatMap((trade) => [
+            { lines: trade.rationale, benefit: trade.myBenefit },
+            { lines: trade.whyTheySayYes, benefit: trade.theirBenefit },
+          ]),
+        ),
+      ),
+    );
+
+  const slotsNamed = (lines: string[]): string[] =>
+    lines
+      .map((line) => /weakest slot: (?:your|their) (\S+) is worth/.exec(line)?.[1])
+      .filter((slot): slot is string => slot !== undefined);
+
+  it('never lands two incoming players on the same weakest slot', () => {
+    // A slot holds one man. `slotWeaknesses` is sorted worst-first, so before
+    // the fix every eligible player in a consolidation was handed the same one
+    // and the card printed its strongest claim twice for one hole.
+    const cards = allCards();
+    expect(cards.length).toBeGreaterThan(0);
+
+    for (const card of cards) {
+      const slots = slotsNamed(card.lines);
+      expect(slots).toEqual([...new Set(slots)]);
+    }
+  });
+
+  it('only claims starting-lineup strength when the lineup actually gained', () => {
+    const cards = allCards();
+    expect(cards.length).toBeGreaterThan(0);
+
+    for (const card of cards) {
+      if (card.lines.some((line) => line.includes('buys starting-lineup strength'))) {
+        expect(card.benefit.now).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('still explains a contender who is buying the future rather than the year', () => {
+    // The branch that replaced the false one. A contender taking on future
+    // value is a good trade and a different argument; leaving it unexplained
+    // would be the failure this whole panel exists to prevent.
+    const cards = allCards();
+
+    for (const card of cards) {
+      const contending = card.benefit.quadrant === 'juggernaut' || card.benefit.quadrant === 'win_now';
+      if (!contending || card.benefit.now > 0) continue;
+      expect(card.lines.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+/**
+ * A contender whose best available trade buys nothing for this year.
+ *
+ * Team 1 is a juggernaut with a stranded WR2 and no hole to fill. The only
+ * packages that balance send that spare out for a body who does not crack its
+ * lineup plus a pick, so `now` lands on exactly 0 and the whole gain is future.
+ * Every other fixture here happens to hand a contender a lineup upgrade, which
+ * is why the false headline survived them all.
+ */
+const FUTURE_BUY: Spec[] = [
+  {
+    rosterId: 1,
+    players: [
+      ['qb', 'QB', 5000, 25],
+      ['rb', 'RB', 5000, 25],
+      ['wr1', 'WR', 5000, 25],
+      ['wr2', 'WR', 2000, 25],
+    ],
+  },
+  { rosterId: 2, players: [['qb', 'QB', 600, 30], ['rb', 'RB', 600, 30], ['wr', 'WR', 300, 30]] },
+  { rosterId: 3, players: [['qb', 'QB', 700, 30], ['rb', 'RB', 700, 30], ['wr', 'WR', 350, 30]] },
+  { rosterId: 4, players: [['qb', 'QB', 650, 30], ['rb', 'RB', 650, 30], ['wr', 'WR', 320, 30]] },
+];
+
+describe('a contender buying the future rather than the year', () => {
+  const contenderCard = () => {
+    const trade = suggestTrades(1, world(FUTURE_BUY, 1200)).trades[0];
+    expect(trade).toBeDefined();
+    return trade;
+  };
+
+  it('does not claim starting-lineup strength when there is none', () => {
+    const trade = contenderCard();
+
+    expect(trade.myBenefit.quadrant).toBe('juggernaut');
+    expect(trade.myBenefit.now).toBe(0);
+    expect(trade.rationale.join(' ')).not.toContain('buys starting-lineup strength');
+  });
+
+  it('says what the trade does buy instead of falling silent', () => {
+    const trade = contenderCard();
+
+    expect(trade.myBenefit.future).toBeGreaterThan(0);
+    expect(trade.rationale.join(' ')).toContain(
+      'adds to your future without costing your lineup this year',
+    );
+  });
+});
