@@ -284,10 +284,18 @@ export function starterDepth(
     });
   }
 
+  // Player id as the last decider, spelled as a total order the way `byValue`
+  // is: two starters worth the same to the lineup are common — a pair of bench
+  // bodies behind them makes both absences cost the same — and leaving that to
+  // `sort` stability would make the order depend on the input.
   return out.sort(
     (a, b) =>
       b.marginalValue - a.marginalValue ||
-      (a.entry.player.id < b.entry.player.id ? -1 : 1),
+      (a.entry.player.id < b.entry.player.id
+        ? -1
+        : a.entry.player.id > b.entry.player.id
+          ? 1
+          : 0),
   );
 }
 

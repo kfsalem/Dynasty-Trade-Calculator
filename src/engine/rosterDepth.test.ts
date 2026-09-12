@@ -386,3 +386,84 @@ describe('fragility, against slots nobody covers on purpose', () => {
     expect(bareSlots(f.starters).map((s) => s.entry.player.id)).toEqual(['qb']);
   });
 });
+
+/**
+ * The properties the module's arithmetic rests on, over randomized rosters.
+ *
+ * `marginalValue` is only meaningful — and "sorted worst first" and the
+ * `marginalValue > 0` filter only mean what they say — if taking a man out can
+ * never *improve* the lineup. That holds because `bestLineup` fills
+ * most-restrictive-first over eligibility classes that nest (WR within REC_FLEX
+ * within FLEX within SUPER_FLEX), which makes the greedy fill optimal. It is an
+ * argument about the filler rather than about this file, so it is checked here
+ * rather than assumed: a future flex that breaks the nesting would break these
+ * numbers silently, and this is what would catch it.
+ */
+describe('starterDepth invariants', () => {
+  /** Deterministic, so a failure names a seed that reproduces it. */
+  function rng(seed: number) {
+    let s = seed;
+    return () => {
+      s = (s * 1664525 + 1013904223) % 4294967296;
+      return s / 4294967296;
+    };
+  }
+
+  const SLOT_SETS: LineupSlot[][] = [
+    ['QB', 'RB', 'RB', 'WR', 'WR', 'WR', 'TE', 'FLEX', 'K', 'DEF'],
+    ['QB', 'QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'FLEX'],
+    ['SUPER_FLEX', 'RB', 'WR', 'WR', 'REC_FLEX', 'TE', 'FLEX'],
+    ['QB', 'RB', 'WR', 'TE'],
+    ['WR', 'WR', 'FLEX'],
+  ];
+
+  const POSITIONS: Position[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
+
+  it('never lets an absence improve the lineup, or cost more than the man is worth', () => {
+    const violations: string[] = [];
+    let checked = 0;
+    let cascades = 0;
+
+    for (let seed = 1; seed <= 400; seed++) {
+      const rand = rng(seed);
+      const slots = SLOT_SETS[seed % SLOT_SETS.length];
+      const men: [string, Position, number | null][] = [];
+
+      for (let i = 0; i < 6 + Math.floor(rand() * 22); i++) {
+        men.push([
+          `p${i}`,
+          POSITIONS[Math.floor(rand() * POSITIONS.length)],
+          // Some go unvalued and some are worth nothing, as on a real roster.
+          rand() > 0.15 ? Math.floor(rand() * 3000) : null,
+        ]);
+      }
+
+      const { summary } = roster(slots, men);
+
+      for (const d of starterDepth(summary, slots)) {
+        checked++;
+        const who = `seed ${seed} / ${d.entry.player.id}`;
+
+        if (d.marginalValue < 0) violations.push(`${who}: costs ${d.marginalValue}`);
+        if (d.marginalValue > d.entry.winNowValue) {
+          violations.push(`${who}: costs ${d.marginalValue} > his ${d.entry.winNowValue}`);
+        }
+        if (d.uncovered && d.replacement !== null) {
+          violations.push(`${who}: uncovered, yet something replaced him`);
+        }
+        if (d.replacement) {
+          cascades++;
+          if (summary.starterIds.has(d.replacement.player.id)) {
+            violations.push(`${who}: replaced by a man already starting`);
+          }
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+    // Guards the guard: a refactor that stopped building lineups would pass
+    // every assertion above by checking nothing at all.
+    expect(checked).toBeGreaterThan(1500);
+    expect(cascades).toBeGreaterThan(500);
+  });
+});
