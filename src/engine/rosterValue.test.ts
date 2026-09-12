@@ -43,6 +43,7 @@ function entry(
     marketValue,
     winNowValue,
     valued: true,
+    onTaxi: false,
     available: canStart(p),
   };
 }
@@ -317,5 +318,57 @@ describe('injured players and the lineup', () => {
     // Bench value is the dynasty complement, so the injured man's asset value
     // has to still be in the roster somewhere. Here it is all of it.
     expect(summary.benchValue).toBe(4000);
+  });
+});
+
+describe('taxi squad', () => {
+  const players = new Map<string, Player>([
+    ['rookie', player('rookie', 'RB')],
+    ['veteran', player('veteran', 'RB')],
+  ]);
+  const values = new Map<string, PlayerValue>([
+    // The rookie is the better player on both scales — only the taxi
+    // designation keeps him out of the lineup.
+    ['rookie', makeValue('rookie', 7000, 'RB', 7000, 4500)],
+    ['veteran', makeValue('veteran', 900, 'RB', 900, 900)],
+  ]);
+  const roster = { ...makeRoster(1, ['rookie', 'veteran']), taxiIds: ['rookie'] };
+
+  it('keeps a taxi player out of the lineup the manager may actually set', () => {
+    const summary = summarizeRoster(roster, players, values, makeSettings(['RB']));
+
+    expect([...summary.starterIds]).toEqual(['veteran']);
+    expect(summary.starterValue).toBe(900);
+    // His value as an asset is untouched — he is absent from the eleven, not
+    // marked down. Same contract as the injured case above.
+    expect(summary.totalValue).toBe(7900);
+  });
+
+  it('still counts him in the three-year projection, where he has been promoted', () => {
+    const entries = valuePlayers(roster.playerIds, players, values, roster.taxiIds);
+
+    expect(names(bestLineup(entries, ['RB']))).toEqual(['veteran']);
+    expect(
+      names(bestLineup(entries, ['RB'], { compare: byValue, includeUnavailable: true })),
+    ).toEqual(['rookie']);
+  });
+
+  it('treats him as active for a team that trades for him', () => {
+    // Taxi designation belongs to the roster, not the player, so it does not
+    // travel. The acquiring team passes its own (empty) taxi list and he is
+    // eligible immediately.
+    const entries = valuePlayers(['rookie'], players, values, []);
+
+    expect(entries[0].onTaxi).toBe(false);
+    expect(names(bestLineup(entries, ['RB']))).toEqual(['rookie']);
+  });
+
+  it('marks him so the UI and the lineup cannot disagree about why he is benched', () => {
+    const entries = valuePlayers(roster.playerIds, players, values, roster.taxiIds);
+    const rookie = entries.find((e) => e.player.id === 'rookie');
+
+    expect(rookie?.onTaxi).toBe(true);
+    // Not an injury. A healthy stashed rookie must not colour as one.
+    expect(rookie?.available).toBe(true);
   });
 });

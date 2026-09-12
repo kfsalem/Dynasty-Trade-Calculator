@@ -75,6 +75,7 @@ function league(
       winNowValue: p.value,
       valued: true,
       available: true,
+      onTaxi: false,
     });
     if (p.move) snapMap.set(p.id, snaps(p.move[0], p.move[1], p.move[2]));
   }

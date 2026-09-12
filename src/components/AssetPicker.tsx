@@ -84,7 +84,10 @@ export function AssetPicker({
   priced,
 }: Props) {
   const roster = league.rosters.find((r) => r.rosterId === rosterId);
-  const entries = roster ? valuePlayers(roster.playerIds, players, values) : [];
+  // Taxi men are listed — they are perfectly tradeable — but the flag has to be
+  // right on every entry, or a later reader of `onTaxi` gets a quiet false here
+  // and a true everywhere else.
+  const entries = roster ? valuePlayers(roster.playerIds, players, values, roster.taxiIds) : [];
   const ownedPicks = picksForRoster(picks, rosterId);
 
   /**
