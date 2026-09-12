@@ -12,6 +12,7 @@ import { analyzeTeam, type ContentionProfile, type SeasonOdds } from './analysis
 import { gradeAgainst } from './grades';
 import { modelManagers, type ManagerModel } from './managers';
 import type { LeagueTransaction, SeasonManager } from '../platforms/types';
+import type { FreeAgent } from './freeAgents';
 import { bestLineup, summarizeRoster, valuePlayers, type RosterSummary } from './rosterValue';
 import type {
   DraftPick,
@@ -1692,5 +1693,72 @@ describe('a hole the trade does not fill', () => {
     expect(starters.has('t1_spare_good')).toBe(true);
     expect(starters.has('t1_spare_bad')).toBe(false);
     expect(trade!.whyTheySayYes.join(' ')).not.toContain('Player t1_spare_bad lands on');
+  });
+});
+
+/** A priced free agent, on the same scale everything else here uses. */
+function freeAgent(id: string, position: Position, winNow: number): FreeAgent {
+  return {
+    player: makePlayer(id, position, 27),
+    value: makeValue(id, winNow, position, winNow, winNow, winNow),
+    snaps: undefined,
+    usage: undefined,
+    adjustment: undefined,
+  };
+}
+
+describe('what the waiver wire says about an offer', () => {
+  // COMPLEMENTARY's good trade brings t2_rb1 back to us. The wire is the only
+  // thing that changes between these cases.
+  const offerFor = (claimable?: FreeAgent[]) => {
+    const ctx = { ...world(COMPLEMENTARY), claimable };
+    const trade = suggestTrades(1, ctx).trades.find((t) =>
+      t.get.some((a) => a.id === 't2_rb'),
+    );
+    expect(trade).toBeDefined();
+    return trade!;
+  };
+
+  it('says nothing when no board has loaded', () => {
+    expect(offerFor(undefined).rationale.join(' ')).not.toContain('is unrostered');
+  });
+
+  it('says nothing when the wire cannot beat the man coming back', () => {
+    expect(offerFor([freeAgent('scrub', 'RB', 10)]).rationale.join(' ')).not.toContain(
+      'is unrostered',
+    );
+  });
+
+  it('names the free agent when he is clearly the better player this season', () => {
+    const incoming = offerFor(undefined).get.find((a) => a.id === 't2_rb')!;
+    const better = freeAgent('wire_rb', 'RB', Math.round(incoming.value * 2));
+
+    const rationale = offerFor([better]).rationale.join(' ');
+    expect(rationale).toContain('Player wire_rb is unrostered');
+    expect(rationale).toContain('Claiming him costs a roster spot and nothing else.');
+  });
+
+  it('does not veto the trade or reorder it', () => {
+    // Stating the fact is the whole intervention. A contender buying future
+    // value over the wire's production this year is making a defensible
+    // choice, and the app's job is to make it a choice rather than an oversight.
+    const incoming = offerFor(undefined).get.find((a) => a.id === 't2_rb')!;
+    const better = freeAgent('wire_rb', 'RB', Math.round(incoming.value * 2));
+
+    const without = offerFor(undefined);
+    const with_ = offerFor([better]);
+
+    expect(with_.id).toBe(without.id);
+    expect(with_.score).toBeCloseTo(without.score, 6);
+  });
+
+  it('never argues the other manager should have claimed somebody', () => {
+    const incoming = offerFor(undefined).get.find((a) => a.id === 't2_rb')!;
+    const better = freeAgent('wire_rb', 'RB', Math.round(incoming.value * 2));
+
+    // A waiver claim is something the reader can make for himself. Telling him
+    // the partner could have claimed somebody argues against an offer he is
+    // not being made.
+    expect(offerFor([better]).whyTheySayYes.join(' ')).not.toContain('is unrostered');
   });
 });
