@@ -258,11 +258,29 @@ const median = (values: number[]): number => {
   return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 };
 
-/** Fraction of a player's value expected to survive `years` of aging. */
+/**
+ * Fraction of a player's value expected to survive `years` of aging.
+ *
+ * The exponent is how many of *those* years are spent past the cliff, which is
+ * not the same as how far past the cliff the player ends up. A 30-year-old back
+ * finishes a three-year horizon seven years past a cliff of 26, but only three
+ * of them are ahead of him — the other four have already happened, and a market
+ * value is a price quoted today by people who can see he is 30. Charging for
+ * them here bills the same aging twice: once in the price, once again in the
+ * projection of it.
+ *
+ * Capping at `years` is therefore not a clamp bolted onto the model, it is the
+ * model stated correctly. It gives the curve a floor it always should have had:
+ * `retention(p, age, years) >= (1 - ANNUAL_DECAY[p]) ** years` for every age,
+ * because no three-year question can remove more than three years of decay.
+ * Uncapped, a 36-year-old back retained 1.4% against that floor of 37.3% — a
+ * 27-fold overstatement, on the position whose decay rate is highest and whose
+ * veterans are exactly the players a contender buys and a rebuilder sells.
+ */
 export function retention(position: Position, age: number | null, years: number): number {
   if (age === null) return 1;
   const yearsPastCliff = Math.max(0, age + years - (AGE_CLIFF[position] ?? 99));
-  return (1 - (ANNUAL_DECAY[position] ?? 0.2)) ** yearsPastCliff;
+  return (1 - (ANNUAL_DECAY[position] ?? 0.2)) ** Math.min(years, yearsPastCliff);
 }
 
 /** Win-now starting value contributed by each position, counting flex usage. */
