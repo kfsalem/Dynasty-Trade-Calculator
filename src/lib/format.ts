@@ -1,3 +1,4 @@
+import { POSITIONS } from '../types';
 import type { InjuryStatus, Position } from '../types';
 
 /**
@@ -130,7 +131,7 @@ export const POSITION_STYLES: Record<
   },
 };
 
-export const POSITION_ORDER: Position[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
+export const POSITION_ORDER: Position[] = POSITIONS;
 
 /** "SUPER_FLEX" -> "SF", "FLEX" -> "FLEX" — compact enough for a slot column. */
 export const formatSlot = (slot: string): string =>

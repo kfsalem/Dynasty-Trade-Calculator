@@ -9,6 +9,31 @@
 export type Position = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF';
 
 /**
+ * Every position this app carries, in the order it reads in.
+ *
+ * Five copies of this list had accumulated — two feeds deciding whether a
+ * position string is one we support, the Sleeper mapper deciding the same, and
+ * two display lists — which is the arrangement `replacement.pricedPositions`
+ * already warns about in as many words: `AGE_CLIFF` was once defined twice with
+ * different numbers, and a 27-year-old back was past the cliff on one page and
+ * not on another.
+ */
+export const POSITIONS: Position[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
+
+const POSITION_SET = new Set<string>(POSITIONS);
+
+/**
+ * Narrowing guard for a position string arriving from any feed.
+ *
+ * Returns a type predicate so callers stop casting. Every site this replaced
+ * wrote `p.position as Position` after testing membership, which asserts the
+ * very thing the test had just established and would have gone on compiling if
+ * the test were removed.
+ */
+export const isPosition = (value: string | null | undefined): value is Position =>
+  value !== null && value !== undefined && POSITION_SET.has(value);
+
+/**
  * Where the NFL calendar currently stands.
  *
  * Carried because a week number on its own does not say what it counts.

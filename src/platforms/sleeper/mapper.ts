@@ -1,3 +1,4 @@
+import { isPosition } from '../../types';
 import type {
   League,
   LeagueSettings,
@@ -24,7 +25,6 @@ import type {
   SleeperUser,
 } from './schema';
 
-const POSITIONS = new Set<Position>(['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
 const BENCH = new Set(['BN', 'IR', 'TAXI']);
 
 /** Sleeper uses "0" as a placeholder for an unfilled starting slot. */
@@ -78,15 +78,15 @@ function mapInjury(status: string | null): InjuryStatus | undefined {
  * deciding what counts as a position keeps that answer identical everywhere.
  */
 export function mapPosition(position: string | null | undefined): Position | null {
-  return position && POSITIONS.has(position as Position) ? (position as Position) : null;
+  return isPosition(position) ? position : null;
 }
 
 export function mapPlayer(p: SlimPlayer): Player | null {
-  if (!POSITIONS.has(p.position as Position)) return null;
+  if (!isPosition(p.position)) return null;
   return {
     id: p.id,
     name: p.name,
-    position: p.position as Position,
+    position: p.position,
     team: p.team,
     age: p.age,
     yearsExp: p.yearsExp,

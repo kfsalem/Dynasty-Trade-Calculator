@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { POSITIONS } from '../types';
 import type { Position } from '../types';
 import type { FreeAgent, FreeAgentBoard as Board } from '../engine/freeAgents';
 import type { PlayerRole } from '../engine/role';
@@ -20,7 +21,6 @@ interface Props {
   priced?: Set<Position>;
 }
 
-const POSITIONS: Position[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
 
 /**
  * How many rows of each block render before the reader asks for more.
