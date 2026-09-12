@@ -613,10 +613,28 @@ function explain(
       );
     }
 
-    const position = analysis.positions.find((p) => p.position === player.position);
-    if (position?.verdict === 'weakness') {
+    /*
+      The weakest *slot* he could fill, not the weakest position.
+
+      The search now targets a slot — that is what makes a consolidation
+      reachable at all — so explaining the result at the position would describe
+      a different trade from the one the engine chose. The two genuinely
+      disagree: a roster with two elite receivers and a hole at WR3 has the most
+      receiver value in the league, so the summed measure reports a *strength*
+      there and this line would fall silent on the very package it was aiming
+      at. See `engine/rosterDepth`.
+
+      `slotWeaknesses` is sorted worst first, so the first slot he is eligible
+      for is the worst one he fixes. It is already filtered to slots that clear
+      the weakness bar, which keeps the same "only when it is genuinely weak"
+      gate this line has always had.
+    */
+    const weak = analysis.slotWeaknesses.find((slot) =>
+      slotEligibility(slot.slot).includes(player.position),
+    );
+    if (weak) {
       lines.push(
-        `${player.name} lands on ${their} weakest position: ${their} ${player.position} starters are worth ${round(position.starterValue)} against a league median of ${round(position.leagueMedian)}.`,
+        `${player.name} lands on ${their} weakest slot: ${their} ${weak.label} is worth ${round(weak.value)} against a league median of ${round(weak.leagueMedian)}.`,
       );
     } else if (afterStarters.has(player.id)) {
       lines.push(`${player.name} walks straight into ${their} starting lineup.`);
@@ -878,6 +896,15 @@ function depthPairs(assets: TradeAsset[], limit: number): TradeAsset[][] {
  * benefit floor in `buildSuggestion` is what rules out an offer the other
  * manager would refuse, and a team asked to give up its starter has to come out
  * ahead on its own contention window before the package survives at all.
+ *
+ * A man out for the season is not a candidate, and that exclusion is the one
+ * place this pool is *narrower* than the roster. The whole premise of the shape
+ * is turning depth into a body at the slot you are thinnest — and a player on
+ * injured reserve fills no slot this year, so an offer built on him proposes to
+ * fix a hole it would leave exactly where it was. He is still a fine asset and
+ * a fine buy-low; he is simply not the answer to *this* question, which is the
+ * same distinction `analyzeTeam` draws when it keeps injured players out of the
+ * surplus list.
  */
 function slotCandidates(
   summary: RosterSummary,
@@ -889,7 +916,10 @@ function slotCandidates(
   const eligible = slotEligibility(slot.slot);
 
   return summary.players
-    .filter((entry) => entry.value > 0 && eligible.includes(entry.player.position))
+    .filter(
+      (entry) =>
+        entry.value > 0 && entry.available && eligible.includes(entry.player.position),
+    )
     .sort((a, b) => b.value - a.value)
     .slice(0, limit)
     .map((entry) =>

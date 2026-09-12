@@ -1264,3 +1264,69 @@ describe('uneven packages', () => {
     expect(overCap).toEqual([]);
   });
 });
+
+describe('uneven packages, the other direction and the edges', () => {
+  it('offers one back for two receivers from the mirror chair', () => {
+    // Team 2 is deep at back with nothing at receiver — the exact inverse of
+    // team 1. One-for-two is the most common uneven shape in this league's own
+    // history, and it is the split direction rather than the consolidation.
+    const result = suggestTrades(2, world(CONSOLIDATION));
+
+    const split = result.trades.find(
+      (t) =>
+        t.give.filter((a) => a.kind === 'player').length === 1 &&
+        t.get.filter((a) => a.kind === 'player').length === 2,
+    );
+
+    expect(split).toBeDefined();
+    expect(split!.give.map((a) => a.id)).toEqual(['t2_rb1']);
+    expect(split!.get.map((a) => a.id).sort()).toEqual(['t1_wr2', 't1_wr3']);
+  });
+
+  it('never trades for a man who is out for the season to fill a lineup hole', () => {
+    // The whole premise of the shape is turning depth into a body at the slot
+    // you are thinnest. A player on injured reserve fills no slot this year, so
+    // an offer built on him proposes to fix a hole it would leave exactly where
+    // it was.
+    const players = new Map<string, Player>();
+    const values = new Map<string, PlayerValue>();
+    const rosters: Roster[] = [];
+
+    for (const spec of CONSOLIDATION) {
+      const ids: string[] = [];
+      for (const [suffix, position, value, age] of spec.players) {
+        const id = `t${spec.rosterId}_${suffix}`;
+        players.set(
+          id,
+          makePlayer(id, position, age, id === 't2_rb1' ? { status: 'ir' } : undefined),
+        );
+        values.set(id, makeValue(id, value));
+        ids.push(id);
+      }
+      rosters.push(makeRoster(spec.rosterId, ids));
+    }
+
+    const league = makeLeague(rosters, settings);
+    const summaries = rosters
+      .map((r) => summarizeRoster(r, players, values, settings))
+      .sort((a, b) => b.starterValue - a.starterValue);
+    const ctx: SuggestContext = { league, players, values, picks: [], summaries };
+
+    // He is the one man who would fix our back slot, and he is unavailable.
+    expect(suggestTrades(1, ctx).trades.filter((t) => t.get.some((a) => a.id === 't2_rb1'))).toEqual(
+      [],
+    );
+  });
+
+  it('explains the package at the slot the search aimed at', () => {
+    const result = suggestTrades(1, world(CONSOLIDATION));
+    const consolidation = result.trades.find(
+      (t) => t.give.filter((a) => a.kind === 'player').length === 2,
+    )!;
+
+    // The search targets a slot, so the card has to describe a slot — naming
+    // the position instead would explain a different trade from the one chosen.
+    expect(consolidation.rationale.join(' ')).toContain('lands on your weakest slot');
+    expect(consolidation.whyTheySayYes.join(' ')).toContain('lands on their weakest slot');
+  });
+});
