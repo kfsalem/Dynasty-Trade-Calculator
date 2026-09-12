@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { freeAgentBoard, playingTime } from './freeAgents';
+import {
+  claimableFreeAgents,
+  freeAgentBoard,
+  playingTime,
+  type FreeAgent,
+  type FreeAgentBoard,
+} from './freeAgents';
 import { valueLeague } from './replacement';
 import { makePlayer, makeRoster, makeSettings, makeValue } from './testFixtures';
 import type { Player, PlayerValue } from '../types';
@@ -202,3 +208,50 @@ describe('playingTime', () => {
     expect(playingTime(undefined)).toBeNull();
   });
 });
+
+describe('claimableFreeAgents', () => {
+  const agent = (id: string, yearsExp: number | null, value: number): FreeAgent => ({
+    player: { ...makePlayer(id, 'QB', 24), yearsExp },
+    value: makeValue(id, value, 'QB', value, value, value),
+    snaps: undefined,
+    usage: undefined,
+    adjustment: undefined,
+  });
+
+  const board = (entries: FreeAgent[]): FreeAgentBoard => ({
+    priced: entries,
+    unpriced: [],
+    all: entries,
+  });
+
+  const pool = board([agent('rookie', 0, 1746), agent('vet', 9, 161), agent('unknown', null, 50)]);
+
+  it('drops the incoming class while the rookie draft is still to come', () => {
+    // The league is still sitting on last season, so its first-year players are
+    // the draft rather than the wire. Believing they were free would tell a
+    // manager not to trade for a quarterback because a first-rounder was spare.
+    const claimable = claimableFreeAgents(pool, { season: '2025', status: 'complete' }, '2026');
+
+    expect(claimable.map((a) => a.player.id)).toEqual(['vet', 'unknown']);
+  });
+
+  it('keeps them once the draft has run, when they are ordinary free agents', () => {
+    const claimable = claimableFreeAgents(pool, { season: '2026', status: 'in_season' }, '2026');
+
+    expect(claimable.map((a) => a.player.id)).toEqual(['rookie', 'vet', 'unknown']);
+  });
+
+  it('drops them in a league that has rolled over but not yet drafted', () => {
+    const claimable = claimableFreeAgents(pool, { season: '2026', status: 'pre_draft' }, '2026');
+
+    expect(claimable.map((a) => a.player.id)).toEqual(['vet', 'unknown']);
+  });
+
+  it('treats an unknown experience as a veteran rather than deleting him', () => {
+    // Both directions are wrong when the index has no record, but only one of
+    // them silently removes a real alternative from the comparison.
+    const claimable = claimableFreeAgents(pool, { season: '2025', status: 'complete' }, '2026');
+
+    expect(claimable.some((a) => a.player.id === 'unknown')).toBe(true);
+  });
+})

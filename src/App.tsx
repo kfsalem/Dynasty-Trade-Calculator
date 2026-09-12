@@ -156,6 +156,7 @@ function App() {
     seasonPhase,
     currentWeek,
     freeAgents,
+    claimable,
     activityCurrent,
     adjustments,
     priced,
@@ -503,6 +504,7 @@ function App() {
                     managers={managers.model}
                     managersLoading={managers.loading}
                     managersFailed={managers.failed}
+                    claimable={claimable}
                     onOpenInCalculator={(trade) => {
                       seedTrade(trade);
                       setTab('trade');

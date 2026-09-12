@@ -230,14 +230,36 @@ const ROOKIE_DRAFT_PENDING = new Set(['pre_draft', 'drafting']);
  * a `complete` status describing a season that is over and a rookie draft that
  * has not been scheduled, so its status says nothing about this year's class.
  */
+/**
+ * Has this league already run the current class's rookie draft?
+ *
+ * Extracted because two different questions turn on it. Which pick years are
+ * still tradeable is the original one; the other is whether an unrostered
+ * rookie is a player you could claim. Before the draft he is not available at
+ * all — he is the draft — and a model that reads him as a free agent will
+ * happily tell a manager not to trade for a quarterback because a first-round
+ * rookie is going spare.
+ *
+ * The league's own status answers it, but only once the league has rolled over
+ * to the current season: a dynasty league still sitting on last year's entry
+ * has a `complete` status describing a season that is over and a rookie draft
+ * that has not been scheduled.
+ */
+export function rookieDraftHeld(
+  league: Pick<League, 'season' | 'status'>,
+  currentSeason: string,
+): boolean {
+  return league.season === currentSeason && !ROOKIE_DRAFT_PENDING.has(league.status);
+}
+
 export function tradeableSeasons(
   currentSeason: string,
   available: string[],
   league: Pick<League, 'season' | 'status'>,
 ): string[] {
-  const drafted =
-    league.season === currentSeason && !ROOKIE_DRAFT_PENDING.has(league.status);
-  const earliest = drafted ? String(Number(currentSeason) + 1) : currentSeason;
+  const earliest = rookieDraftHeld(league, currentSeason)
+    ? String(Number(currentSeason) + 1)
+    : currentSeason;
 
   return available.filter((season) => season >= earliest).sort();
 }

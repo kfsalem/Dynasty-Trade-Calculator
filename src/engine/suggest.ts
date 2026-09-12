@@ -13,7 +13,9 @@ import {
 import { blend, type Learned } from './learned';
 import { countPhrase, type Countable } from '../lib/learnedText';
 import { appetiteFor, managerFor, partnership, type ManagerModel } from './managers';
+import type { FreeAgent } from './freeAgents';
 import { picksForRoster } from './picks';
+import { CLEAR_MARGIN, relativeMargin } from './startSit';
 import { tradeWindow } from './tradeWindow';
 import {
   bestLineup,
@@ -125,6 +127,21 @@ export interface SuggestionResult {
 
 export interface SuggestContext extends TradeContext {
   summaries: RosterSummary[];
+  /**
+   * Free agents this manager could claim instead of trading, when known.
+   *
+   * Already narrowed by `claimableFreeAgents`, so the engine can take the list
+   * at face value: priced, and not an undrafted rookie class masquerading as
+   * the waiver wire. Optional in the same way as `trends` and `managers` — the
+   * board is allowed to fail to load, and the engine has to keep suggesting
+   * trades without it.
+   *
+   * Free agents are priced through the same `applyReplacement` against the same
+   * converged levels as every rostered player, so `winNowValue` compares
+   * directly with no conversion. That is what makes the check honest rather
+   * than a second opinion; see `engine/freeAgents`.
+   */
+  claimable?: FreeAgent[];
   /**
    * League-wide playoff odds, when a season is being played.
    *
@@ -570,6 +587,15 @@ function explain(
   perspective: 'mine' | 'theirs',
   trends?: RoleTrends,
   social: string[] = [],
+  /**
+   * What the waiver wire says about this offer.
+   *
+   * Separate from `social` rather than folded into it because the two are
+   * different kinds of claim — one is about the manager across the table, the
+   * other about the player pool — and a reader should be able to tell which
+   * sentence is evidence about a person and which is arithmetic.
+   */
+  wire: string[] = [],
 ): string[] {
   const they = perspective === 'mine' ? 'You' : side.teamName;
   const their = perspective === 'mine' ? 'your' : 'their';
@@ -748,6 +774,7 @@ function explain(
     which is the question a manager asks after he is satisfied it fits.
   */
   lines.push(...social);
+  lines.push(...wire);
 
   const parts: string[] = [];
   if (benefit.now > 0) parts.push(`+${round(benefit.now)} to ${their} starting lineup`);
@@ -871,6 +898,59 @@ function socialLines(
     );
   }
 
+  return lines;
+}
+
+/**
+ * Incoming players a free agent already beats, for nothing, this season.
+ *
+ * The check the engine could not make until now. `movableAssets` asks who a
+ * manager would part with and `sideBenefit` asks what the lineup gains, and
+ * neither has ever asked the prior question a manager asks first: is this
+ * player available cheaper? `engine/wire` has made exactly this comparison for
+ * the weekly lineup since #46 — the cheap question was guarded and the
+ * expensive one was not.
+ *
+ * Win-now only, deliberately. A free agent and a traded player are directly
+ * comparable on that scale because both ran through the same replacement
+ * levels, and it is the scale on which "you could just claim him" is a true
+ * statement. It is emphatically not true on the dynasty scale: a 30-year-old on
+ * waivers who outscores a rookie this season is not the same asset, and a
+ * version of this that suppressed the trade on that basis would be arguing
+ * against the whole two-scale model.
+ *
+ * So this states the fact and stops. It does not veto the trade and does not
+ * touch `score` — a contender buying the future over the wire's this-year
+ * production is making a defensible choice, and the app's job here is to make
+ * sure it is a choice rather than an oversight.
+ *
+ * Held to `CLEAR_MARGIN`, the same bar `startSit` and `wire` use, so the app
+ * applies one standard to "is this actually an upgrade" everywhere.
+ */
+function wireAlternatives(side: TradeSideResult, ctx: SuggestContext): string[] {
+  if (!ctx.claimable?.length) return [];
+
+  const best = new Map<Position, FreeAgent>();
+  for (const agent of ctx.claimable) {
+    const held = best.get(agent.player.position);
+    if (!held || (agent.value?.winNowValue ?? 0) > (held.value?.winNowValue ?? 0)) {
+      best.set(agent.player.position, agent);
+    }
+  }
+
+  const lines: string[] = [];
+  for (const player of side.incomingPlayers) {
+    const agent = best.get(player.position);
+    if (!agent) continue;
+
+    const free = agent.value?.winNowValue ?? 0;
+    const cost = ctx.values.get(player.id)?.winNowValue ?? 0;
+    if (relativeMargin(free, cost) <= CLEAR_MARGIN) continue;
+
+    lines.push(
+      `${player.name} is not the best ${player.position} available: ${agent.player.name} is unrostered and worth ${round(free)} to a lineup this season against his ${round(cost)}. Claiming him costs a roster spot and nothing else.`,
+    );
+  }
   return lines;
 }
 
@@ -1160,6 +1240,11 @@ function buildSuggestion(
       mine.summary,
       'mine',
       ctx.trends,
+      [],
+      // Only on our own card. A waiver claim is something the reader can make
+      // for himself; telling him the other manager could have claimed somebody
+      // is an argument for a trade he is not being offered.
+      wireAlternatives(mySide, ctx),
     ),
     whyTheySayYes: explain(
       theirSide,

@@ -1,4 +1,5 @@
-import type { Player, PlayerValue, Position } from '../types';
+import type { League, Player, PlayerValue, Position } from '../types';
+import { rookieDraftHeld } from './picks';
 import type { ReplacementLevel } from './replacement';
 import { applyReplacement } from './replacement';
 import { activityFactor, type ActivityAdjustment } from './activityFactor';
@@ -185,4 +186,39 @@ export function freeAgentBoard({
   const unpriced = all.filter((entry) => entry.value === null).sort(byPlayingTime);
 
   return { priced, unpriced, all };
+}
+
+/**
+ * Free agents a manager could actually claim today.
+ *
+ * The board is a list of everyone nobody rosters, which is not the same list.
+ * Two things have to come off it before it can be used as the alternative to a
+ * trade.
+ *
+ * **The unpriced**, for the reason `engine/wire` already gives: three quarters
+ * of the wire has no published value, and no published value is not the same
+ * as worth nothing. Claiming that one of them beats a player in a trade would
+ * mean inventing the number the comparison rests on.
+ *
+ * **The incoming rookie class**, whenever the league has yet to draft it. Those
+ * players are unrostered because the rookie draft has not happened, not because
+ * anyone can have them — on the test league the four best "free agent"
+ * quarterbacks were all first-year players worth up to 1,746, against a best
+ * genuine free agent of 161. A comparison that believed them would tell a
+ * manager not to trade for a quarterback because a first-rounder was going
+ * spare.
+ *
+ * Once the draft has run they are ordinary free agents and stay in, which is
+ * why this asks `rookieDraftHeld` rather than filtering rookies outright.
+ */
+export function claimableFreeAgents(
+  board: FreeAgentBoard,
+  league: Pick<League, 'season' | 'status'>,
+  currentSeason: string,
+): FreeAgent[] {
+  if (rookieDraftHeld(league, currentSeason)) return board.priced;
+  // `yearsExp` is nullish for a player the index has no record for; treating
+  // the unknown as a veteran keeps him in the pool, which is the direction that
+  // cannot silently delete a real alternative.
+  return board.priced.filter((entry) => (entry.player.yearsExp ?? 1) > 0);
 }

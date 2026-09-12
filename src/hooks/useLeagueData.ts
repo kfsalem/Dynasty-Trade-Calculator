@@ -6,7 +6,11 @@ import { fetchPickValues } from '../values/dynastyprocess';
 import type { RosterSummary } from '../engine/rosterValue';
 import { buildDraftPicks, tradeableSeasons } from '../engine/picks';
 import { isGameWeek, regularSeasonWeek } from '../engine/season';
-import { freeAgentBoard, type FreeAgentBoard } from '../engine/freeAgents';
+import {
+  claimableFreeAgents,
+  freeAgentBoard,
+  type FreeAgentBoard,
+} from '../engine/freeAgents';
 import { pricedPositions, valueLeague, type LeagueActivity } from '../engine/replacement';
 import { snapShares } from '../engine/snapShare';
 import { opportunities } from '../engine/opportunity';
@@ -467,6 +471,20 @@ export function useLeagueSummaries(leagueId: string | null) {
     });
   }, [leagueQuery.data, valuesQuery.data, adjusted, snaps, usage, activity]);
 
+  /**
+   * The subset of that board a manager could actually claim today.
+   *
+   * Derived here rather than inside the suggestion engine because the question
+   * needs the real-world season, which is a property of the *import* and not of
+   * the league — see `rookieDraftHeld`. The engine takes the narrowed list at
+   * face value.
+   */
+  const claimable = useMemo(() => {
+    const bundle = leagueQuery.data;
+    if (!bundle || !freeAgents) return undefined;
+    return claimableFreeAgents(freeAgents, bundle.league, bundle.currentSeason);
+  }, [freeAgents, leagueQuery.data]);
+
   const summaries = useMemo<RosterSummary[]>(
     () => [...(adjusted?.summaries ?? [])].sort((a, b) => b.starterValue - a.starterValue),
     [adjusted],
@@ -651,6 +669,8 @@ export function useLeagueSummaries(leagueId: string | null) {
     priced,
     /** Every player nobody rosters, priced where anyone prices him. */
     freeAgents,
+    /** …narrowed to the ones a manager could claim instead of trading. */
+    claimable,
     /**
      * Whether the activity data describes the season being played.
      *

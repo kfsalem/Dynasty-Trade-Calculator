@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { DraftPick, League, Player, PlayerValue } from '../types';
 import type { RosterSummary } from '../engine/rosterValue';
 import { suggestTrades, type SuggestContext, type SuggestedTrade, type TradeAsset } from '../engine/suggest';
+import type { FreeAgent } from '../engine/freeAgents';
 import type { RoleTrends } from '../engine/roleTrend';
 import type { ManagerModel } from '../engine/managers';
 import { countPhrase, type Countable } from '../lib/learnedText';
@@ -39,6 +40,12 @@ interface Props {
   managersLoading?: boolean;
   /** The walk lost a request. Every partner is weighted the same, as before. */
   managersFailed?: boolean;
+  /**
+   * Free agents you could claim instead of trading, already narrowed to the
+   * ones that are genuinely available. Absent while the board loads, and the
+   * engine then makes exactly the suggestions it always did.
+   */
+  claimable?: FreeAgent[];
 }
 
 const TRADES: Countable = { one: 'trade', many: 'trades' };
@@ -220,6 +227,7 @@ export function TradeSuggestions({
   managers,
   managersLoading,
   managersFailed,
+  claimable,
 }: Props) {
   const result = useMemo(() => {
     const ctx: SuggestContext = {
@@ -231,9 +239,10 @@ export function TradeSuggestions({
       trends,
       season: odds,
       managers,
+      claimable,
     };
     return suggestTrades(myRosterId, ctx);
-  }, [league, players, values, picks, summaries, myRosterId, trends, odds, managers]);
+  }, [league, players, values, picks, summaries, myRosterId, trends, odds, managers, claimable]);
 
   /**
    * The deadline, said out loud while there is still time to act on it.
