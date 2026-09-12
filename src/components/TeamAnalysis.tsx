@@ -143,7 +143,13 @@ export function TeamAnalysis({
   roles,
   onChangeTeam,
 }: Props) {
-  const analysis = analyzeTeam(myRosterId, summaries, league.settings, season);
+  // `analyzeTeam` reaches `contentionProfile`, which carries the same
+  // once-per-team projection cost as `leagueContention` below — so it is
+  // memoised on the same terms rather than re-running on every render.
+  const analysis = useMemo(
+    () => analyzeTeam(myRosterId, summaries, league.settings, season),
+    [myRosterId, summaries, league.settings, season],
+  );
   const roster = league.rosters.find((r) => r.rosterId === myRosterId);
 
   // Projecting every roster three years forward runs `bestLineup` once per
