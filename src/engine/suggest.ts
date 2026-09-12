@@ -674,11 +674,21 @@ function explain(
       is eligible for is the worst one he fixes. It is already filtered to slots
       that clear the weakness bar, which keeps the same "only when it is
       genuinely weak" gate this line has always had.
+
+      Starting is the precondition rather than the fallback, and that ordering
+      is the whole of #112. `slotWeaknesses` is a measure of the roster *before*
+      the trade, so eligibility for a hole is not evidence of filling it — a man
+      who cracks no lineup leaves the hole exactly where it was. Asking
+      `afterStarters` first also stops him consuming a slot from `claimed` that
+      a team-mate who does start could have used, and lets him fall through to
+      saying nothing, which is the honest line about him.
     */
-    const weak = analysis.slotWeaknesses.find(
-      (slot) =>
-        !claimed.has(slot.label) && slotEligibility(slot.slot).includes(player.position),
-    );
+    const weak = afterStarters.has(player.id)
+      ? analysis.slotWeaknesses.find(
+          (slot) =>
+            !claimed.has(slot.label) && slotEligibility(slot.slot).includes(player.position),
+        )
+      : undefined;
     if (weak) {
       claimed.add(weak.label);
       lines.push(

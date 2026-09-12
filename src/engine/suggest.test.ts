@@ -5,13 +5,14 @@ import {
   suggestTrades,
   windowWeights,
   type SuggestContext,
+  type TradeAsset,
 } from './suggest';
 import type { RoleTrend, RoleTrends } from './roleTrend';
 import { analyzeTeam, type ContentionProfile, type SeasonOdds } from './analysis';
 import { gradeAgainst } from './grades';
 import { modelManagers, type ManagerModel } from './managers';
 import type { LeagueTransaction, SeasonManager } from '../platforms/types';
-import { summarizeRoster, type RosterSummary } from './rosterValue';
+import { bestLineup, summarizeRoster, valuePlayers, type RosterSummary } from './rosterValue';
 import type {
   DraftPick,
   LeagueSettings,
@@ -1354,12 +1355,42 @@ describe('the card cannot contradict its own numbers', () => {
   const allCards = () =>
     WORLDS.flatMap((spec) =>
       [0, 1200].flatMap((pickValue) =>
-        [1, 2, 3, 4].flatMap((rosterId) =>
-          suggestTrades(rosterId, world(spec, pickValue)).trades.flatMap((trade) => [
-            { lines: trade.rationale, benefit: trade.myBenefit },
-            { lines: trade.whyTheySayYes, benefit: trade.theirBenefit },
-          ]),
-        ),
+        [1, 2, 3, 4].flatMap((rosterId) => {
+          const ctx = world(spec, pickValue);
+
+          /** Who a roster starts once the trade has gone through. */
+          const startersAfter = (id: number, out: TradeAsset[], incoming: TradeAsset[]) => {
+            const roster = ctx.league.rosters.find((r) => r.rosterId === id)!;
+            const leaving = new Set(out.filter((a) => a.kind === 'player').map((a) => a.id));
+            const after = [
+              ...roster.playerIds.filter((p) => !leaving.has(p)),
+              ...incoming.filter((a) => a.kind === 'player').map((a) => a.id),
+            ];
+            return new Set(
+              bestLineup(
+                valuePlayers(after, ctx.players, ctx.values, roster.taxiIds),
+                ctx.league.settings.startingSlots,
+              )
+                .map((slot) => slot.entry?.player.id)
+                .filter((pid): pid is string => Boolean(pid)),
+            );
+          };
+
+          return suggestTrades(rosterId, ctx).trades.flatMap((trade) => [
+            {
+              lines: trade.rationale,
+              benefit: trade.myBenefit,
+              incoming: trade.get,
+              starters: startersAfter(rosterId, trade.give, trade.get),
+            },
+            {
+              lines: trade.whyTheySayYes,
+              benefit: trade.theirBenefit,
+              incoming: trade.give,
+              starters: startersAfter(trade.partnerRosterId, trade.get, trade.give),
+            },
+          ]);
+        }),
       ),
     );
 
@@ -1367,6 +1398,25 @@ describe('the card cannot contradict its own numbers', () => {
     lines
       .map((line) => /weakest slot: (?:your|their) (\S+) is worth/.exec(line)?.[1])
       .filter((slot): slot is string => slot !== undefined);
+
+  it('only says a man fills a hole when he is actually in the lineup', () => {
+    // `slotWeaknesses` measures the roster *before* the trade, so being
+    // eligible for a hole is not evidence of filling it. A man who cracks no
+    // lineup leaves the hole exactly where it was, and the card said otherwise
+    // on 6 of 74 claims against the real league.
+    const cards = allCards();
+    expect(cards.length).toBeGreaterThan(0);
+
+    for (const card of cards) {
+      for (const line of card.lines) {
+        const named = /^(.+?) lands on (?:your|their) weakest slot/.exec(line)?.[1];
+        if (!named) continue;
+        const asset = card.incoming.find((a) => a.label === named);
+        expect(asset).toBeDefined();
+        expect(card.starters.has(asset!.id)).toBe(true);
+      }
+    }
+  });
 
   it('never lands two incoming players on the same weakest slot', () => {
     // A slot holds one man. `slotWeaknesses` is sorted worst-first, so before
@@ -1530,5 +1580,117 @@ describe('one idea, offered once', () => {
     // The behaviour the old key already had, which the new one must not lose.
     const shapes = suggestTrades(1, world(CONSOLIDATION, 1200)).trades.map((t) => t.shape);
     expect(shapes).toEqual([...new Set(shapes)]);
+  });
+});
+
+/**
+ * A partner with two holes at one position, offered two men who fix one.
+ *
+ * Needs its own lineup — two running-back slots — so the receiving side has a
+ * second weak slot for the makeweight to be handed once #104 stopped both men
+ * claiming the first. Team 2 starts the good back and benches the bad one,
+ * which is exactly the shape where "lands on their weakest slot" describes a
+ * hole the trade leaves open.
+ */
+const TWO_BACK_SLOTS: LineupSlot[] = ['QB', 'RB', 'RB', 'WR'];
+
+function twoBackWorld(): SuggestContext {
+  const settings = makeSettings(TWO_BACK_SLOTS, { teamCount: 4, draftRounds: 2 });
+  const players = new Map<string, Player>();
+  const values = new Map<string, PlayerValue>();
+  const rosters: Roster[] = [];
+
+  const specs: Spec[] = [
+    {
+      rosterId: 1,
+      players: [
+        ['qb', 'QB', 6000, 25],
+        ['rb1', 'RB', 6000, 25],
+        ['rb2', 'RB', 5500, 25],
+        ['wr', 'WR', 200, 25],
+        // The pair we send: one starts for them, one cannot.
+        ['spare_good', 'RB', 2500, 26],
+        ['spare_bad', 'RB', 390, 26],
+      ],
+    },
+    {
+      rosterId: 2,
+      players: [
+        ['qb', 'QB', 5000, 24],
+        ['rb_a', 'RB', 400, 24],
+        ['rb_b', 'RB', 300, 24],
+        ['wr', 'WR', 3200, 23],
+        ['wr_spare', 'WR', 2980, 23],
+      ],
+    },
+    // Real backs, so that team 2's 400 and 300 read as holes against the
+    // league rather than as an ordinary pair of starters.
+    {
+      rosterId: 3,
+      players: [
+        ['qb', 'QB', 700, 30],
+        ['rb1', 'RB', 2600, 26],
+        ['rb2', 'RB', 2400, 26],
+        ['wr', 'WR', 350, 30],
+      ],
+    },
+    {
+      rosterId: 4,
+      players: [
+        ['qb', 'QB', 650, 30],
+        ['rb1', 'RB', 2500, 26],
+        ['rb2', 'RB', 2300, 26],
+        ['wr', 'WR', 320, 30],
+      ],
+    },
+  ];
+
+  for (const spec of specs) {
+    const ids: string[] = [];
+    for (const [suffix, position, value, age] of spec.players) {
+      const id = `t${spec.rosterId}_${suffix}`;
+      players.set(id, makePlayer(id, position, age));
+      values.set(id, makeValue(id, value));
+      ids.push(id);
+    }
+    rosters.push(makeRoster(spec.rosterId, ids));
+  }
+
+  const league = makeLeague(rosters, settings);
+  const summaries = rosters
+    .map((r) => summarizeRoster(r, players, values, settings))
+    .sort((a, b) => b.starterValue - a.starterValue);
+
+  return { league, players, values, picks: [], summaries };
+}
+
+describe('a hole the trade does not fill', () => {
+  it('does not say a benched man lands on a weak slot', () => {
+    const ctx = twoBackWorld();
+    const trade = suggestTrades(1, ctx).trades.find(
+      (t) => t.give.filter((a) => a.kind === 'player').length === 2,
+    );
+    expect(trade).toBeDefined();
+
+    const partner = ctx.league.rosters.find((r) => r.rosterId === trade!.partnerRosterId)!;
+    const leaving = new Set(trade!.get.filter((a) => a.kind === 'player').map((a) => a.id));
+    const after = [
+      ...partner.playerIds.filter((id) => !leaving.has(id)),
+      ...trade!.give.filter((a) => a.kind === 'player').map((a) => a.id),
+    ];
+    const starters = new Set(
+      bestLineup(
+        valuePlayers(after, ctx.players, ctx.values, partner.taxiIds),
+        ctx.league.settings.startingSlots,
+      )
+        .map((s) => s.entry?.player.id)
+        .filter((id): id is string => Boolean(id)),
+    );
+
+    // The weaker back does not make their lineup, so the hole he was being
+    // credited with filling is still there after the trade.
+    expect(starters.has('t1_spare_good')).toBe(true);
+    expect(starters.has('t1_spare_bad')).toBe(false);
+    expect(trade!.whyTheySayYes.join(' ')).not.toContain('Player t1_spare_bad lands on');
   });
 });
