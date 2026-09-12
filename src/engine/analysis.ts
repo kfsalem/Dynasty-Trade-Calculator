@@ -1,6 +1,13 @@
 import { DEADLINE_SPEAKS_AT, tradeWindow, type TradeWindow } from './tradeWindow';
 import type { LeagueSettings, Player, Position } from '../types';
 import { bestLineup, byValue, type RosterSummary, type ValuedPlayer } from './rosterValue';
+import {
+  bareSlots,
+  fragility,
+  slotStrengths,
+  type Fragility,
+  type SlotStrength,
+} from './rosterDepth';
 
 /**
  * Team analysis: strengths, weaknesses, surplus, and contention window.
@@ -201,9 +208,24 @@ export interface ContentionProfile {
 
 export interface TeamAnalysis {
   rosterId: number;
+  /**
+   * Win-now value summed per position across the whole lineup.
+   *
+   * Kept, and no longer the basis for finding a weakness. As a *summary* it is
+   * accurate and it is what the positional chart plots — "this roster has 6,100
+   * of receiver value" is a true sentence. As a *weakness detector* it was
+   * wrong at the grain, because a sum cannot see a hole underneath two good
+   * players. See `slots`, and `engine/rosterDepth` for the argument.
+   */
   positions: PositionalStrength[];
   strengths: PositionalStrength[];
   weaknesses: PositionalStrength[];
+  /** Every starting slot, ranked against the same slot on every other roster. */
+  slots: SlotStrength[];
+  /** The slots this roster is weak at, worst first. What `focus` speaks about. */
+  slotWeaknesses: SlotStrength[];
+  /** What one absence would cost, per starter, and which slots have no cover. */
+  depth: Fragility;
   surpluses: SurplusAsset[];
   contention: ContentionProfile;
   focus: string[];
@@ -670,12 +692,36 @@ export function analyzeTeam(
   const strengths = positions.filter((p) => p.verdict === 'strength');
   const weaknesses = positions.filter((p) => p.verdict === 'weakness');
 
+  // Weakness is asked at the slot, not at the position. A roster with two elite
+  // receivers and nothing at WR3 has the most receiver value in the league and a
+  // hole in the lineup it fields, and only one of those two facts is worth
+  // saying out loud. See `engine/rosterDepth`.
+  const slots = slotStrengths(summary, all);
+  const slotWeaknesses = slots
+    .filter((s) => s.verdict === 'weakness')
+    .sort((a, b) => a.z - b.z);
+  const depth = fragility(summary, settings.startingSlots);
+
   const focus: string[] = [contention.advice];
 
-  if (weaknesses.length > 0) {
-    const worst = [...weaknesses].sort((a, b) => a.z - b.z)[0];
+  if (slotWeaknesses.length > 0) {
+    const worst = slotWeaknesses[0];
     focus.push(
-      `Your weakest spot is ${worst.position}: ${Math.round(worst.starterValue).toLocaleString()} of starting value against a league median of ${Math.round(worst.leagueMedian).toLocaleString()}.`,
+      `Your weakest spot is ${worst.label}: ${Math.round(worst.value).toLocaleString()} against a league median of ${Math.round(worst.leagueMedian).toLocaleString()} at the same slot, which is ${worst.rank} of ${worst.teamCount}.`,
+    );
+  }
+
+  // Counted rather than ranked, and only when there is something to count. An
+  // uncovered slot is a hard fact — the lineup would field one man fewer — so it
+  // needs no threshold and earns a sentence of its own, separate from the
+  // weakness above: a slot can be strong today and still have nothing behind it.
+  if (depth.uncoveredSlots > 0) {
+    const bare = bareSlots(depth.starters);
+    const who = bare.map((s) => `${s.entry.player.name} (${s.slotLabel})`).join(', ');
+    focus.push(
+      bare.length === 1
+        ? `One starting slot has no cover at all — ${who}. Lose him and you field a man short.`
+        : `${bare.length} starting slots have no cover at all — ${who}. Lose any of them and you field a man short.`,
     );
   }
 
@@ -704,5 +750,16 @@ export function analyzeTeam(
     );
   }
 
-  return { rosterId, positions, strengths, weaknesses, surpluses, contention, focus };
+  return {
+    rosterId,
+    positions,
+    strengths,
+    weaknesses,
+    slots,
+    slotWeaknesses,
+    depth,
+    surpluses,
+    contention,
+    focus,
+  };
 }
