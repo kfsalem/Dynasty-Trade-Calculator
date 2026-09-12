@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ANNUAL_DECAY,
+  HORIZON_YEARS,
+  SKILL_POSITIONS,
   analyzeTeam,
   contentionProfile,
   futureScore,
@@ -204,6 +207,36 @@ describe('retention', () => {
 
   it('treats unknown ages as no decay rather than guessing', () => {
     expect(retention('RB', null, 3)).toBe(1);
+  });
+
+  it('charges only the years inside the horizon, not the ones already elapsed', () => {
+    // A 30-year-old back ends a three-year horizon seven years past a cliff of
+    // 26, but four of those already happened and are priced into the value
+    // being decayed. Only the three ahead of him belong to this question.
+    expect(retention('RB', 30, 3)).toBeCloseTo(0.72 ** 3, 5);
+    expect(retention('RB', 30, 3)).not.toBeCloseTo(0.72 ** 7, 5);
+  });
+
+  it('never removes more decay than the horizon is long', () => {
+    // The floor the model always implied: a three-year projection cannot take
+    // away more than three years. Uncapped, a 36-year-old back retained 1.4%
+    // against this 37.3%.
+    for (const position of SKILL_POSITIONS) {
+      const floor = (1 - ANNUAL_DECAY[position]) ** HORIZON_YEARS;
+      for (let age = 20; age <= 45; age++) {
+        expect(retention(position, age, HORIZON_YEARS)).toBeGreaterThanOrEqual(floor - 1e-9);
+      }
+    }
+  });
+
+  it('still falls monotonically with age, up to the floor', () => {
+    for (const position of SKILL_POSITIONS) {
+      for (let age = 20; age < 45; age++) {
+        expect(retention(position, age + 1, HORIZON_YEARS)).toBeLessThanOrEqual(
+          retention(position, age, HORIZON_YEARS) + 1e-9,
+        );
+      }
+    }
   });
 });
 
