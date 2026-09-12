@@ -1,9 +1,8 @@
 import { z } from 'zod';
 import { fetchJson } from '../lib/http';
 import { cached, TTL } from '../lib/cache';
-import type { LeagueSettings, PlayerValue, Position } from '../types';
-
-const POSITIONS: string[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
+import { isPosition } from '../types';
+import type { LeagueSettings, PlayerValue } from '../types';
 
 const BASE = 'https://api.fantasycalc.com/values/current';
 
@@ -95,9 +94,7 @@ export async function fetchFantasyCalcValues(
 
       bySleeperId.set(sleeperId, {
         playerId: sleeperId,
-        position: POSITIONS.includes(position as Position)
-          ? (position as Position)
-          : null,
+        position: isPosition(position) ? position : null,
         value: normalized,
         marketValue: normalized,
         redraftValue: redraft,

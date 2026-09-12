@@ -1,6 +1,7 @@
 import type { DraftPick, League, Player, PlayerValue, Position } from '../types';
 import { POSITION_STYLES, formatInjury, formatValue } from '../lib/format';
 import { valuePlayers } from '../engine/rosterValue';
+import { picksForRoster } from '../engine/picks';
 import { injuryNote } from '../engine/availability';
 import type { SnapShare } from '../engine/snapShare';
 import type { Opportunity } from '../engine/opportunity';
@@ -84,9 +85,7 @@ export function AssetPicker({
 }: Props) {
   const roster = league.rosters.find((r) => r.rosterId === rosterId);
   const entries = roster ? valuePlayers(roster.playerIds, players, values) : [];
-  const ownedPicks = picks
-    .filter((p) => p.ownerRosterId === rosterId)
-    .sort((a, b) => a.season.localeCompare(b.season) || a.round - b.round);
+  const ownedPicks = picksForRoster(picks, rosterId);
 
   /**
    * The tick you just made, answered where you can see it.

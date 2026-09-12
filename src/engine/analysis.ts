@@ -585,7 +585,10 @@ export function contentionProfile(
   const futureScores = all.map((s) => futureScore(s, settings));
 
   const now = summary.starterValue;
-  const future = futureScore(summary, settings);
+  // Already in `futureScores` — `summary` is an element of `all` for every
+  // caller in the app. Recomputed only for one passed from outside it.
+  const index = all.indexOf(summary);
+  const future = index >= 0 ? futureScores[index] : futureScore(summary, settings);
 
   // The future axis has to measure the *shape* of a roster, not its quality a
   // second time. Decay is roughly proportional to value, so absolute future
@@ -711,7 +714,7 @@ export function analyzeTeam(
   if (!summary) return null;
 
   const byRoster = all.map((s) => ({ summary: s, positional: positionalStarterValue(s) }));
-  const mine = positionalStarterValue(summary);
+  const mine = byRoster.find((r) => r.summary === summary)?.positional ?? {};
 
   const positions: PositionalStrength[] = SKILL_POSITIONS.map((position) => {
     const league = byRoster.map((r) => r.positional[position] ?? 0);

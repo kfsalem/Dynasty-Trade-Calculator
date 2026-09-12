@@ -1,3 +1,4 @@
+import { isPosition } from '../../types';
 import { fetchJson, ApiError } from '../../lib/http';
 import { cached, TTL } from '../../lib/cache';
 import {
@@ -37,9 +38,6 @@ export interface SlimPlayer {
 }
 
 export type PlayerIndex = Record<string, SlimPlayer>;
-
-/** Positions we care about. Sleeper also ships every IDP and practice-squad body. */
-const KEPT_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
 
 /**
  * Accepts a bare league ID or any Sleeper URL containing one.
@@ -151,8 +149,9 @@ export function getPlayers(): Promise<PlayerIndex> {
 
     const index: PlayerIndex = {};
     for (const [id, p] of Object.entries(raw)) {
-      const position = p.position ?? '';
-      if (!KEPT_POSITIONS.has(position)) continue;
+      // Sleeper also ships every IDP and practice-squad body.
+      const position = p.position;
+      if (!isPosition(position)) continue;
 
       const name =
         p.full_name ?? [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
