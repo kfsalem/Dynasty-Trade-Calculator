@@ -23,7 +23,7 @@ import {
   type DatasetMeta,
   type DatasetName,
 } from '../src/data/types';
-import { requireRows } from './ingest/columns';
+import { reduceStartedSeason } from './ingest/seasonPick';
 import { IngestError } from './ingest/errors';
 import {
   describeUnmatched,
@@ -34,7 +34,7 @@ import {
   type MatchStats,
 } from './ingest/crosswalk';
 import { requireMatchRates, type MatchGate } from './ingest/matchGate';
-import { BYES_URL, fetchText, resolveLatestSeason } from './ingest/sources';
+import { BYES_URL, fetchText, publishedSeasons } from './ingest/sources';
 import { reduceByeWeeks } from './ingest/byeWeeks';
 import { reduceDepthCharts } from './ingest/depthCharts';
 import { reduceSnapCounts } from './ingest/snapCounts';
@@ -129,6 +129,15 @@ const DATASETS: Dataset[] = [
     minPlayers: 400,
   },
 ];
+
+/**
+ * How many published seasons to try before calling a dataset empty.
+ *
+ * Two. The window where the newest file is too thin to use is the fortnight
+ * after a season opens, and one step back clears it — any deeper and a source
+ * that genuinely broke could be papered over with data two years old.
+ */
+const SEASON_ATTEMPTS = 2;
 
 const kb = (bytes: number) => `${(bytes / 1024).toFixed(1)} KB`;
 const pct = (fraction: number) => `${(fraction * 100).toFixed(1)}%`;
@@ -305,23 +314,33 @@ async function main(): Promise<void> {
         throw new IngestError('fetch', 'Skipped: the id crosswalk was unavailable.');
       }
 
-      const { season, url } = await resolveLatestSeason(
+      // Newest first and more than one, because a published season is not
+      // always a season that has been played. See `reduceStartedSeason`.
+      const seasons = await publishedSeasons(
         dataset.name,
         dataset.release,
         dataset.fileFor,
+        SEASON_ATTEMPTS,
       );
-      const csv = await fetchText(url);
-      const { file, stats, notes } = dataset.reduce(csv, crosswalk, {
-        season,
-        source: url,
-        generatedAt,
-      });
 
-      const rows = Object.keys(file.players).length;
-      requireRows(dataset.name, rows, dataset.minPlayers);
+      const { chosen, rows, notStarted } = await reduceStartedSeason(
+        dataset.name,
+        dataset.minPlayers,
+        seasons,
+        async ({ season, url }) =>
+          dataset.reduce(await fetchText(url), crosswalk, { season, source: url, generatedAt }),
+      );
+
+      const { file, stats, notes } = chosen;
 
       const through = file.throughWeek === null ? 'snapshot' : `through week ${file.throughWeek}`;
       console.log(`  ${dataset.name}  ${file.season} season, ${through}`);
+      for (const thin of notStarted) {
+        console.warn(
+          `    ${thin.season} is published but holds only ${thin.rows} players, ` +
+            `so it has not started yet — using ${file.season}`,
+        );
+      }
       for (const note of notes ?? []) console.warn(`    ${note}`);
       reportMatches(stats, GATE);
 

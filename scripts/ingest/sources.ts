@@ -100,7 +100,8 @@ async function exists(url: string): Promise<boolean> {
 const SEASON_LOOKBACK = 3;
 
 /**
- * Find the newest season nflverse has actually published for a dataset.
+ * The newest seasons nflverse has actually published for a dataset, newest
+ * first, up to `limit`.
  *
  * This is per-dataset on purpose. The datasets do not advance together: on
  * 2026-07-30, `depth_charts_2026.csv` was live and being rewritten hourly while
@@ -108,18 +109,37 @@ const SEASON_LOOKBACK = 3;
  * offseason depth charts exist, offseason snaps do not. Assuming one season for
  * everything either 404s the whole build in July or pins depth charts a year
  * stale come September.
+ *
+ * More than one is returned because a published season is not the same as a
+ * season with data in it. nflverse writes a season's file the moment its first
+ * game kicks off: on 2026-09-11 `snap_counts_2026.csv` existed, returned 200,
+ * and held a single game — 94 rows, 27 skill players. The newest *file* was a
+ * season one night old.
+ *
+ * The caller decides what counts as enough and walks this list until something
+ * clears it, so "the season has not started" resolves to last season's data
+ * rather than to a failed build every September. The app is built for exactly
+ * that: `useLeagueData` shows whatever the ingest last produced and passes it to
+ * valuation as empty when its season is not the one being played.
  */
-export async function resolveLatestSeason(
+export async function publishedSeasons(
   dataset: string,
   release: string,
   fileFor: (season: number) => string,
-): Promise<{ season: number; url: string }> {
+  limit: number,
+): Promise<{ season: number; url: string }[]> {
   const newest = new Date().getUTCFullYear();
+  const found: { season: number; url: string }[] = [];
 
   for (let season = newest; season > newest - SEASON_LOOKBACK; season--) {
     const url = nflverseUrl(release, fileFor(season));
-    if (await exists(url)) return { season, url };
+    if (await exists(url)) {
+      found.push({ season, url });
+      if (found.length >= limit) return found;
+    }
   }
+
+  if (found.length > 0) return found;
 
   throw new IngestError(
     'fetch',
