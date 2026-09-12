@@ -1454,3 +1454,81 @@ describe('a contender buying the future rather than the year', () => {
     );
   });
 });
+
+/**
+ * `CONSOLIDATION` with a fourth receiver identical to the third.
+ *
+ * Team 2 starts one receiver, so of the two we send it only ever plays the
+ * better one — the other is ballast, there to make the package balance. Which
+ * ballast we attach is not a second idea, and the two packages print the same
+ * four numbers.
+ */
+const BALLAST: Spec[] = CONSOLIDATION.map((spec) =>
+  spec.rosterId === 1
+    ? { ...spec, players: [...spec.players, ['wr4', 'WR', 2800, 25] as [string, Position, number, number]] }
+    : spec,
+);
+
+describe('one idea, offered once', () => {
+  const toPartner2 = (spec: Spec[]) =>
+    suggestTrades(1, world(spec)).trades.filter((t) => t.partnerRosterId === 2);
+
+  it('leaves a player who starts for neither side out of the idea', () => {
+    const [trade] = toPartner2(CONSOLIDATION).filter(
+      (t) => t.give.filter((a) => a.kind === 'player').length === 2,
+    );
+
+    expect(trade.give.map((a) => a.id).sort()).toEqual(['t1_wr2', 't1_wr3']);
+    // Only one of the two can play at team 2's single receiver slot, and the
+    // other started nowhere before the trade either. He is ballast, so he is
+    // not part of what makes this offer the offer it is.
+    expect(trade.shape).toBe('t1_wr2>t2_rb1');
+  });
+
+  it('does not spend a second slot on the same trade with different ballast', () => {
+    const trades = toPartner2(BALLAST);
+
+    // wr3 and wr4 are interchangeable, so [wr2,wr3] and [wr2,wr4] for the same
+    // back are one idea. Keyed on every player, they were two, and they filled
+    // both of this partner's slots between them.
+    const shapes = trades.map((t) => t.shape);
+    expect(shapes).toEqual([...new Set(shapes)]);
+
+    // And the numbers agree too, which is the reader's test for the same thing.
+    const numbers = trades.map((t) =>
+      [t.myBenefit.now, t.myBenefit.future, t.theirBenefit.now, t.theirBenefit.future]
+        .map(Math.round)
+        .join('|'),
+    );
+    expect(numbers).toEqual([...new Set(numbers)]);
+  });
+
+  it('never shows two cards to one partner with the same four numbers', () => {
+    // The reader's test: if every figure on two cards agrees, they are one idea
+    // however the packages differ.
+    for (const spec of [BALLAST, CONSOLIDATION, COMPLEMENTARY, WITH_BENCH, FUTURE_BUY]) {
+      for (const pickValue of [0, 1200]) {
+        for (const rosterId of [1, 2, 3, 4]) {
+          const seen = new Set<string>();
+          for (const t of suggestTrades(rosterId, world(spec, pickValue)).trades) {
+            const key = [
+              t.partnerRosterId,
+              Math.round(t.myBenefit.now),
+              Math.round(t.myBenefit.future),
+              Math.round(t.theirBenefit.now),
+              Math.round(t.theirBenefit.future),
+            ].join('|');
+            expect(seen.has(key)).toBe(false);
+            seen.add(key);
+          }
+        }
+      }
+    }
+  });
+
+  it('still treats a swap balanced two different ways as one idea', () => {
+    // The behaviour the old key already had, which the new one must not lose.
+    const shapes = suggestTrades(1, world(CONSOLIDATION, 1200)).trades.map((t) => t.shape);
+    expect(shapes).toEqual([...new Set(shapes)]);
+  });
+});

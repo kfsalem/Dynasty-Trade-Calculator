@@ -81,8 +81,18 @@ export interface SideBenefit {
 }
 
 export interface SuggestedTrade {
-  /** Stable key from the asset ids on both sides — also used to dedupe. */
+  /** Stable key from the asset ids on both sides. Identity, and the final dedupe. */
   id: string;
+  /**
+   * The players this package actually moves into or out of a lineup, as a key.
+   *
+   * What makes two offers to the same partner *the same idea*, which is a
+   * coarser question than whether they are the same package. Picks and
+   * makeweights are omitted: both exist to balance the arithmetic, and a card
+   * that differs only in which of them is attached prints the same four numbers
+   * as the one above it. See `buildSuggestion`.
+   */
+  shape: string;
   partnerRosterId: number;
   partnerName: string;
   /** Assets leaving your roster. */
@@ -1086,7 +1096,42 @@ function buildSuggestion(
     balanceFactor *
     (acceptance?.value ?? 1);
 
+  /*
+    Which men this package actually moves, for the dedupe in `suggestTrades`.
+
+    Keyed on players rather than assets so the same swap balanced with a 1st, a
+    2nd, or a pair of picks stays one idea — that much the old key already did.
+    What it missed is that not every *player* in a package is part of the idea
+    either. A makeweight who starts for nobody on either side is there to make
+    the arithmetic balance, exactly as a pick is, and swapping him for an
+    equivalent body produces a second card identical to the first in every
+    number it prints. On the real league both of one roster's two suggestions
+    were the same trade with a different spare running back attached.
+
+    Material means his presence or absence changes a lineup: he starts for the
+    side sending him, or he starts for the side receiving him. Anyone else is
+    ballast.
+
+    Two immaterial players can only stand in for each other inside the same
+    package if their market values are close — that is what `tolerance` enforces
+    — so collapsing them cannot hide a meaningfully different offer. Where
+    everything on both sides is immaterial the key is empty, and those packages
+    genuinely are one idea: none of them changes a lineup anywhere.
+  */
+  const material = (assets: TradeAsset[], from: Set<string>, to: Set<string>): string =>
+    assets
+      .filter((asset) => asset.kind === 'player' && (from.has(asset.id) || to.has(asset.id)))
+      .map((asset) => asset.id)
+      .sort()
+      .join(',');
+
+  const shape = [
+    material(balanced.give, mine.summary.starterIds, their.afterStarters),
+    material(balanced.get, partner.summary.starterIds, my.afterStarters),
+  ].join('>');
+
   return {
+    shape,
     id: [...balanced.give, ...balanced.get].map((a) => a.id).sort().join('|'),
     partnerRosterId: partner.summary.rosterId,
     partnerName: theirSide.teamName,
@@ -1210,14 +1255,10 @@ export function suggestTrades(
     // Keyed on the players alone. The same swap balanced with a 1st, a 2nd, or
     // a pair of picks is one idea presented three ways, and filling a partner's
     // slots with those variants crowds out genuinely different offers.
-    const byPlayers = new Map<string, SuggestedTrade>();
-
-    const players = (assets: TradeAsset[]) =>
-      assets
-        .filter((a) => a.kind === 'player')
-        .map((a) => a.id)
-        .sort()
-        .join(',');
+    // Keyed on the men the package actually moves in or out of a lineup. The
+    // same swap balanced three different ways is one idea presented three
+    // times, and so is the same swap with a different spare attached.
+    const byShape = new Map<string, SuggestedTrade>();
 
     const offer = (give: TradeAsset[], get: TradeAsset[]) => {
       considered++;
@@ -1233,9 +1274,8 @@ export function suggestTrades(
       );
       if (!trade) return;
 
-      const key = `${players(trade.give)}>${players(trade.get)}`;
-      const seen = byPlayers.get(key);
-      if (!seen || trade.score > seen.score) byPlayers.set(key, trade);
+      const seen = byShape.get(trade.shape);
+      if (!seen || trade.score > seen.score) byShape.set(trade.shape, trade);
     };
 
     for (const give of myAssets) {
@@ -1268,7 +1308,35 @@ export function suggestTrades(
       for (const pair of theirDepthPairs) offer([give], pair);
     }
 
-    const forPartner = [...byPlayers.values()].sort((a, b) => b.score - a.score);
+    /*
+      And a second pass on what the card actually reports.
+
+      `shape` collapses packages that move the same men, which covers ballast
+      and balancing picks. It cannot cover the case where *different* men
+      produce the same trade — two of three interchangeable receivers sent for
+      one back is a different pair each time and the same offer every time. The
+      reader's test is the honest one: if all four figures agree, and they are
+      going to the same manager, there is nothing on the second card that was
+      not on the first.
+
+      Rounded to the integers the card prints, so the test is exactly the one a
+      reader would apply. Two genuinely different packages agreeing on all four
+      to the unit is possible and vanishingly unlikely; if it happens, the
+      better-scoring one is the one worth showing anyway.
+    */
+    const byOutcome = new Map<string, SuggestedTrade>();
+    for (const trade of byShape.values()) {
+      const outcome = [
+        Math.round(trade.myBenefit.now),
+        Math.round(trade.myBenefit.future),
+        Math.round(trade.theirBenefit.now),
+        Math.round(trade.theirBenefit.future),
+      ].join('|');
+      const seen = byOutcome.get(outcome);
+      if (!seen || trade.score > seen.score) byOutcome.set(outcome, trade);
+    }
+
+    const forPartner = [...byOutcome.values()].sort((a, b) => b.score - a.score);
     trades.push(...forPartner.slice(0, perPartner));
   }
 
