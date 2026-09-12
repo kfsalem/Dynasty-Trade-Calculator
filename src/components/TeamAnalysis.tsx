@@ -9,6 +9,10 @@ import {
 } from '../engine/analysis';
 import { fieldedStanding, leagueFielded } from '../engine/fielded';
 import type { Grade } from '../engine/grades';
+import { bucketRoster, type Bucket } from '../engine/buckets';
+import { futureLineup, leagueDemand } from '../engine/analysis';
+import type { PlayerRole } from '../engine/role';
+import type { DraftPick } from '../types';
 import { isGameWeek } from '../engine/season';
 import type { PositionScarcity } from '../engine/replacement';
 import type { FreeAgentBoard } from '../engine/freeAgents';
@@ -57,6 +61,19 @@ interface Props {
    * nothing about price until it has one.
    */
   bids: BidModel | undefined;
+  /** This roster's picks. Empty until the pick values land — see `picksSettled`. */
+  picks: DraftPick[];
+  /**
+   * Whether `picks` is the finished list.
+   *
+   * Pick values load in their own query, so an empty `picks` means "not yet" as
+   * often as it means "none". The decomposition counts picks as its whole
+   * lottery bucket, so drawing it before they arrive would report a manager's
+   * bets as smaller than they are.
+   */
+  picksSettled: boolean;
+  /** Measured role, when the activity data is in hand. */
+  roles: Map<string, PlayerRole> | undefined;
   onChangeTeam: () => void;
 }
 
@@ -76,6 +93,30 @@ function marginPhrase(grade: Grade): string | null {
   if (pct < 1) return null;
   return leader ? `${pct}% clear` : `${pct}% back`;
 }
+
+/**
+ * Ordered most useful to least, which is the order a manager reads them in.
+ *
+ * No colour. Buckets are a new categorical dimension and the design system has
+ * no palette to spare for one — status hues are reserved and position hues are
+ * fixed — so the emphasis here is carried by weight and size, which is what the
+ * register asks for anyway.
+ */
+const BUCKETS: { key: Bucket; label: string; note: string }[] = [
+  { key: 'core', label: 'Core', note: 'Starts now, and still starts in three years.' },
+  { key: 'depth', label: 'Depth', note: 'Useful, not declining, not in your best eleven.' },
+  {
+    key: 'depreciating',
+    label: 'Depreciating',
+    note: 'Past the age cliff for the position. Someone would start him today.',
+  },
+  {
+    key: 'lottery',
+    label: 'Lottery',
+    note: 'Picks, and players who have not yet shown what they are.',
+  },
+  { key: 'dead', label: 'Dead weight', note: 'Nobody in this league would start him.' },
+];
 
 const QUADRANT_STYLE: Record<Quadrant, string> = {
   juggernaut: 'bg-positive-soft border-positive text-positive',
@@ -97,6 +138,9 @@ export function TeamAnalysis({
   activityCurrent,
   bench,
   bids,
+  picks,
+  picksSettled,
+  roles,
   onChangeTeam,
 }: Props) {
   const analysis = analyzeTeam(myRosterId, summaries, league.settings, season);
@@ -123,6 +167,30 @@ export function TeamAnalysis({
     happened to close the tab in January, and presenting it as a shortfall would
     invent a mistake nobody has made.
   */
+  /*
+    The roster taken apart. Needs the three-year lineup and the league's demand
+    for a position, both of which `analyzeTeam` computes for its own reasons —
+    recomputed here rather than threaded through it, because the decomposition
+    is a property of one roster and `TeamAnalysis` is the only thing that wants
+    it. Cheap: one projection and one pass over the league's lineups.
+  */
+  const buckets = useMemo(() => {
+    const summary = summaries.find((s) => s.rosterId === myRosterId);
+    if (!summary) return null;
+
+    return bucketRoster({
+      summary,
+      futureStarterIds: new Set(
+        futureLineup(summary, league.settings)
+          .map((slot) => slot.entry?.player.id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+      demand: leagueDemand(summaries),
+      picks,
+      roles,
+    });
+  }, [summaries, myRosterId, league.settings, picks, roles]);
+
   const fielded = useMemo(() => {
     if (!isGameWeek(seasonPhase ?? 'unknown')) return null;
     return fieldedStanding(
@@ -265,6 +333,40 @@ export function TeamAnalysis({
           </p>
         )}
       </div>
+
+      {/*
+        What the roster is made of, after what it is worth. `totalValue` is a sum
+        and `futureScore` is one coordinate; neither can say what a manager is
+        actually holding, and that is what makes advice specific.
+      */}
+      {buckets && buckets.total > 0 && (
+        <div className="card mt-5">
+          <h3 className="font-semibold">What you are holding</h3>
+          <p className="mt-1 text-sm text-muted">
+            Every asset in one bucket and no more than one. Dynasty value, so this is a
+            question about holding rather than about Sunday.
+            {!picksSettled && ' Picks are still loading and are not counted yet.'}
+          </p>
+
+          <dl className="mt-4 space-y-2">
+            {BUCKETS.filter(({ key }) => buckets.count[key] > 0).map(({ key, label, note }) => (
+              <div key={key} className="flex items-baseline justify-between gap-4 border-t border-line pt-2 first:border-t-0 first:pt-0">
+                <div className="min-w-0">
+                  <dt className="font-semibold">{label}</dt>
+                  <dd className="text-xs text-subtle">{note}</dd>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="tabular font-semibold">{formatValue(buckets.value[key])}</div>
+                  <div className="tabular text-xs text-subtle">
+                    {buckets.count[key]} {buckets.count[key] === 1 ? 'asset' : 'assets'} ·{' '}
+                    {Math.round((buckets.value[key] / buckets.total) * 100)}%
+                  </div>
+                </div>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
 
       {/*
         After the window, and deliberately not before it. Everything above this

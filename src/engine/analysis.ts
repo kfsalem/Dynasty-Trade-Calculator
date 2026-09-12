@@ -1,6 +1,12 @@
 import { DEADLINE_SPEAKS_AT, tradeWindow, type TradeWindow } from './tradeWindow';
 import type { LeagueSettings, Player, Position } from '../types';
-import { bestLineup, byValue, type RosterSummary, type ValuedPlayer } from './rosterValue';
+import {
+  bestLineup,
+  byValue,
+  type LineupAssignment,
+  type RosterSummary,
+  type ValuedPlayer,
+} from './rosterValue';
 import { gradeAgainst, type Grade } from './grades';
 import {
   bareSlots,
@@ -291,6 +297,22 @@ export function positionalStarterValue(
  * say a rookie has no future is the one whose whole subject is the future.
  */
 export function futureScore(summary: RosterSummary, settings: LeagueSettings): number {
+  return futureLineup(summary, settings).reduce((sum, slot) => sum + (slot.entry?.value ?? 0), 0);
+}
+
+/**
+ * The lineup behind `futureScore` — who a roster would still be starting in
+ * `HORIZON_YEARS`, on decayed values.
+ *
+ * Split out rather than recomputed because the bucket decomposition needs the
+ * names and not just the total, and deciding "does he still start" a second way
+ * would be a second answer to the same question. The entries are decayed copies
+ * carrying their original player ids, which is all a membership test wants.
+ */
+export function futureLineup(
+  summary: RosterSummary,
+  settings: LeagueSettings,
+): LineupAssignment[] {
   const projected: ValuedPlayer[] = summary.players.map((entry) => {
     // Decay the tiebreaker alongside the value it breaks ties for. Leaving
     // marketValue undecayed would rank a 35-year-old above a 24-year-old among
@@ -312,10 +334,7 @@ export function futureScore(summary: RosterSummary, settings: LeagueSettings): n
   return bestLineup(projected, settings.startingSlots, {
     compare: byValue,
     includeUnavailable: true,
-  }).reduce(
-    (sum, slot) => sum + (slot.entry?.value ?? 0),
-    0,
-  );
+  });
 }
 
 const QUADRANTS: Record<Quadrant, { label: string; advice: string }> = {
@@ -627,6 +646,61 @@ export function contentionProfile(
   };
 }
 
+/**
+ * The weakest starter every roster fields at each position.
+ *
+ * Extracted because two different questions now read it: which of your bench
+ * players somebody else would start (a surplus), and which of your players
+ * *nobody* would start (dead weight). Those are the same measurement asked from
+ * opposite ends, and computing it twice is how they would come to disagree.
+ *
+ * Measured in win-now units. Displacing a starter is a lineup decision, and on
+ * the dynasty scale the test reported every expensive rookie as a surplus his
+ * owner should trade — he out-priced somebody's worst starter, so the model said
+ * he would start there, when no manager in the league would have played him.
+ */
+export interface LeagueDemand {
+  /** Per position, the weakest starting value each roster fields there. */
+  weakest: Partial<Record<Position, { rosterId: number; value: number }[]>>;
+}
+
+export function leagueDemand(all: RosterSummary[]): LeagueDemand {
+  const weakest: LeagueDemand['weakest'] = {};
+
+  for (const position of SKILL_POSITIONS) {
+    weakest[position] = all.map((summary) => {
+      const atPosition = summary.lineup
+        .filter((slot) => slot.entry?.player.position === position)
+        .map((slot) => slot.entry?.winNowValue ?? 0);
+
+      // A roster with nobody starting at the position has a hole worth 0, so
+      // anyone would be an upgrade there.
+      return {
+        rosterId: summary.rosterId,
+        value: atPosition.length > 0 ? Math.min(...atPosition) : 0,
+      };
+    });
+  }
+
+  return { weakest };
+}
+
+/**
+ * How many other rosters would immediately start this player.
+ *
+ * Zero is the interesting answer, and it is what "dead weight" means: not that
+ * he is cheap, but that there is no lineup in this league he walks into.
+ */
+export function wouldStartOn(
+  demand: LeagueDemand,
+  entry: ValuedPlayer,
+  exceptRosterId: number,
+): number {
+  return (demand.weakest[entry.player.position] ?? []).filter(
+    (team) => team.rosterId !== exceptRosterId && entry.winNowValue > team.value,
+  ).length;
+}
+
 export function analyzeTeam(
   rosterId: number,
   all: RosterSummary[],
@@ -658,26 +732,10 @@ export function analyzeTeam(
     };
   });
 
-  // For each position, the weakest player each roster currently starts there.
-  // Beating it means a bench player would displace that starter — which is the
-  // only definition of "surplus" that translates into a tradeable asset.
-  //
-  // Measured in win-now units on both sides of the comparison, because
-  // displacing a starter is a lineup decision. On the dynasty scale the test
-  // reported every expensive rookie as a surplus his owner should trade: he
-  // out-priced somebody's worst starter, so the model said he would start
-  // there, when in fact no manager in the league would have played him.
-  const weakestStarter: Partial<Record<Position, number[]>> = {};
-  for (const position of SKILL_POSITIONS) {
-    weakestStarter[position] = byRoster.map(({ summary: s }) => {
-      const atPosition = s.lineup
-        .filter((slot) => slot.entry?.player.position === position)
-        .map((slot) => slot.entry?.winNowValue ?? 0);
-      // A roster with nobody starting at the position has a hole worth 0, so
-      // anyone would be an upgrade there.
-      return atPosition.length > 0 ? Math.min(...atPosition) : 0;
-    });
-  }
+  // Beating a roster's weakest starter means a bench player would displace him,
+  // which is the only definition of "surplus" that translates into a tradeable
+  // asset. Shared with the bucket decomposition — see `leagueDemand`.
+  const demand = leagueDemand(all);
 
   const surpluses: SurplusAsset[] = summary.players
     .filter((entry) => !summary.starterIds.has(entry.player.id))
@@ -697,10 +755,7 @@ export function analyzeTeam(
     .map((entry) => ({
       player: entry.player,
       value: entry.value,
-      wouldStartOn: (weakestStarter[entry.player.position] ?? []).filter(
-        (weakest, i) =>
-          byRoster[i].summary.rosterId !== rosterId && entry.winNowValue > weakest,
-      ).length,
+      wouldStartOn: wouldStartOn(demand, entry, rosterId),
     }))
     // Surplus means someone else would actually start him. Measuring against
     // the league *median* starter instead sets the bar so high that deep
