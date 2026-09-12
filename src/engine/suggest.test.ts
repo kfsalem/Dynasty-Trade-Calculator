@@ -8,6 +8,7 @@ import {
 } from './suggest';
 import type { RoleTrend, RoleTrends } from './roleTrend';
 import { analyzeTeam, type ContentionProfile, type SeasonOdds } from './analysis';
+import { gradeAgainst } from './grades';
 import { modelManagers, type ManagerModel } from './managers';
 import type { LeagueTransaction, SeasonManager } from '../platforms/types';
 import { summarizeRoster, type RosterSummary } from './rosterValue';
@@ -484,6 +485,11 @@ describe('windowWeights', () => {
   ): ContentionProfile => ({
     nowScore: 0,
     futureScore: 0,
+    // Built rather than written out, so this fixture cannot drift from the
+    // shape `contentionProfile` actually produces. `windowWeights` reads
+    // neither grade; it is the two shares below that decide its answer.
+    nowGrade: gradeAgainst(0, [0]),
+    laterGrade: gradeAgainst(0, [0]),
     nowRank: 1,
     futureRank: 1,
     retainedShare: 1,
