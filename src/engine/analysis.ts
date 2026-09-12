@@ -1,6 +1,7 @@
 import { DEADLINE_SPEAKS_AT, tradeWindow, type TradeWindow } from './tradeWindow';
 import type { LeagueSettings, Player, Position } from '../types';
 import { bestLineup, byValue, type RosterSummary, type ValuedPlayer } from './rosterValue';
+import { gradeAgainst, type Grade } from './grades';
 import {
   bareSlots,
   fragility,
@@ -150,7 +151,20 @@ export interface ContentionProfile {
   nowScore: number;
   /** Dynasty asset base three years out, after age decay. */
   futureScore: number;
+  /**
+   * Where this team sits on each axis, with the distance the rank throws away.
+   *
+   * **Two grades, never averaged.** R8 split now from later deliberately, and a
+   * single letter would collapse them again and undo it. `now` grades
+   * `starterValue` and `later` grades `futureScore` — the same two numbers the
+   * ranks beside them report, so a consumer can show either and they cannot
+   * disagree.
+   */
+  nowGrade: Grade;
+  laterGrade: Grade;
+  /** `nowGrade.rank`, kept for the consumers that read it directly. */
   nowRank: number;
+  /** `laterGrade.rank`, likewise. */
   futureRank: number;
   /**
    * Future asset base per point of present lineup strength. This, not the
@@ -580,11 +594,18 @@ export function contentionProfile(
   const outlook = seasonOutlook(summary.rosterId, season);
   const advice = adviceFor(outlook, quadrant, tradeWindow(settings, season));
 
+  // Graded once and read twice, so the rank on the card and the rank inside the
+  // grade are the same number rather than two computations that agree today.
+  const nowGrade = gradeAgainst(now, nowScores);
+  const laterGrade = gradeAgainst(future, futureScores);
+
   return {
     nowScore: now,
     futureScore: future,
-    nowRank: nowScores.filter((v) => v > now).length + 1,
-    futureRank: futureScores.filter((v) => v > future).length + 1,
+    nowGrade,
+    laterGrade,
+    nowRank: nowGrade.rank,
+    futureRank: laterGrade.rank,
     retainedShare,
     teamCount: all.length,
     nowShare: share(now, nowScores),

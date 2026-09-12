@@ -8,6 +8,7 @@ import {
   type SeasonOdds,
 } from '../engine/analysis';
 import { fieldedStanding, leagueFielded } from '../engine/fielded';
+import type { Grade } from '../engine/grades';
 import { isGameWeek } from '../engine/season';
 import type { PositionScarcity } from '../engine/replacement';
 import type { FreeAgentBoard } from '../engine/freeAgents';
@@ -57,6 +58,23 @@ interface Props {
    */
   bids: BidModel | undefined;
   onChangeTeam: () => void;
+}
+
+/**
+ * The distance a rank throws away, as a phrase — or nothing.
+ *
+ * The leader's cushion and everyone else's climb, which is the one number that
+ * makes a rank mean something: "#1 of 12" reads identically whether the lead is
+ * a rounding error or a third of the league.
+ *
+ * Null below a point, because "0% clear" is not a margin, it is a tie dressed
+ * up as an advantage.
+ */
+function marginPhrase(grade: Grade): string | null {
+  const leader = grade.rank === 1;
+  const pct = Math.round((leader ? grade.ahead : grade.behind) * 100);
+  if (pct < 1) return null;
+  return leader ? `${pct}% clear` : `${pct}% back`;
 }
 
 const QUADRANT_STYLE: Record<Quadrant, string> = {
@@ -176,12 +194,18 @@ export function TeamAnalysis({
             <span className="font-semibold tabular-nums">
               #{contention.nowRank} of {contention.teamCount}
             </span>
+            {marginPhrase(contention.nowGrade) && (
+              <span className="tabular opacity-70"> · {marginPhrase(contention.nowGrade)}</span>
+            )}
           </div>
           <div>
             <span className="opacity-70">In 3 years</span>{' '}
             <span className="font-semibold tabular-nums">
               #{contention.futureRank} of {contention.teamCount}
             </span>
+            {marginPhrase(contention.laterGrade) && (
+              <span className="tabular opacity-70"> · {marginPhrase(contention.laterGrade)}</span>
+            )}
           </div>
           {/*
             The rank the two above are silent about. "Now" is `starterValue`,

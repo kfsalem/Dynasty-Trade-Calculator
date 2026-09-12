@@ -111,3 +111,38 @@ describe('ceiling versus what is being fielded', () => {
     expect(screen.getByText(/You have no lineup set/)).toBeInTheDocument();
   });
 });
+
+describe('the margin behind a rank', () => {
+  it('says how far clear the leader is, since the rank alone cannot', () => {
+    // Team 1 leads on ceiling: 2700 against 2550.
+    show('best', 'regular');
+
+    // Team 1 tops both axes, so the rank itself appears twice.
+    expect(screen.getAllByText('#1 of 3').length).toBe(2);
+    expect(screen.getAllByText(/6% clear/).length).toBeGreaterThan(0);
+  });
+
+  it('says how far back a team is when somebody is above it', () => {
+    // Rendered from team 2's chair, 2550 against the 2700 above it.
+    const { league, summaries } = world('best');
+    render(
+      <TeamAnalysis
+        league={league}
+        summaries={summaries}
+        myRosterId={2}
+        scarcity={undefined}
+        seasonPhase="regular"
+        currentWeek={3}
+        byeTeams={null}
+        season={undefined}
+        freeAgents={undefined}
+        activityCurrent={false}
+        bench={{ report: undefined, loading: false, failed: false, truncated: false }}
+        bids={undefined}
+        onChangeTeam={() => {}}
+      />,
+    );
+
+    expect(screen.getAllByText(/6% back/).length).toBeGreaterThan(0);
+  });
+});
