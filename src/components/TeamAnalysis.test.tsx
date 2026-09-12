@@ -71,6 +71,9 @@ function show(set: 'best' | 'stale' | 'none', seasonPhase: SeasonPhase) {
       activityCurrent={false}
       bench={{ report: undefined, loading: false, failed: false, truncated: false }}
       bids={undefined}
+      picks={[]}
+      picksSettled
+      roles={undefined}
       onChangeTeam={() => {}}
     />,
   );
@@ -139,10 +142,60 @@ describe('the margin behind a rank', () => {
         activityCurrent={false}
         bench={{ report: undefined, loading: false, failed: false, truncated: false }}
         bids={undefined}
+        picks={[]}
+        picksSettled
+        roles={undefined}
         onChangeTeam={() => {}}
       />,
     );
 
     expect(screen.getAllByText(/6% back/).length).toBeGreaterThan(0);
+  });
+});
+
+describe('what you are holding', () => {
+  it('names each bucket with its share of the roster', () => {
+    show('best', 'regular');
+
+    const panel = screen.getByText('What you are holding').closest('div')!;
+
+    // Three starters, all 25 with five years' service, plus a spare receiver
+    // worth 100 that nobody in the league would start.
+    expect(screen.getByText('Core')).toBeInTheDocument();
+    expect(screen.getByText('Dead weight')).toBeInTheDocument();
+    expect(panel.textContent).toContain('3 assets');
+    expect(panel.textContent).toContain('1 asset');
+
+    // The buckets partition the roster, so the shares sum to the whole of it.
+    expect(screen.queryByText('Depreciating')).not.toBeInTheDocument();
+    expect(screen.queryByText('Lottery')).not.toBeInTheDocument();
+  });
+
+  it('says so while the picks are still loading', () => {
+    const { league, summaries } = world('best');
+    render(
+      <TeamAnalysis
+        league={league}
+        summaries={summaries}
+        myRosterId={1}
+        scarcity={undefined}
+        seasonPhase="regular"
+        currentWeek={3}
+        byeTeams={null}
+        season={undefined}
+        freeAgents={undefined}
+        activityCurrent={false}
+        bench={{ report: undefined, loading: false, failed: false, truncated: false }}
+        bids={undefined}
+        picks={[]}
+        picksSettled={false}
+        roles={undefined}
+        onChangeTeam={() => {}}
+      />,
+    );
+
+    // An empty `picks` means "not yet" as often as it means "none", and the
+    // lottery bucket is made of picks.
+    expect(screen.getByText(/Picks are still loading/)).toBeInTheDocument();
   });
 });

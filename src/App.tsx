@@ -22,6 +22,7 @@ import {
 import { runsFaab } from './engine/bids';
 import { useMyRoster } from './hooks/useMyRoster';
 import { decodeTrade, encodeTrade, resolveShare } from './lib/share';
+import { picksForRoster } from './engine/picks';
 
 const STORAGE_KEY = 'dynasty:leagueId';
 
@@ -471,6 +472,9 @@ function App() {
                     activityCurrent={activityCurrent}
                     bench={bench}
                     bids={bids}
+                    picks={picksForRoster(picks, myRosterId)}
+                    picksSettled={picksSettled}
+                    roles={roles}
                     onChangeTeam={() => setMyRoster(null)}
                   />
                 ))}
