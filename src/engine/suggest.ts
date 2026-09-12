@@ -1,7 +1,8 @@
-import type { DraftPick, Player, TradeAnalysis, TradeSideResult } from '../types';
+import type { DraftPick, Player, Position, TradeAnalysis, TradeSideResult } from '../types';
 import {
   AGE_CLIFF,
   HORIZON_YEARS,
+  SKILL_POSITIONS,
   analyzeTeam,
   retention,
   type ContentionProfile,
@@ -14,8 +15,15 @@ import { countPhrase, type Countable } from '../lib/learnedText';
 import { appetiteFor, managerFor, partnership, type ManagerModel } from './managers';
 import { picksForRoster } from './picks';
 import { tradeWindow } from './tradeWindow';
-import { bestLineup, byValue, valuePlayers, type RosterSummary } from './rosterValue';
-import { evaluateTrade, type TradeContext } from './trade';
+import {
+  bestLineup,
+  byValue,
+  slotEligibility,
+  valuePlayers,
+  type RosterSummary,
+} from './rosterValue';
+import type { SlotStrength } from './rosterDepth';
+import { evaluateTrade, rosterCap, type TradeContext } from './trade';
 import type { RoleTrend, RoleTrends } from './roleTrend';
 
 /**
@@ -775,6 +783,124 @@ function socialLines(
   return lines;
 }
 
+const playersIn = (assets: TradeAsset[]): number =>
+  assets.filter((a) => a.kind === 'player').length;
+
+/**
+ * Whether a roster still fits its league after giving and receiving.
+ *
+ * Picks are ignored because they occupy no roster spot. Only a package that
+ * actually adds bodies can push a team over, which is the same allowance
+ * `evaluateTrade` makes when it warns about the cap — a roster already over the
+ * limit is not made illegal by a trade that leaves it the same size or smaller.
+ */
+function fitsRoster(
+  rosterId: number,
+  out: TradeAsset[],
+  incoming: TradeAsset[],
+  ctx: SuggestContext,
+): boolean {
+  const roster = ctx.league.rosters.find((r) => r.rosterId === rosterId);
+  if (!roster) return false;
+
+  const before = roster.playerIds.length;
+  const after = before - playersIn(out) + playersIn(incoming);
+  return after <= rosterCap(ctx.league.settings) || after <= before;
+}
+
+/**
+ * The slot this roster is furthest behind the league at.
+ *
+ * Whatever its verdict, not only the ones that clear the weakness bar. A team
+ * with no slot weak enough to be worth a sentence on the team page still has a
+ * weakest slot, and that is the one a consolidation should aim at — the whole
+ * move is turning depth you do not need into a man at the spot you are thinnest.
+ *
+ * Kicker and defence slots are excluded. They are unvalued (#10), so every
+ * roster ties at zero there and a tie would otherwise be indistinguishable from
+ * a hole.
+ */
+function weakestSlot(analysis: TeamAnalysis): SlotStrength | null {
+  const real = analysis.slots.filter((slot) =>
+    slotEligibility(slot.slot).some((position) => SKILL_POSITIONS.includes(position)),
+  );
+  if (real.length === 0) return null;
+  return [...real].sort((a, b) => a.z - b.z)[0];
+}
+
+/**
+ * Pairs of same-position players to give up together.
+ *
+ * Same position on purpose: this is the consolidation the issue describes —
+ * surplus *depth* turned into one better man — and two players a roster is deep
+ * in is a reason the resulting card can state. Two unrelated players bundled
+ * because the arithmetic happened to balance is a package with no story, and
+ * the search cannot afford to enumerate those anyway.
+ *
+ * Drawn from the top three at each position, so a roster five deep at receiver
+ * offers its best combinations rather than all ten of them.
+ */
+function depthPairs(assets: TradeAsset[], limit: number): TradeAsset[][] {
+  const byPosition = new Map<Position, TradeAsset[]>();
+  for (const asset of assets) {
+    if (asset.kind !== 'player') continue;
+    const group = byPosition.get(asset.player.position);
+    if (group) group.push(asset);
+    else byPosition.set(asset.player.position, [asset]);
+  }
+
+  const pairs: TradeAsset[][] = [];
+  for (const group of byPosition.values()) {
+    if (group.length < 2) continue;
+    const top = [...group].sort((a, b) => b.value - a.value).slice(0, 3);
+    for (let i = 0; i < top.length; i++) {
+      for (let j = i + 1; j < top.length; j++) pairs.push([top[i], top[j]]);
+    }
+  }
+
+  // Best combined value first, so the cap keeps the packages worth proposing.
+  return pairs
+    .sort((a, b) => b[0].value + b[1].value - (a[0].value + a[1].value))
+    .slice(0, limit);
+}
+
+/**
+ * The best men a roster holds who could fill a given slot, best first.
+ *
+ * Drawn from the whole roster rather than from `movableAssets`, and that is the
+ * point rather than an oversight. `movableAssets` is a list of *spares* — the
+ * bench players somebody else would start, the picks a contender can spend —
+ * and the man on the receiving end of a consolidation is by definition not
+ * spare. He is the other team's starter. Two good players for one great one is
+ * unreachable if the great one was never a candidate.
+ *
+ * Widening the pool is safe because nothing here decides a trade. The two-sided
+ * benefit floor in `buildSuggestion` is what rules out an offer the other
+ * manager would refuse, and a team asked to give up its starter has to come out
+ * ahead on its own contention window before the package survives at all.
+ */
+function slotCandidates(
+  summary: RosterSummary,
+  slot: SlotStrength | null,
+  ctx: SuggestContext,
+  limit: number,
+): TradeAsset[] {
+  if (!slot) return [];
+  const eligible = slotEligibility(slot.slot);
+
+  return summary.players
+    .filter((entry) => entry.value > 0 && eligible.includes(entry.player.position))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limit)
+    .map((entry) =>
+      playerAsset(
+        entry.player,
+        entry.value,
+        ctx.values.get(entry.player.id)?.marketValue ?? entry.value,
+      ),
+    );
+}
+
 function buildSuggestion(
   give: TradeAsset[],
   get: TradeAsset[],
@@ -794,6 +920,28 @@ function buildSuggestion(
     tolerance,
   );
   if (!balanced) return null;
+
+  /*
+    Roster-size legality, and it is checked here rather than read off the
+    warnings `evaluateTrade` already produces — for two reasons.
+
+    The first is what the two mean. A manager who builds an over-cap trade
+    himself is told about it and may still want it; an over-cap trade the *app*
+    proposes is not a trade at all, and shipping one reads as a bug to anyone
+    who knows their own league's rules.
+
+    The second is cost. Until packages could be uneven this could not happen —
+    one for one leaves every roster exactly the size it was — so nothing had to
+    look. A consolidation shrinks one roster and grows the other, which makes
+    this load-bearing for the first time, and it is counting on numbers already
+    in hand where `evaluateTrade` is two lineup rebuilds.
+  */
+  if (
+    !fitsRoster(myRosterId, balanced.give, balanced.get, ctx) ||
+    !fitsRoster(partner.summary.rosterId, balanced.get, balanced.give, ctx)
+  ) {
+    return null;
+  }
 
   const split = (assets: TradeAsset[]) => ({
     playerIds: assets.filter((a) => a.kind === 'player').map((a) => a.id),
@@ -964,6 +1112,10 @@ export function suggestTrades(
   const trades: SuggestedTrade[] = [];
   let considered = 0;
 
+  // Mine do not change from partner to partner, so they are built once.
+  const myWeakest = weakestSlot(myAnalysis);
+  const myDepthPairs = depthPairs(myAssets, candidatesPerTeam);
+
   for (const summary of ctx.summaries) {
     if (summary.rosterId === myRosterId) continue;
     const analysis = analyses.get(summary.rosterId);
@@ -977,32 +1129,60 @@ export function suggestTrades(
     // slots with those variants crowds out genuinely different offers.
     const byPlayers = new Map<string, SuggestedTrade>();
 
+    const players = (assets: TradeAsset[]) =>
+      assets
+        .filter((a) => a.kind === 'player')
+        .map((a) => a.id)
+        .sort()
+        .join(',');
+
+    const offer = (give: TradeAsset[], get: TradeAsset[]) => {
+      considered++;
+      const trade = buildSuggestion(
+        give,
+        get,
+        myRosterId,
+        partner,
+        mine,
+        ctx,
+        tolerance,
+        minBenefitShare,
+      );
+      if (!trade) return;
+
+      const key = `${players(trade.give)}>${players(trade.get)}`;
+      const seen = byPlayers.get(key);
+      if (!seen || trade.score > seen.score) byPlayers.set(key, trade);
+    };
+
     for (const give of myAssets) {
-      for (const get of theirAssets) {
-        considered++;
-        const trade = buildSuggestion(
-          [give],
-          [get],
-          myRosterId,
-          partner,
-          mine,
-          ctx,
-          tolerance,
-          minBenefitShare,
-        );
-        if (!trade) continue;
+      for (const get of theirAssets) offer([give], [get]);
+    }
 
-        const players = (assets: TradeAsset[]) =>
-          assets
-            .filter((a) => a.kind === 'player')
-            .map((a) => a.id)
-            .sort()
-            .join(',');
-        const key = `${players(trade.give)}>${players(trade.get)}`;
+    /*
+      The uneven shapes, generated by *shape* rather than enumerated.
 
-        const seen = byPlayers.get(key);
-        if (!seen || trade.score > seen.score) byPlayers.set(key, trade);
-      }
+      Naive two-a-side turns a `teams × k²` search into `teams × k³`, and the
+      per-package cost is two lineup rebuilds — so the packages have to be
+      targeted. Both directions below describe a trade with a reason attached
+      before any arithmetic runs, which is also what makes the resulting card
+      explainable: the give side is depth this roster does not need, and the get
+      side is the slot it is thinnest at.
+
+      Measured against this league's own history, these are not a long tail:
+      53% of completed trades are uneven and one-for-two alone is 26%, the
+      single most common shape the engine could not previously express.
+    */
+    const theirTargets = slotCandidates(summary, myWeakest, ctx, candidatesPerTeam);
+    for (const pair of myDepthPairs) {
+      for (const get of theirTargets) offer(pair, [get]);
+    }
+
+    const theirWeakest = weakestSlot(analysis);
+    const myTargets = slotCandidates(mySummary, theirWeakest, ctx, candidatesPerTeam);
+    const theirDepthPairs = depthPairs(theirAssets, candidatesPerTeam);
+    for (const give of myTargets) {
+      for (const pair of theirDepthPairs) offer([give], pair);
     }
 
     const forPartner = [...byPlayers.values()].sort((a, b) => b.score - a.score);

@@ -2,6 +2,7 @@ import type {
   DraftPick,
   FairnessRating,
   League,
+  LeagueSettings,
   Player,
   PlayerValue,
   TradeAnalysis,
@@ -54,6 +55,22 @@ export const FAIRNESS_LABEL: Record<FairnessRating, string> = {
   unfair: 'Uneven',
   very_unfair: 'Very lopsided',
 };
+
+/**
+ * How many players a roster may hold.
+ *
+ * `roster_positions` covers starters and bench only — taxi and IR are separate
+ * allowances on top. Counting just `roster_positions` makes every roster in a
+ * taxi-squad league look permanently over the limit.
+ *
+ * Exported because the suggestion engine has to apply the same limit, and for a
+ * different purpose: an over-cap trade a manager builds himself earns a warning,
+ * while an over-cap trade the app *proposes* is simply not a trade. Two copies
+ * of the arithmetic would be two answers to "how big is a roster here".
+ */
+export function rosterCap(settings: LeagueSettings): number {
+  return settings.allSlots.length + settings.taxiSlots + settings.reserveSlots;
+}
 
 function buildSide(
   input: TradeSideInput,
@@ -153,16 +170,10 @@ function buildSide(
     }
   }
 
-  // roster_positions covers starters and bench only — taxi and IR are separate
-  // allowances on top. Counting just roster_positions makes every roster in a
-  // taxi-squad league look permanently over the limit.
-  const { allSlots, taxiSlots, reserveSlots } = ctx.league.settings;
-  const rosterCap = allSlots.length + taxiSlots + reserveSlots;
+  const cap = rosterCap(ctx.league.settings);
   // Only a trade that actually adds bodies can push a roster over.
-  if (after.length > rosterCap && after.length > roster.playerIds.length) {
-    warnings.push(
-      `Roster would hold ${after.length} players, over the ${rosterCap}-spot limit.`,
-    );
+  if (after.length > cap && after.length > roster.playerIds.length) {
+    warnings.push(`Roster would hold ${after.length} players, over the ${cap}-spot limit.`);
   }
 
   if (incomingValue > 0 && afterLineup.total < before.total) {

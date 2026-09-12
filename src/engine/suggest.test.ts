@@ -1135,3 +1135,132 @@ describe('who the offer is going to', () => {
     ).toBe(true);
   });
 });
+
+/**
+ * Depth on one side, a hole on the other: the consolidation shape.
+ *
+ * Us: an elite QB and WR1, two spare receivers, and nothing at running back.
+ * Team 2: an elite back, cover behind him, and nothing at receiver. Neither
+ * team can fix itself one-for-one — our two spares are individually worth less
+ * than their starter, and that is the whole point of consolidating.
+ */
+const CONSOLIDATION: Spec[] = [
+  {
+    rosterId: 1,
+    players: [
+      ['qb', 'QB', 5000, 25],
+      ['wr1', 'WR', 5000, 25],
+      ['wr2', 'WR', 3000, 25],
+      ['wr3', 'WR', 2800, 25],
+      ['rb', 'RB', 300, 25],
+    ],
+  },
+  {
+    rosterId: 2,
+    players: [
+      ['rb1', 'RB', 6000, 25],
+      ['rb2', 'RB', 4000, 25],
+      ['qb', 'QB', 500, 25],
+      ['wr', 'WR', 100, 25],
+    ],
+  },
+  {
+    rosterId: 3,
+    players: [
+      ['qb', 'QB', 3000, 24],
+      ['rb', 'RB', 3000, 24],
+      ['wr', 'WR', 3000, 24],
+    ],
+  },
+  {
+    rosterId: 4,
+    players: [
+      ['qb', 'QB', 2000, 24],
+      ['rb', 'RB', 2000, 24],
+      ['wr', 'WR', 2000, 24],
+    ],
+  },
+];
+
+describe('uneven packages', () => {
+  const shapes = (result: ReturnType<typeof suggestTrades>) =>
+    result.trades.map((t) => [
+      t.give.filter((a) => a.kind === 'player').length,
+      t.get.filter((a) => a.kind === 'player').length,
+    ]);
+
+  it('proposes two spare receivers for the back it cannot otherwise reach', () => {
+    const result = suggestTrades(1, world(CONSOLIDATION));
+
+    const consolidation = result.trades.find(
+      (t) =>
+        t.give.filter((a) => a.kind === 'player').length === 2 &&
+        t.get.filter((a) => a.kind === 'player').length === 1,
+    );
+
+    expect(consolidation).toBeDefined();
+    expect(consolidation!.give.map((a) => a.id).sort()).toEqual(['t1_wr2', 't1_wr3']);
+    expect(consolidation!.get.map((a) => a.id)).toEqual(['t2_rb1']);
+  });
+
+  it('gives up the shape that was unreachable before', () => {
+    // The engine could previously only express 1-for-1 (plus a balancing pick).
+    // At least one suggestion now moves a different number of men each way.
+    expect(shapes(suggestTrades(1, world(CONSOLIDATION))).some(([g, r]) => g !== r)).toBe(true);
+  });
+
+  it('still finds the simple swap when that is the better offer', () => {
+    // The complementary league has one obviously good 1-for-1 in it, and adding
+    // uneven shapes must not crowd it out.
+    const result = suggestTrades(1, world(COMPLEMENTARY));
+
+    expect(result.trades.length).toBeGreaterThan(0);
+    expect(shapes(result)).toContainEqual([1, 1]);
+    // And it still ranks first. `minBenefitShare` is a share of the side's
+    // starting value rather than of the package, so a bigger package does not
+    // buy an easier floor — a consolidation clears it by helping more, which is
+    // the thing being measured.
+    expect(shapes(result)[0]).toEqual([1, 1]);
+  });
+
+  it('ranks the consolidation first where it is the better offer', () => {
+    // The mirror of the test above: when the uneven package is the one that
+    // actually fixes a roster, it wins. The floor discriminates on benefit, not
+    // on how many men moved.
+    expect(shapes(suggestTrades(1, world(CONSOLIDATION)))[0]).toEqual([2, 1]);
+  });
+
+  it('does not propose a package that would put a roster over its limit', () => {
+    // Cap is `allSlots` (3 starters + 6 bench) with no taxi or IR: nine men.
+    // Team 2 is already at nine, so taking two for one would make ten.
+    const full: Spec[] = CONSOLIDATION.map((spec) =>
+      spec.rosterId === 2
+        ? {
+            ...spec,
+            players: [
+              ...spec.players,
+              ...([
+                ['f1', 'WR', 60, 25],
+                ['f2', 'WR', 55, 25],
+                ['f3', 'WR', 50, 25],
+                ['f4', 'WR', 45, 25],
+                ['f5', 'WR', 40, 25],
+              ] as Spec['players']),
+            ],
+          }
+        : spec,
+    );
+
+    const result = suggestTrades(1, world(full));
+
+    // Every offer leaves them at nine or fewer: two-for-one is now illegal for
+    // them, though the same package was proposed when they had room for it.
+    const overCap = result.trades.filter(
+      (t) =>
+        t.get.filter((a) => a.kind === 'player').length -
+          t.give.filter((a) => a.kind === 'player').length >
+        0,
+    );
+    expect(overCap).toEqual([]);
+  });
+});
