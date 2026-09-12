@@ -581,9 +581,28 @@ function explain(
     lines.push(
       `${they} ${is} ${window} at #${analysis.contention.nowRank} of ${analysis.contention.teamCount} — picks are exactly what ${their} team should be collecting instead of wins it can't use.`,
     );
-  } else if (contending && side.incomingPlayers.length > 0) {
+  } else if (contending && benefit.now > 0) {
     lines.push(
       `${they} ${is} ${window} — this buys starting-lineup strength while ${their} window is open.`,
+    );
+  } else if (contending && benefit.future > 0) {
+    /*
+      A contender who is not buying this year's lineup.
+
+      The branch above used to fire on the *shape* of the package — receiving
+      any player at all was enough — so a juggernaut taking on pure future value
+      was told the trade bought starting-lineup strength, four lines above a
+      `Net:` line that declined to report any. The card contradicted its own
+      arithmetic, on the panel whose whole job is to be the reason the other
+      manager says yes.
+
+      Gating on the benefit leaves the case still needing a sentence: buying the
+      future while contending is a perfectly good trade, it is simply a
+      different argument, and an offer that arrives with no argument at all is
+      the failure this function exists to prevent.
+    */
+    lines.push(
+      `${they} ${is} ${window}, and this adds to ${their} future without costing ${their} lineup this year.`,
     );
   } else if (
     !contending &&
@@ -597,6 +616,19 @@ function explain(
       `${they} ${is} ${window}, and this gets ${their} core ${(outgoingAge - incomingAge).toFixed(0)} ${outgoingAge - incomingAge < 1.5 ? 'year' : 'years'} younger at the same value.`,
     );
   }
+
+  /*
+    Weak slots already spoken for, because a slot holds one man.
+
+    `slotWeaknesses` is sorted worst first, so `find` returns the same slot for
+    every eligible player — and a consolidation sends two. Both were told they
+    land on it, which is false of whichever one does not, and doubles the
+    strongest claim the card makes: "fixes your worst hole" printed twice for
+    one hole. `depthPairs` deliberately pairs same-position players, so the two
+    are eligible for exactly the same slots by construction and the collision is
+    the rule rather than the exception.
+  */
+  const claimed = new Set<string>();
 
   for (const player of side.incomingPlayers) {
     // Stated before the lineup and positional reasons, because a role the
@@ -628,15 +660,17 @@ function explain(
       there and this line would fall silent on the very package it was aiming
       at. See `engine/rosterDepth`.
 
-      `slotWeaknesses` is sorted worst first, so the first slot he is eligible
-      for is the worst one he fixes. It is already filtered to slots that clear
-      the weakness bar, which keeps the same "only when it is genuinely weak"
-      gate this line has always had.
+      `slotWeaknesses` is sorted worst first, so the first *unclaimed* slot he
+      is eligible for is the worst one he fixes. It is already filtered to slots
+      that clear the weakness bar, which keeps the same "only when it is
+      genuinely weak" gate this line has always had.
     */
-    const weak = analysis.slotWeaknesses.find((slot) =>
-      slotEligibility(slot.slot).includes(player.position),
+    const weak = analysis.slotWeaknesses.find(
+      (slot) =>
+        !claimed.has(slot.label) && slotEligibility(slot.slot).includes(player.position),
     );
     if (weak) {
+      claimed.add(weak.label);
       lines.push(
         `${player.name} lands on ${their} weakest slot: ${their} ${weak.label} is worth ${round(weak.value)} against a league median of ${round(weak.leagueMedian)}.`,
       );
@@ -658,8 +692,23 @@ function explain(
 
     const surplus = analysis.surpluses.find((s) => s.player.id === player.id);
     if (surplus) {
+      /*
+        Two different reasons a surplus man is not in the lineup, and only one of
+        them is about how good he is.
+
+        A benched player is behind somebody. A taxi player is *ineligible* —
+        #103 took him out of the pool, so "doesn't crack the best lineup" is
+        true of him in a way that says nothing about his quality, and calling a
+        taxi slot "the bench" now describes a distinction the app can draw and
+        is choosing not to. It also happens to be the better argument: a rookie
+        his owner cannot start is a cleaner thing to ask for than one he has
+        merely benched.
+      */
+      const onTaxi = summary.players.find((e) => e.player.id === player.id)?.onTaxi;
       lines.push(
-        `${player.name} doesn't crack ${their} best lineup today — ${their} depth at ${player.position} is going to waste on the bench.`,
+        onTaxi
+          ? `${player.name} is on ${their} taxi squad — ${they === 'You' ? 'you' : 'they'} cannot start him at all without promoting him, and ${their} depth at ${player.position} is deep enough that ${they === 'You' ? 'you' : 'they'} never have.`
+          : `${player.name} doesn't crack ${their} best lineup today — ${their} depth at ${player.position} is going to waste on the bench.`,
       );
     } else if (
       player.age !== null &&
