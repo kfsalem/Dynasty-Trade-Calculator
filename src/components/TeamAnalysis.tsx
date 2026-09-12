@@ -7,6 +7,8 @@ import {
   type Quadrant,
   type SeasonOdds,
 } from '../engine/analysis';
+import { fieldedStanding, leagueFielded } from '../engine/fielded';
+import { isGameWeek } from '../engine/season';
 import type { PositionScarcity } from '../engine/replacement';
 import type { FreeAgentBoard } from '../engine/freeAgents';
 import type { BenchReport } from '../engine/benchPoints';
@@ -94,6 +96,23 @@ export function TeamAnalysis({
     [league.rosters],
   );
 
+  /*
+    What every team is set to field this week, against what it could.
+
+    Gated on `isGameWeek` — the same test the lineup panel uses — because out of
+    season the platform's starters are a stale week-17 lineup on every roster in
+    the league. Ranking those would be ranking the order twelve managers last
+    happened to close the tab in January, and presenting it as a shortfall would
+    invent a mistake nobody has made.
+  */
+  const fielded = useMemo(() => {
+    if (!isGameWeek(seasonPhase ?? 'unknown')) return null;
+    return fieldedStanding(
+      myRosterId,
+      leagueFielded(league.rosters, summaries, league.settings.startingSlots, byeTeams),
+    );
+  }, [seasonPhase, myRosterId, league.rosters, summaries, league.settings.startingSlots, byeTeams]);
+
   if (!analysis || !roster) {
     return (
       <div className="card">
@@ -165,6 +184,22 @@ export function TeamAnalysis({
             </span>
           </div>
           {/*
+            The rank the two above are silent about. "Now" is `starterValue`,
+            which `summarizeRoster` builds from `bestLineup` rather than from
+            the platform's starters — so it grades the eleven this roster *can*
+            field. That is the right number for a roster, and it is not the team
+            being put on the field. Shown only when the two disagree: a manager
+            already fielding his best does not need a second rank telling him so.
+          */}
+          {fielded && !fielded.unset && fielded.gap > 0 && (
+            <div>
+              <span className="opacity-70">Fielding</span>{' '}
+              <span className="font-semibold tabular-nums">
+                #{fielded.fieldedRank} of {fielded.ranked}
+              </span>
+            </div>
+          )}
+          {/*
             The evidence behind the sentence above, whenever there is a season
             to read. The advice quotes this figure, and a claim as strong as
             "this season is not the one to spend on" should show the number it
@@ -187,6 +222,24 @@ export function TeamAnalysis({
             </div>
           )}
         </div>
+
+        {/*
+          The sentence the ranks cannot carry. A bare "#7 of 12" beside "#1 of
+          12" reads as a contradiction rather than as two different questions,
+          and the whole point is that both are true at once.
+        */}
+        {fielded && !fielded.unset && fielded.gap > 0 && (
+          <p className="mt-3 border-t border-current/15 pt-3 text-sm">
+            Every rank above grades the best lineup this roster can field. What you have set
+            for this week is worth {formatValue(fielded.gap)} less than that.
+          </p>
+        )}
+        {fielded?.unset && (
+          <p className="mt-3 border-t border-current/15 pt-3 text-sm">
+            Every rank above grades the best lineup this roster can field. You have no lineup
+            set, so there is nothing to compare it against.
+          </p>
+        )}
       </div>
 
       {/*
