@@ -27,9 +27,13 @@ function entry(
     marketValue: winNowValue,
     winNowValue,
     valued: true,
+    onTaxi: false,
     available: canStart(player),
   };
 }
+
+/** The same entry, stashed on the taxi squad. */
+const onTaxi = (e: ValuedPlayer): ValuedPlayer => ({ ...e, onTaxi: true });
 
 const ids = (plan: ReturnType<typeof startSit>) =>
   plan.lineup.map((a) => a.entry?.player.id ?? null);
@@ -511,5 +515,51 @@ describe('relativeMargin', () => {
 
   it('is zero when there is nothing to compare against', () => {
     expect(relativeMargin(0, 0)).toBe(0);
+  });
+});
+
+describe('startSit and the taxi squad', () => {
+  it('never recommends starting a taxi player, however good he is', () => {
+    // The rookie outscores the man in the RB slot by a mile. Sleeper will not
+    // let the manager start him without promoting him first, so recommending
+    // it is advice that cannot be taken.
+    const entries = [
+      entry('qb1', 'QB', 900),
+      entry('wr1', 'WR', 700),
+      entry('wr2', 'WR', 600),
+      entry('rb_active', 'RB', 100),
+      onTaxi(entry('rb_rookie', 'RB', 5000)),
+    ];
+
+    const plan = startSit({
+      entries,
+      startingSlots: SLOTS,
+      setLineup: ['qb1', 'rb_active', 'wr1', 'wr2'],
+    });
+
+    expect(ids(plan)).not.toContain('rb_rookie');
+    expect(plan.changes).toEqual([]);
+    expect(plan.gain).toBe(0);
+  });
+
+  it('promotes the best eligible man into a slot a taxi player cannot fill', () => {
+    const entries = [
+      entry('qb1', 'QB', 900),
+      entry('wr1', 'WR', 700),
+      entry('wr2', 'WR', 600),
+      entry('rb_bench', 'RB', 400),
+      entry('rb_started', 'RB', 100),
+      onTaxi(entry('rb_rookie', 'RB', 5000)),
+    ];
+
+    const plan = startSit({
+      entries,
+      startingSlots: SLOTS,
+      setLineup: ['qb1', 'rb_started', 'wr1', 'wr2'],
+    });
+
+    // The upgrade is the best *eligible* body, not the taxi man.
+    expect(ids(plan)).toContain('rb_bench');
+    expect(ids(plan)).not.toContain('rb_rookie');
   });
 });

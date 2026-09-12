@@ -52,6 +52,24 @@ export interface ValuedPlayer {
    * Says nothing about value. See `engine/availability`.
    */
   available: boolean;
+  /**
+   * True when the platform has him on the taxi squad.
+   *
+   * Kept apart from `available` rather than folded into it, though both mean
+   * "cannot fill a starting slot this season". Two reasons. `available` is read
+   * by the roster UI to colour an *injury* badge, and a healthy rookie stashed
+   * on the taxi squad is not hurt — merging them would print a medical claim
+   * about a man in perfect health. And the two behave differently everywhere
+   * except the lineup: an injured player is not a surplus, because nobody in
+   * the league could start him this season, while a taxi player very much is —
+   * trade him and he lands on the acquiring team's active roster.
+   *
+   * A fact about a roster and not about a player, which is why it arrives
+   * through `valuePlayers` rather than from `engine/availability`. That also
+   * makes it automatically false for a player arriving in a trade, which is
+   * correct: taxi designation does not travel with him.
+   */
+  onTaxi: boolean;
 }
 
 /**
@@ -124,13 +142,15 @@ export interface LineupOptions {
   /** Order to fill slots in. Defaults to `byWinNow` — who plays on Sunday. */
   compare?: (a: ValuedPlayer, b: ValuedPlayer) => number;
   /**
-   * Consider players a season-ending status rules out. Defaults to false.
+   * Consider players who cannot fill a slot this season. Defaults to false.
    *
-   * The one caller that needs this is the three-year projection, and it needs
-   * it badly: a torn ACL in 2026 says nothing about a lineup in 2029, so
-   * carrying today's injuries into the future score would write a hamstring
-   * into a roster's whole outlook. Every lineup about *this* season leaves it
-   * alone.
+   * Covers both reasons a man is out of the pool — a season-ending status and a
+   * taxi-squad designation — because the one caller that needs this is the
+   * three-year projection and it needs the same answer for both. A torn ACL in
+   * 2026 says nothing about a lineup in 2029, and neither does a taxi slot: the
+   * whole purpose of stashing a rookie there is that he is promoted later.
+   * Carrying either into the future score would write a temporary fact into a
+   * roster's whole outlook. Every lineup about *this* season leaves both alone.
    */
   includeUnavailable?: boolean;
 }
@@ -185,7 +205,18 @@ export function valuePlayers(
   playerIds: string[],
   players: Map<string, Player>,
   values: Map<string, PlayerValue>,
+  /**
+   * Who the platform has on the taxi squad, when the caller knows.
+   *
+   * Optional because several callers build a *hypothetical* roster — the id
+   * list a team would hold after a trade — where the honest answer for an
+   * incoming player is "not on anyone's taxi squad". Defaulting to empty gives
+   * exactly that, so those callers pass the owning roster's list and the men
+   * arriving in the deal fall outside it on their own.
+   */
+  taxiIds: Iterable<string> = [],
 ): ValuedPlayer[] {
+  const taxi = taxiIds instanceof Set ? taxiIds : new Set(taxiIds);
   const out: ValuedPlayer[] = [];
   for (const id of playerIds) {
     const player = players.get(id);
@@ -198,6 +229,7 @@ export function valuePlayers(
       winNowValue: value?.winNowValue ?? 0,
       valued: value !== undefined,
       available: canStart(player),
+      onTaxi: taxi.has(id),
     });
   }
   return out.sort(byValue);
@@ -221,16 +253,20 @@ export function valuePlayers(
  * thirty-two-year-old receiver who is still the WR20, and before R8 this
  * function claimed he would.
  *
- * Players ruled out for the season are not in the pool at all (R9). A roster's
- * `playerIds` includes whoever is parked on IR, and before this they were picked
- * for starting slots like anyone else — so a lineup could be led by a receiver
- * who will not take a snap. Note what this does *not* do: nobody's value moves.
- * He is absent from the eleven, and worth exactly what he was worth as an asset.
+ * Players ruled out for the season are not in the pool at all. A roster's
+ * `playerIds` includes whoever is parked on IR *and* whoever is stashed on the
+ * taxi squad, and before this they were picked for starting slots like anyone
+ * else — so a lineup could be led by a receiver who will not take a snap, or by
+ * a rookie the platform will not let the manager start without promoting him
+ * first. R9 closed the first of those; #103 closed the second, which R9's own
+ * note had named and left open. Note what this does *not* do: nobody's value
+ * moves. He is absent from the eleven, and worth exactly what he was worth as
+ * an asset.
  *
- * The exclusion cannot destabilise the replacement-level fixed point, which is
- * the standing hazard in this file. Availability is a fact about a player and
- * his own status — like an activity factor and unlike a value, it cannot respond
- * to the lineups it perturbs, so there is no loop for it to run around.
+ * Neither exclusion can destabilise the replacement-level fixed point, which is
+ * the standing hazard in this file. Both are facts about a player and his own
+ * status — like an activity factor and unlike a value, they cannot respond to
+ * the lineups they perturb, so there is no loop for them to run around.
  *
  * `LineupOptions` is the escape hatch for callers that legitimately ask a
  * different question — `futureScore` builds the lineup a roster could field in
@@ -244,7 +280,7 @@ export function bestLineup(
 ): LineupAssignment[] {
   const used = new Set<string>();
   const pool = [...entries]
-    .filter((entry) => includeUnavailable || entry.available)
+    .filter((entry) => includeUnavailable || (entry.available && !entry.onTaxi))
     .sort(compare);
 
   const pick = (eligible: Position[]): ValuedPlayer | null => {
@@ -274,7 +310,7 @@ export function summarizeRoster(
   values: Map<string, PlayerValue>,
   settings: LeagueSettings,
 ): RosterSummary {
-  const entries = valuePlayers(roster.playerIds, players, values);
+  const entries = valuePlayers(roster.playerIds, players, values, roster.taxiIds);
   const lineup = bestLineup(entries, settings.startingSlots);
 
   const starterIds = new Set(

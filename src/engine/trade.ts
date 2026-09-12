@@ -31,8 +31,17 @@ export interface TradeContext {
 function starterValue(
   playerIds: string[],
   ctx: TradeContext,
+  /**
+   * The owning roster's taxi squad.
+   *
+   * Passed for the hypothetical post-trade list as well as the current one, and
+   * that is correct rather than sloppy: taxi designation does not travel with a
+   * traded player, so the men arriving in the deal are simply absent from this
+   * set and count as active.
+   */
+  taxiIds: string[] = [],
 ): { total: number; emptySlots: number } {
-  const entries = valuePlayers(playerIds, ctx.players, ctx.values);
+  const entries = valuePlayers(playerIds, ctx.players, ctx.values, taxiIds);
   const lineup = bestLineup(entries, ctx.league.settings.startingSlots);
   return {
     total: lineup.reduce((sum, slot) => sum + (slot.entry?.winNowValue ?? 0), 0),
@@ -112,8 +121,8 @@ function buildSide(
     ...received.playerIds,
   ];
 
-  const before = starterValue(roster.playerIds, ctx);
-  const afterLineup = starterValue(after, ctx);
+  const before = starterValue(roster.playerIds, ctx, roster.taxiIds);
+  const afterLineup = starterValue(after, ctx, roster.taxiIds);
 
   const warnings: string[] = [];
 

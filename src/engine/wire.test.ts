@@ -21,6 +21,7 @@ function entry(
     marketValue: winNowValue,
     winNowValue,
     valued: true,
+    onTaxi: false,
     available: canStart(player),
   };
 }

@@ -317,8 +317,12 @@ function futureLineupValue(playerIds: string[], ctx: SuggestContext): number {
 }
 
 /** Ids a roster would start today, given the players it would hold after a trade. */
-function lineupIds(playerIds: string[], ctx: SuggestContext): Set<string> {
-  const entries = valuePlayers(playerIds, ctx.players, ctx.values);
+function lineupIds(
+  playerIds: string[],
+  ctx: SuggestContext,
+  taxiIds: string[] = [],
+): Set<string> {
+  const entries = valuePlayers(playerIds, ctx.players, ctx.values, taxiIds);
   return new Set(
     bestLineup(entries, ctx.league.settings.startingSlots)
       .map((slot) => slot.entry?.player.id)
@@ -509,7 +513,7 @@ function sideBenefit(
       quadrant: contention.quadrant,
     },
     afterIds,
-    afterStarters: lineupIds(afterIds, ctx),
+    afterStarters: lineupIds(afterIds, ctx, roster.taxiIds),
   };
 }
 
