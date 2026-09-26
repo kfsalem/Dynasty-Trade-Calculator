@@ -20,14 +20,31 @@
  * know what it does to real rosters.
  *
  * Drives the app's own pipeline — `loadLeague`, `fetchFantasyCalcValues`,
- * `valueLeague` — rather than reimplementing it, so what prints is what the app
- * would show. The one deliberate gap is activity data: those files are served
- * from `/data` at runtime and are not fetched here, which leaves every activity
- * factor at exactly 1. That is a state the app itself degrades to, and
- * replacement levels and league scoring still apply.
+ * `valueLeague` — rather than reimplementing it, and feeds the suggestion
+ * engine every input the app does: league-adjusted values, activity and the
+ * league's scoring from the files under `public/data`, role trends, the
+ * claimable free-agent wire and the live playoff odds. Checked on the test
+ * league on 2026-09-26, it reports the same suggestions, team by team, as the
+ * Trade ideas tab (#138).
+ *
+ * The one input left out is the manager model: it needs a request per week per
+ * season to build, and it only scales the score of offers that already cleared
+ * the bar. That can change which offers make the top six for a team with more
+ * than six, never how many there are, so the counts here are unaffected by it.
+ *
+ * That parity is load-bearing. Before it, this script handed the engine raw
+ * market prices and no wire, odds, activity or scoring, and reported 16
+ * suggestions where the app showed 14 — which read as a feature working when it
+ * was not.
  */
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { sleeperProvider } from '../src/platforms/sleeper';
+import { snapShares } from '../src/engine/snapShare';
+import { opportunities } from '../src/engine/opportunity';
+import { checkScoring, scoringIsUsable } from '../src/engine/scoringCheck';
+import { roleTrends } from '../src/engine/roleTrend';
 import { fetchFantasyCalcValues } from '../src/values/fantasycalc';
 import { fetchPickValues } from '../src/values/dynastyprocess';
 import { buildDraftPicks, tradeableSeasons } from '../src/engine/picks';
@@ -36,6 +53,16 @@ import { analyzeTeam, futureLineup, leagueDemand } from '../src/engine/analysis'
 import { bucketRoster, type Bucket } from '../src/engine/buckets';
 import { bareSlots, fragility, slotStrengths } from '../src/engine/rosterDepth';
 import { suggestTrades } from '../src/engine/suggest';
+import { claimableFreeAgents, freeAgentBoard } from '../src/engine/freeAgents';
+import {
+  calibrate,
+  playedFixtures,
+  remainingFixtures,
+  simulate,
+  teamStates,
+} from '../src/engine/playoffOdds';
+import { regularSeasonWeek } from '../src/engine/season';
+import type { SeasonOdds } from '../src/engine/analysis';
 import type { RosterSummary } from '../src/engine/rosterValue';
 
 const leagueId = process.argv[2];
@@ -63,7 +90,74 @@ async function main() {
   console.log(`slots: ${league.settings.startingSlots.join(', ')}`);
 
   const values = await fetchFantasyCalcValues(league.settings);
-  const valuation = valueLeague(league.rosters, players, values.bySleeperId, league.settings);
+
+  /*
+    Everything else the app feeds the model, read the way `useLeagueData` reads
+    it. The activity and scoring files the app fetches from `/data` are the
+    same files committed under `public/data`, so they are read from disk.
+    Without them this script priced a different league than the app shows, and
+    said so only in a comment: on the test league it once reported 16 trade
+    suggestions where the app showed 14 (#138).
+  */
+  const file = <T,>(name: string): T | null => {
+    try {
+      return JSON.parse(
+        readFileSync(fileURLToPath(new URL(`../public/data/${name}`, import.meta.url)), 'utf8'),
+      ) as T;
+    } catch {
+      return null;
+    }
+  };
+  type SnapFile = Parameters<typeof snapShares>[0];
+  type UsageFile = Parameters<typeof opportunities>[0];
+  type ScoringStats = NonNullable<Parameters<typeof checkScoring>[0]>;
+  const snapFile = file<SnapFile>('snaps.json');
+  const usageFile = file<UsageFile>('opportunity.json');
+  const scoringFile = file<ScoringStats>('scoring.json');
+  const snaps = snapFile ? snapShares(snapFile) : undefined;
+  const usage = usageFile ? opportunities(usageFile) : undefined;
+
+  // Activity counts only for the season being played, as in the app.
+  const played = Number(bundle.currentSeason);
+  const snapsLive = snapFile?.season === played;
+  const usageLive = usageFile?.season === played;
+  const activity = {
+    snaps: snapsLive && snaps ? snaps : new Map(),
+    usage: usageLive && usage ? usage : new Map(),
+    current: snapsLive || usageLive,
+  };
+
+  // The schedule carries both the awarded points the scoring check needs and
+  // the fixtures the playoff odds need, so it is loaded once, here.
+  const weeksTotal = league.settings.playoffWeekStart - 1;
+  const schedule =
+    sleeperProvider.loadSchedule && weeksTotal > 0
+      ? await sleeperProvider.loadSchedule(leagueId, weeksTotal)
+      : null;
+
+  // The league's own scoring corrects market prices only where this engine
+  // reproduces it — the gate the app applies.
+  const fidelity = checkScoring(scoringFile, schedule?.awarded, league.settings.scoring);
+  const scoringStats = scoringIsUsable(fidelity) ? scoringFile : null;
+
+  const valuation = valueLeague(
+    league.rosters,
+    players,
+    values.bySleeperId,
+    league.settings,
+    activity,
+    scoringStats,
+  );
+  const trends = roleTrends({
+    summaries: valuation.summaries,
+    values: valuation.values,
+    snaps,
+    usage,
+    current: activity.current,
+  });
+  console.log(
+    `activity: ${activity.current ? 'this season' : 'not this season, factors at 1'} · scoring: ${fidelity.verdict}${scoringStats ? ', applied' : ', not applied'}`,
+  );
   const summaries: RosterSummary[] = [...valuation.summaries].sort(
     (a, b) => b.starterValue - a.starterValue,
   );
@@ -88,6 +182,53 @@ async function main() {
     bundle.draftOrders,
   );
   console.log(`picks: ${picks.length} tradeable`);
+
+  /*
+    The waiver wire, as the app builds it — and not optional, for the same
+    reason picks are not. Since #114 the engine refuses to propose paying for a
+    player the wire gives away, so a search run without it proposes trades the
+    app never shows. On the test league it once reported 16 suggestions where
+    the app showed 14, every extra one a quarterback purchase with Bo Nix
+    unrostered (#138). Priced against the rostered pool's own levels, and
+    narrowed to who could be claimed today, exactly as `useLeagueData` does.
+  */
+  const board = freeAgentBoard({
+    freeAgents: bundle.freeAgents,
+    market: values.bySleeperId,
+    levels: valuation.levels,
+    snaps,
+    usage,
+    current: activity.current,
+  });
+  const claimable = claimableFreeAgents(board, league, bundle.currentSeason);
+  console.log(`free agents: ${board.all.length} on the wire, ${claimable.length} claimable and priced`);
+
+  /*
+    The live playoff odds, built the way `useLeagueData` builds them and for the
+    same reason the wire is here: the engine reads them. `windowWeights` moves a
+    team whose season is slipping towards the future (#66), so a 0-2 roster is
+    not told to spend picks on a quarterback — and without the odds this script
+    told it exactly that. Only in the regular season, as in the app.
+  */
+  let season: SeasonOdds | undefined;
+  const week = regularSeasonWeek(bundle.currentWeek, bundle.seasonPhase, weeksTotal);
+  if (bundle.seasonPhase === 'regular' && week !== null && schedule) {
+    const teams = teamStates(league, summaries);
+    const odds = simulate({
+      teams,
+      remaining: remainingFixtures(schedule.matchups, week, league.settings.playoffWeekStart),
+      playoffTeams: league.settings.playoffTeams,
+      model: calibrate(teams, playedFixtures(schedule.matchups)),
+    });
+    season = {
+      odds: new Map(odds.map((o) => [o.rosterId, o.odds])),
+      weeksPlayed: Math.min(Math.max(week - 1, 0), weeksTotal),
+      weeksTotal,
+    };
+    console.log(`playoff odds: week ${week} of ${weeksTotal}`);
+  } else {
+    console.log(`playoff odds: none (${bundle.seasonPhase})`);
+  }
 
   console.log('\n=== SLOT STRENGTH ===');
   let weakTotal = 0;
@@ -180,9 +321,16 @@ async function main() {
     const result = suggestTrades(summary.rosterId, {
       league,
       players,
-      values: values.bySleeperId,
+      // League-adjusted, as the app passes them — not the raw market the
+      // valuation started from. Handing the engine raw prices beside rosters
+      // valued in adjusted ones was a second, older gap between this script
+      // and the app.
+      values: valuation.values,
       picks,
       summaries,
+      claimable,
+      season,
+      trends,
     });
     found += result.trades.length;
 
