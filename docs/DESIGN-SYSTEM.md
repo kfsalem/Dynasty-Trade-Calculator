@@ -246,7 +246,7 @@ behaviour is ahead of the colour.
 `.claude/skills/design-system/SKILL.md` carries the enforceable subset of this
 document: the tokens, the two obliged rules, and the do-not list. It is checked
 in, so it applies to anyone working in the repo rather than living in one
-person's memory. **It is authoritative** — see `.claude/skills/README.md` for
+person's memory. **It is authoritative** — see [`.claude/skills/README.md`](../.claude/skills/README.md) for
 the full roster and precedence order.
 
 Three general design skills are vendored alongside it from
