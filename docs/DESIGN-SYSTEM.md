@@ -255,7 +255,7 @@ Three general design skills are vendored alongside it from
 Playwright viewport and interaction checks, and `web-artifacts-builder` for
 standalone artifacts built *beside* the project rather than inside it.
 [Impeccable](https://github.com/pbakaus/impeccable) is not installed;
-`.claude/skills/README.md` says how to add it as a plugin.
+[`.claude/skills/README.md`](../.claude/skills/README.md) says how to add it as a plugin.
 
 **Where the general skills stop.** They know nothing about this app. The
 position palette here is validated, not chosen — restyling QB back to blue on
