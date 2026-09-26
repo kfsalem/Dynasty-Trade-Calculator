@@ -150,6 +150,55 @@ export interface SeasonHistory {
    * season. Sleeper's own answer to the question `engine/benchPoints` asks.
    */
   claimed: Map<number, ClaimedTotals>;
+  /**
+   * Every team's score each week, regular season and playoffs, with who it
+   * played (#52). Separate from `weeks`, which is lineups for the regular
+   * season only and is what the bench arithmetic reads.
+   */
+  results: TeamResult[];
+  /** How the season's playoffs ran, and how they came out (#52). */
+  playoffs: SeasonPlayoffs;
+}
+
+/** One team's score in one week, and the fixture it came from. */
+export interface TeamResult {
+  week: number;
+  rosterId: number;
+  /**
+   * Shared by the two teams that played each other. Null for a team with no
+   * fixture that week — a bye, or a playoff week it was not in.
+   */
+  matchupId: number | null;
+  points: number;
+}
+
+/** A season's playoff format and both brackets. */
+export interface SeasonPlayoffs {
+  /** The first playoff week; the regular season is every week before it. */
+  weekStart: number;
+  teams: number;
+  /**
+   * Sleeper's `playoff_round_type`: 0 is one week per round, 1 a two-week
+   * final, 2 two weeks per round. Only 0 has been checked against a live
+   * league; see `roundWeeks`.
+   */
+  roundType: number | null;
+  winners: BracketMatch[];
+  losers: BracketMatch[];
+}
+
+/** One game of a bracket. */
+export interface BracketMatch {
+  round: number;
+  match: number;
+  teams: [number | null, number | null];
+  winner: number | null;
+  loser: number | null;
+  /**
+   * Set on a placement game: 1 for the final, 3 for third place, 5 for fifth.
+   * Null on a game that decides who advances.
+   */
+  placement: number | null;
 }
 
 export interface SeasonManager {

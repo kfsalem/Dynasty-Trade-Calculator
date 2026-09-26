@@ -17,6 +17,7 @@ import {
   getDrafts,
   getLeague,
   getMatchups,
+  getBracket,
   getPlayers,
   getRosters,
   getState,
@@ -39,8 +40,11 @@ import {
   mapSettings,
   mapTransactions,
   mapWeekLineups,
+  mapTeamResults,
+  mapBracket,
 } from './mapper';
 import { cached } from '../../lib/cache';
+import { lastPlayoffWeek } from '../../engine/playoffRounds';
 
 /**
  * Sleeper's `season_type`, canonicalised.
@@ -334,22 +338,41 @@ async function loadSeason(
   current: boolean,
 ): Promise<SeasonHistory & { previous: string | null }> {
   const read = async () => {
-    const [league, rosters, users] = await Promise.all([
+    // The brackets ride along with the league (#52). Either failing costs the
+    // playoff standings and nothing else, so each falls back to empty.
+    const [league, rosters, users, winners, losers] = await Promise.all([
       getLeague(leagueId),
       getRosters(leagueId),
       getUsers(leagueId),
+      getBracket(leagueId, 'winners').then(mapBracket).catch(() => []),
+      getBracket(leagueId, 'losers').then(mapBracket).catch(() => []),
     ]);
 
     const settings = mapSettings(league);
     const slotCount = settings.startingSlots.length;
     const throughWeek = Math.max(0, settings.playoffWeekStart - 1);
-    const weekNumbers = Array.from({ length: throughWeek }, (_, i) => i + 1);
+    // Through the playoffs as well, for the standings and records (#52). The
+    // bracket says how many rounds there were. A season still being played has
+    // a bracket whose games have no teams yet, and adds no weeks.
+    const seeded = winners.filter((match) => match.teams.some((team) => team !== null));
+    const rounds = Math.max(0, ...seeded.map((match) => match.round));
+    const lastWeek = Math.max(
+      throughWeek,
+      lastPlayoffWeek(settings.playoffWeekStart, settings.playoffRoundType, rounds),
+    );
+    const weekNumbers = Array.from({ length: lastWeek }, (_, i) => i + 1);
 
-    const weeks = await Promise.all(
+    // One request per week, read two ways: lineups for the regular season —
+    // which is all the bench arithmetic has ever read — and scores for every
+    // week, playoffs included.
+    const perWeek = await Promise.all(
       weekNumbers.map((week) =>
         getMatchups(leagueId, week)
-          .then((rows) => mapWeekLineups(week, rows, slotCount))
-          .catch(() => []),
+          .then((rows) => ({
+            lineups: week <= throughWeek ? mapWeekLineups(week, rows, slotCount) : [],
+            results: mapTeamResults(week, rows),
+          }))
+          .catch(() => ({ lineups: [], results: [] })),
       ),
     );
 
@@ -358,13 +381,23 @@ async function loadSeason(
       season: league.season,
       startingSlots: settings.startingSlots,
       managers: mapSeasonManagers(rosters, users),
-      weeks: weeks.flat(),
+      weeks: perWeek.flatMap((week) => week.lineups),
       claimed: mapClaimedTotals(rosters),
+      results: perWeek.flatMap((week) => week.results),
+      playoffs: {
+        weekStart: settings.playoffWeekStart,
+        teams: settings.playoffTeams,
+        roundType: settings.playoffRoundType,
+        winners,
+        losers,
+      },
       previous: league.previous_league_id ?? null,
     };
   };
 
-  return current ? read() : cached(`sleeper:history:${leagueId}:v1`, SEASON_TTL, read);
+  // v2: the cached shape gained `results` and `playoffs` (#52), which a v1
+  // entry cannot supply.
+  return current ? read() : cached(`sleeper:history:${leagueId}:v2`, SEASON_TTL, read);
 }
 
 /**

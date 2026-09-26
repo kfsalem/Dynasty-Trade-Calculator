@@ -10,14 +10,17 @@ import type {
   InjuryStatus,
 } from '../../types';
 import type {
+  BracketMatch,
   ClaimedTotals,
   LeagueTransaction,
   SeasonManager,
+  TeamResult,
   TransactionType,
   WeekLineup,
 } from '../types';
 import type { SlimPlayer } from './client';
 import type {
+  SleeperBracketMatch,
   SleeperLeague,
   SleeperMatchup,
   SleeperRoster,
@@ -437,6 +440,36 @@ export function mapWeekLineups(
       points,
     };
   });
+}
+
+/**
+ * Every team's score in one week, and who it played (#52).
+ *
+ * A week nobody has played yet — every row at zero — maps to nothing, the
+ * same rule `mapWeekLineups` uses, so an unplayed week never reads as a week
+ * of shutouts.
+ */
+export function mapTeamResults(week: number, rows: SleeperMatchup[]): TeamResult[] {
+  const played = rows.some((row) => (row.points ?? 0) !== 0);
+  if (!played) return [];
+  return rows.map((row) => ({
+    week,
+    rosterId: row.roster_id,
+    matchupId: row.matchup_id ?? null,
+    points: row.points ?? 0,
+  }));
+}
+
+/** A bracket as the canonical model reads it (#52). */
+export function mapBracket(rows: SleeperBracketMatch[]): BracketMatch[] {
+  return rows.map((row) => ({
+    round: row.r,
+    match: row.m,
+    teams: [row.t1 ?? null, row.t2 ?? null],
+    winner: row.w ?? null,
+    loser: row.l ?? null,
+    placement: row.p ?? null,
+  }));
 }
 
 /**

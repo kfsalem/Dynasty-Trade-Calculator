@@ -126,6 +126,27 @@ export const sleeperMatchupSchema = z.object({
 
 export const sleeperMatchupsSchema = z.array(sleeperMatchupSchema);
 
+/**
+ * One game of a playoff bracket (#52).
+ *
+ * `r` is the round and `m` the match number. `p` marks a placement game — 1
+ * for the final, 3 for third place, 5 for fifth — and is absent on the games
+ * that decide who advances. Verified against a live 2025 winners bracket, which
+ * carries both a `p:3` and a `p:5`. `t1_from`/`t2_from` say where a team came
+ * from and are not needed: the teams themselves are on the row.
+ */
+export const sleeperBracketMatchSchema = z.object({
+  r: z.number(),
+  m: z.number(),
+  t1: z.number().nullish(),
+  t2: z.number().nullish(),
+  w: z.number().nullish(),
+  l: z.number().nullish(),
+  p: z.number().nullish(),
+});
+
+export const sleeperBracketSchema = z.array(sleeperBracketMatchSchema);
+
 export const sleeperRosterSchema = z.object({
   roster_id: z.number(),
   owner_id: z.string().nullish(),
@@ -352,6 +373,7 @@ export type SleeperPlayer = z.infer<typeof sleeperPlayerSchema>;
 export type SleeperTradedPick = z.infer<typeof sleeperTradedPickSchema>;
 export type SleeperState = z.infer<typeof sleeperStateSchema>;
 export type SleeperMatchup = z.infer<typeof sleeperMatchupSchema>;
+export type SleeperBracketMatch = z.infer<typeof sleeperBracketMatchSchema>;
 export type SleeperTransaction = z.infer<typeof sleeperTransactionSchema>;
 export type SleeperDraft = z.infer<typeof sleeperDraftSchema>;
 export type SleeperAccount = NonNullable<z.infer<typeof sleeperAccountSchema>>;
