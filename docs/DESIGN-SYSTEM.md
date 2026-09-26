@@ -1,7 +1,10 @@
 # Design System
 
-The direction Milestone 5 executes against. Written for #53, before #15–#18, so
-that four issues encode one set of decisions rather than four guesses.
+Written for #53, before #15–#18, so that four issues encoded one set of
+decisions rather than four guesses. **The register in §1 was replaced on
+2026-09-26 by #120**, which supersedes #53; everything measured below it — the
+colour validation, the accessibility rules, the density rule — carries over
+unchanged.
 
 Audited against the live app on 2026-08-08. Every colour claim here was produced
 by running the validator, not by looking at swatches — see
@@ -11,20 +14,58 @@ by running the validator, not by looking at swatches — see
 
 ## 1. Register
 
-**Broadcast.** Saturated position colour, oversized numerals, filled bars. This
-should read as a fantasy football product, not a spreadsheet.
+**Premium, verdict first.** Sleeper's clarity crossed with SalemWare's dark
+depth. The approved mockup of the My team tab, desktop and phone, is linked from
+#120.
 
-The discipline that keeps it from becoming noise:
+> **Quiet chrome, loud answers. Disciplined with hue.**
 
-> **Loud with type and scale. Disciplined with hue.**
+It replaces **Broadcast** — saturated fills, oversized numerals everywhere,
+filled header blocks. Broadcast gave every panel the same volume, and a page of
+equally loud panels, each opening with a paragraph of method, reads as a wall.
+The analysis was never the problem; showing all of it at once, at equal weight,
+was.
 
-Weight, size and fill are free — a value can be 32px and bold, a bar can be
-solid, a header can be a filled block. Hue is not free: every colour in the data
-layer means something specific, and the meanings are fixed below. A broadcast
-that colours everything has no way left to say *this one matters*.
+### What the look is
 
-The app's job is to explain a number the user did not expect. Energy is welcome;
-ambiguity is not.
+- **Dark depth.** A near-black, *neutral* page with one soft azure glow at the
+  top; layered surfaces separated by semi-transparent hairlines and a soft
+  shadow rather than by fill. From `Salem-ales/salemware.webapp`.
+- **Neutral behind data.** The SalemWare marketing site's violet-tinted black
+  shifts every data colour placed on it — right behind a hero, wrong behind a
+  table (the SalemWare CRM's `palette.ts` records the same finding). Glow and
+  tint stay in the page's top edge; every data surface is neutral.
+- **Sleeper's clarity.** Player headshots, generous cards, one action per row,
+  bottom navigation on a phone. People who use this app spend their week in
+  Sleeper; it should feel like the same class of product.
+- **Type does the emphasis.** A display face (Plus Jakarta Sans) for verdicts
+  and figures, Inter for everything else. A figure worth reading is large; the
+  method behind it is small and one tap away.
+
+### What the structure is
+
+Every tab answers its question before it explains itself.
+
+1. **One verdict sentence** in display type — "Window closing. This is your
+   year."
+2. **At most four figures** above the fold, as tiles.
+3. **Actions as cards**, one per row, each with a collapsible **Why?** holding
+   the reasoning that used to be prose above it.
+4. **Detail lives in the player panel** (#68), not in every row of every table.
+5. **Provenance is a badge you can open**, not a paragraph at the top of every
+   tab. The scoring check is the model.
+
+**Hue is still not free.** Every colour in the data layer means one thing, and
+the meanings in §4 are fixed. The new look adds exactly one decorative colour —
+the azure of the glow and of actions — and it already has a role: `accent`.
+
+### What has not changed yet
+
+§2–§5 describe what ships today. The token pass in #120 changes the page and
+surface values, adds an elevation scale and a display face, and will update
+those sections as it lands. Until it does, the values below are current — and
+the rules around them (validation, contrast, pointer density, the motion
+budget) are not up for renegotiation when it happens.
 
 ## 2. Layout and density
 
@@ -83,7 +124,7 @@ Scale:
 
 | role | size | weight |
 |---|---|---|
-| `display` — hero numerals, the broadcast moment | 30–36px | 700 |
+| `display` — verdicts and hero numerals | 30–36px | 700 |
 | `title` | 20px | 700 |
 | `heading` | 16px | 600 |
 | `body` / data | 13px | 400/500 |
@@ -260,8 +301,9 @@ standalone artifacts built *beside* the project rather than inside it.
 **Where the general skills stop.** They know nothing about this app. The
 position palette here is validated, not chosen — restyling QB back to blue on
 aesthetic grounds reintroduces a measured colourblindness failure. The register
-is settled. Use the general skills for layout ideation, copy, motion and
-critique; not to relitigate §4.
+is §1's, chosen by the owner on 2026-09-26; a general skill urging some other
+identity is moot here. Use the general skills for layout ideation, copy, motion
+and critique; not to relitigate §1 or §4.
 
 **Charts do not get a bespoke skill.** Claude Code ships a `dataviz` skill whose
 method is design-system-agnostic and whose non-negotiables already match what
