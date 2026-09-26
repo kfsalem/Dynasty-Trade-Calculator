@@ -24,6 +24,11 @@ import { roleTrends } from '../engine/roleTrend';
 import type { SeasonOdds } from '../engine/analysis';
 import { usePlayoffOdds } from './usePlayoffOdds';
 import {
+  leagueHistoryStats,
+  type LeagueHistoryStats,
+  type StandingsMode,
+} from '../engine/leagueHistory';
+import {
   fetchByeWeeks,
   fetchDepthCharts,
   fetchOpportunity,
@@ -117,6 +122,46 @@ export function useLeagueHistory(leagueId: string | null, enabled: boolean) {
     staleTime: 60 * 60 * 1000,
     retry: 1,
   });
+}
+
+/**
+ * Standings, records and rivalries across the league's whole history (#52).
+ *
+ * The same walk as the bench report, from the same cached query, so opening
+ * both costs one walk. `current` cuts the season being played off at its last
+ * finished week: a week in progress has partial scores that must not become
+ * records.
+ */
+export function useHistoryStats(
+  leagueId: string | null,
+  enabled: boolean,
+  mode: StandingsMode,
+  current: { season: string; lastCompleteWeek: number } | undefined,
+) {
+  const query = useLeagueHistory(leagueId, enabled);
+  const season = current?.season;
+  const lastCompleteWeek = current?.lastCompleteWeek;
+
+  const stats = useMemo<LeagueHistoryStats | undefined>(
+    () =>
+      query.data
+        ? leagueHistoryStats(
+            query.data,
+            mode,
+            season !== undefined && lastCompleteWeek !== undefined
+              ? { season, lastCompleteWeek }
+              : undefined,
+          )
+        : undefined,
+    [query.data, mode, season, lastCompleteWeek],
+  );
+
+  return {
+    stats,
+    loading: query.isFetching && !query.data,
+    failed: query.isError,
+    truncated: query.data?.truncated ?? false,
+  };
 }
 
 /**

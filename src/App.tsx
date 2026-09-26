@@ -3,6 +3,8 @@ import { LeagueImport } from './components/LeagueImport';
 import { LeagueHeader } from './components/LeagueHeader';
 import { ScoringBadge } from './components/ScoringBadge';
 import { PlayerDetail } from './components/PlayerDetail';
+import { LeagueHistory } from './components/LeagueHistory';
+import { useStandingsMode } from './hooks/useStandingsMode';
 import { OpenPlayerContext } from './hooks/useOpenPlayer';
 import { pickDetail, playerDetail } from './engine/playerDetail';
 import { RosterList } from './components/RosterList';
@@ -18,6 +20,7 @@ import { FreeAgentBoard } from './components/FreeAgentBoard';
 import { EmptyState } from './components/EmptyState';
 import {
   useBenchReport,
+  useHistoryStats,
   useBidModel,
   useLeagueSummaries,
   useManagerModel,
@@ -29,10 +32,14 @@ import { picksForRoster } from './engine/picks';
 
 const STORAGE_KEY = 'dynasty:leagueId';
 
-type Tab = 'analysis' | 'ideas' | 'rosters' | 'agents' | 'trade';
+type Tab = 'analysis' | 'ideas' | 'rosters' | 'agents' | 'trade' | 'league';
 
 /**
  * Value, name, and the name to show when space is short.
+ *
+ * Since #52 there are six, and on a phone they share a bottom bar of six equal
+ * columns — about 57px each at 375px — so every long label has a short form
+ * there. The full name stays the accessible name in both layouts.
  *
  * The four full labels measure ~367px against the 343px a 375px phone actually
  * offers once the page gutters are taken out, so the strip scrolled and the
@@ -42,11 +49,12 @@ type Tab = 'analysis' | 'ideas' | 'rosters' | 'agents' | 'trade';
  * announces does not depend on the viewport.
  */
 const TABS: [Tab, string, string][] = [
-  ['analysis', 'My team', 'My team'],
-  ['ideas', 'Trade ideas', 'Trade ideas'],
+  ['analysis', 'My team', 'Team'],
+  ['ideas', 'Trade ideas', 'Trades'],
   ['rosters', 'Rosters', 'Rosters'],
-  ['agents', 'Free agents', 'Free agents'],
-  ['trade', 'Trade calculator', 'Calculator'],
+  ['agents', 'Free agents', 'Wire'],
+  ['trade', 'Trade calculator', 'Calc'],
+  ['league', 'League', 'League'],
 ];
 
 /**
@@ -70,6 +78,7 @@ const TAB_ICON: Record<Tab, ReactNode> = {
     </>
   ),
   trade: <path d="M12 3v18M5 7h14M5 7l-3 6a3 3 0 006 0zM19 7l-3 6a3 3 0 006 0z" />,
+  league: <path d="M8 4h8v6a4 4 0 01-8 0zM8 6H5a3 3 0 003 3M16 6h3a3 3 0 01-3 3M12 14v4M8 21h8M10 18h4" />,
 };
 
 /** The product mark: a rising line on the action azure. */
@@ -230,6 +239,19 @@ function App() {
    * and switching tabs costs nothing.
    */
   const bench = useBenchReport(leagueId, tab === 'analysis' && myRosterId !== null);
+
+  /*
+    The league's history (#52), walked only when the League tab is open. The
+    season being played is cut off at its last finished week, so a week in
+    progress never becomes a record.
+  */
+  const { mode: standingsMode, setMode: setStandingsMode } = useStandingsMode();
+  const inSeason = seasonPhase === 'regular' || seasonPhase === 'post';
+  const historyCurrent =
+    inSeason && league && currentWeek !== null
+      ? { season: league.season, lastCompleteWeek: Math.max(0, currentWeek - 1) }
+      : undefined;
+  const history = useHistoryStats(leagueId, tab === 'league', standingsMode, historyCurrent);
   /*
     Gated on the tab that reads it, the same way the bench walk is. Nothing else
     in the app ranks a partner, so a visitor who never opens Trade ideas never
@@ -488,7 +510,7 @@ function App() {
                 Same element in both, so the keyboard contract below — roving
                 tabIndex, arrows, Home and End — holds in both.
               */
-              className="fixed inset-x-3 bottom-3 z-20 grid grid-cols-5 rounded-card border border-line bg-surface/95 p-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] elevation-overlay backdrop-blur sm:static sm:inline-grid sm:auto-cols-max sm:grid-flow-col sm:grid-cols-none sm:rounded-2xl sm:bg-surface sm:elevation-raised"
+              className="fixed inset-x-3 bottom-3 z-20 grid grid-cols-6 rounded-card border border-line bg-surface/95 p-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] elevation-overlay backdrop-blur sm:static sm:inline-grid sm:auto-cols-max sm:grid-flow-col sm:grid-cols-none sm:rounded-2xl sm:bg-surface sm:elevation-raised"
               onKeyDown={(e) => {
                 const step =
                   e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
@@ -683,6 +705,18 @@ function App() {
                     priced={priced}
                   />
                 ))}
+
+              {tab === 'league' && (
+                <LeagueHistory
+                  stats={history.stats}
+                  loading={history.loading}
+                  failed={history.failed}
+                  truncated={history.truncated}
+                  mode={standingsMode}
+                  onModeChange={setStandingsMode}
+                  myKey={league.rosters.find((r) => r.rosterId === myRosterId)?.ownerId ?? null}
+                />
+              )}
             </div>
           </>
         )}
