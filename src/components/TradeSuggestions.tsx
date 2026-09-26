@@ -271,6 +271,17 @@ export function TradeSuggestions({
   // The search ran and found nothing, as against a rule that stopped it
   // before it started (trading off, deadline passed, a spare-less roster).
   const searched = result.considered > 0;
+  const reasons = (
+    [
+      ['unbalanced', "couldn't be made even, even with a draft pick added"],
+      ['someoneWorse', 'would leave you or them worse off'],
+      ['overRoster', 'would put a roster over its limit'],
+      ['tooSmall', 'help both sides, but by too little to be worth a negotiation'],
+    ] as const
+  )
+    .map(([key, text]) => ({ key, text, count: result.rejections[key] }))
+    .filter((reason) => reason.count > 0)
+    .sort((a, b) => b.count - a.count);
 
   return (
     <div className="space-y-6">
@@ -358,6 +369,23 @@ export function TradeSuggestions({
           </h3>
           {/* The engine's note already says how many packages it searched. */}
           <p className="mt-2 max-w-2xl text-sm text-muted">{result.note}</p>
+          {/*
+            Why, counted (#133). Measured on a live league, the old one-line
+            excuse named the two smallest reasons and missed the largest, so
+            the reader gets the breakdown instead, biggest first.
+          */}
+          {searched && reasons.length > 0 && (
+            <ul className="mt-4 max-w-2xl space-y-2">
+              {reasons.map(({ key, count, text }) => (
+                <li key={key} className="flex items-baseline gap-3 text-sm">
+                  <span className="w-12 shrink-0 text-right font-display text-lg font-bold tabular-nums text-ink">
+                    {count.toLocaleString('en-US')}
+                  </span>
+                  <span className="text-muted">{text}</span>
+                </li>
+              ))}
+            </ul>
+          )}
           {searched && firstPartner !== undefined && !league.settings.tradesDisabled && (
             <div className="mt-5 flex flex-wrap gap-2">
               <button

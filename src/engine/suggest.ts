@@ -117,10 +117,42 @@ export interface SuggestedTrade {
   whyTheySayYes: string[];
 }
 
+/**
+ * Why the packages that did not become offers failed, counted.
+ *
+ * Measured on a live league for #133, the engine's one-line excuse for an
+ * empty result — "they leave the other team worse off, or the gain is too
+ * small" — named the two smallest reasons and missed the largest: about half
+ * of all packages cannot be made even at all. An empty list is an answer, and
+ * the reader deserves the actual breakdown behind it.
+ *
+ * Each rejected package is counted once, under the first test it failed, in the
+ * order the tests run.
+ */
+export interface Rejections {
+  /** Could not be brought within tolerance, even with a draft pick added. */
+  unbalanced: number;
+  /** Would leave one side over its roster limit. */
+  overRoster: number;
+  /** Would leave you, them, or both worse off. */
+  someoneWorse: number;
+  /** Helps both sides, but by less than the floor worth negotiating over. */
+  tooSmall: number;
+}
+
+const noRejections = (): Rejections => ({
+  unbalanced: 0,
+  overRoster: 0,
+  someoneWorse: 0,
+  tooSmall: 0,
+});
+
 export interface SuggestionResult {
   trades: SuggestedTrade[];
   /** How many packages were built and evaluated, for an honest "searched N". */
   considered: number;
+  /** Why the ones that did not become offers failed. */
+  rejections: Rejections;
   /** Set when nothing cleared the bar, explaining what blocked it. */
   note: string | null;
 }
@@ -1093,6 +1125,8 @@ function buildSuggestion(
   ctx: SuggestContext,
   tolerance: number,
   minBenefitShare: number,
+  /** Where each rejection is counted. See `Rejections`. */
+  rejections: Rejections = noRejections(),
 ): SuggestedTrade | null {
   const balanced = balancePackage(
     give,
@@ -1102,7 +1136,10 @@ function buildSuggestion(
     ctx,
     tolerance,
   );
-  if (!balanced) return null;
+  if (!balanced) {
+    rejections.unbalanced++;
+    return null;
+  }
 
   /*
     Roster-size legality, and it is checked here rather than read off the
@@ -1123,6 +1160,7 @@ function buildSuggestion(
     !fitsRoster(myRosterId, balanced.give, balanced.get, ctx) ||
     !fitsRoster(partner.summary.rosterId, balanced.get, balanced.give, ctx)
   ) {
+    rejections.overRoster++;
     return null;
   }
 
@@ -1148,6 +1186,8 @@ function buildSuggestion(
   const floor = (side: TradeSideResult) =>
     Math.max(1, side.starterValueBefore * minBenefitShare);
   if (my.benefit.total < floor(mySide) || their.benefit.total < floor(theirSide)) {
+    if (my.benefit.total <= 0 || their.benefit.total <= 0) rejections.someoneWorse++;
+    else rejections.tooSmall++;
     return null;
   }
 
@@ -1286,6 +1326,7 @@ export function suggestTrades(
     return {
       trades: [],
       considered: 0,
+      rejections: noRejections(),
       note: 'This league has trading switched off, so there are no offers to make. Everything else in the app still works — the rosters, the values and the weekly lineup do not depend on being able to trade.',
     };
   }
@@ -1295,6 +1336,7 @@ export function suggestTrades(
     return {
       trades: [],
       considered: 0,
+      rejections: noRejections(),
       note: `This league's trade deadline passed in week ${window.deadline}, so the roster you have is the one you finish the season with. Suggestions come back in the offseason, when they can be acted on again.`,
     };
   }
@@ -1313,7 +1355,12 @@ export function suggestTrades(
   const mySummary = ctx.summaries.find((s) => s.rosterId === myRosterId);
   const myAnalysis = analyses.get(myRosterId);
   if (!mySummary || !myAnalysis) {
-    return { trades: [], considered: 0, note: 'That team is no longer in this league.' };
+    return {
+      trades: [],
+      considered: 0,
+      rejections: noRejections(),
+      note: 'That team is no longer in this league.',
+    };
   }
 
   const mine = { summary: mySummary, analysis: myAnalysis };
@@ -1323,6 +1370,7 @@ export function suggestTrades(
     return {
       trades: [],
       considered: 0,
+      rejections: noRejections(),
       // Two different reasons the pool is empty, and only one of them is about
       // what you own. Telling a manager who holds four firsts that he has "no
       // picks to spend" is a false statement about his own roster.
@@ -1334,6 +1382,7 @@ export function suggestTrades(
 
   const trades: SuggestedTrade[] = [];
   let considered = 0;
+  const rejections = noRejections();
 
   // Mine do not change from partner to partner, so they are built once.
   const myWeakest = weakestSlot(myAnalysis);
@@ -1366,6 +1415,7 @@ export function suggestTrades(
         ctx,
         tolerance,
         minBenefitShare,
+        rejections,
       );
       if (!trade) return;
 
@@ -1460,12 +1510,14 @@ export function suggestTrades(
   const because =
     pickTrading && ctx.picks.length === 0
       ? " Draft-pick values didn't load, which removes the usual way to balance an uneven offer — try again in a moment."
-      : ' Either they leave the other team worse off, or the gain is too small on both sides to be worth opening a negotiation over.';
+      : // The reasons are counted in `rejections` and shown as a breakdown,
+        // rather than guessed at here. See `Rejections`.
+        '';
   const alsoUnder = pickTrading
     ? ''
     : ' This league also has pick trading switched off, so an uneven offer here cannot be levelled with a draft pick.';
 
   const note = ranked.length > 0 ? null : `${searched}${because}${alsoUnder}`;
 
-  return { trades: ranked, considered, note };
+  return { trades: ranked, considered, rejections, note };
 }
