@@ -62,6 +62,14 @@ vi.mock('./hooks/useLeagueData', () => ({
     failed: false,
     truncated: false,
   }),
+  // The history walk behind the League tab (#52), idle: these tests are about
+  // the shell, and the tab has its own.
+  useHistoryStats: () => ({
+    stats: undefined,
+    loading: false,
+    failed: false,
+    truncated: false,
+  }),
   // The manager model's walk, idle for the same reason: the suggestion list
   // renders identically with and without it, and these tests are about the
   // shell rather than about the ordering inside that list.
