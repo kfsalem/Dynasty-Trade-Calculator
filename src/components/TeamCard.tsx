@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PlayerName } from './PlayerName';
 import type { RosterSummary, ValuedPlayer } from '../engine/rosterValue';
 import type { SnapShare } from '../engine/snapShare';
 import type { Opportunity } from '../engine/opportunity';
@@ -77,8 +78,8 @@ function PlayerLine({
       </span>
       {/* Four columns of numbers leave a long name truncating, so the full one
           stays available on hover rather than being lost. */}
-      <span className="min-w-0 flex-1 truncate" title={entry.player.name}>
-        {entry.player.name}
+      <span className="min-w-0 flex-1 truncate">
+        <PlayerName player={entry.player} />
         {entry.player.team ? (
           <span className="ml-1.5 text-xs text-subtle">{entry.player.team}</span>
         ) : (

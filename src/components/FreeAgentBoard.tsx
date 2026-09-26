@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { PlayerName } from './PlayerName';
 import { POSITIONS } from '../types';
 import type { Position } from '../types';
 import type { FreeAgent, FreeAgentBoard as Board } from '../engine/freeAgents';
@@ -254,8 +255,8 @@ function Row({
         {style.label}
       </span>
 
-      <span className="min-w-0 flex-1 truncate" title={entry.player.name}>
-        {entry.player.name}
+      <span className="min-w-0 flex-1 truncate">
+        <PlayerName player={entry.player} />
         <span className="ml-1.5 text-xs text-subtle">{entry.player.team ?? 'FA'}</span>
         {entry.player.injury && (
           /* Solid red for a season-ending designation, lighter for week-to-week
