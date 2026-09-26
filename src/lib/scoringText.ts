@@ -1,4 +1,6 @@
 import type { ScoringSettings } from '../types';
+import type { ScoringFidelity } from '../engine/scoringCheck';
+import type { ScoringPremium } from '../engine/scoringPremium';
 
 /**
  * A league's scoring, in words a manager would use.
@@ -122,4 +124,38 @@ export function premiumSentence(premium: {
     ({ position, pct }) => `${position} ${pct > 0 ? '+' : ''}${pct}%`,
   );
   return `Market prices are corrected for it: ${joinWords(phrases)}.`;
+}
+
+/**
+ * The scoring check as a header badge: a few words, and whether it is a warning.
+ *
+ * The full note used to sit as a paragraph at the top of every tab; since #120
+ * it lives behind this badge, so the badge carries the verdict and the note the
+ * evidence. Null exactly when the note itself has nothing to say — the two must
+ * agree, or the header shows a badge that opens onto nothing.
+ */
+export function scoringBadge(
+  fidelity: ScoringFidelity | undefined,
+  premium?: ScoringPremium,
+): { label: string; caution: boolean } | null {
+  if (!fidelity) return null;
+  const { verdict, compared, exact, unreachable, unknown } = fidelity;
+  const missing = describeRules([...unreachable, ...unknown]);
+  const priced = premium?.measured ? premiumSentence(premium) : null;
+  if (verdict === 'unchecked' && missing.length === 0 && !priced) return null;
+
+  const count = (n: number) => n.toLocaleString('en-US');
+  switch (verdict) {
+    case 'exact':
+      return { label: 'Scoring matches Sleeper', caution: false };
+    case 'unreliable':
+      return { label: "Scoring can't be reproduced", caution: true };
+    case 'unchecked':
+      return { label: 'Scoring not checked yet', caution: false };
+    default:
+      return {
+        label: `Scoring checked · ${count(exact)} of ${count(compared)} weeks exact`,
+        caution: false,
+      };
+  }
 }

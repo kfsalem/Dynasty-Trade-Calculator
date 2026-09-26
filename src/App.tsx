@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { LeagueImport } from './components/LeagueImport';
 import { LeagueHeader } from './components/LeagueHeader';
-import { ScoringNote } from './components/ScoringNote';
+import { ScoringBadge } from './components/ScoringBadge';
 import { RosterList } from './components/RosterList';
 import { TradeBuilder, type PendingTrade } from './components/TradeBuilder';
 import { TradeSuggestions } from './components/TradeSuggestions';
@@ -45,6 +45,55 @@ const TABS: [Tab, string, string][] = [
   ['agents', 'Free agents', 'Free agents'],
   ['trade', 'Trade calculator', 'Calculator'],
 ];
+
+/**
+ * One icon per tab, for the phone's bottom bar (#120), where a label alone at
+ * 11px is too little to find a tab by. Stroke paths in one 24px box so they
+ * sit at one weight; decorative, since each tab keeps its label.
+ */
+const TAB_ICON: Record<Tab, ReactNode> = {
+  analysis: <path d="M3 11l9-7 9 7v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z" />,
+  ideas: <path d="M7 7h13M16 3l4 4-4 4M17 17H4M8 13l-4 4 4 4" />,
+  rosters: (
+    <>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M17 11a3 3 0 100-6M21 20c0-2.6-1.6-4.8-4-5.6" />
+    </>
+  ),
+  agents: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v8M8 12h8" />
+    </>
+  ),
+  trade: <path d="M12 3v18M5 7h14M5 7l-3 6a3 3 0 006 0zM19 7l-3 6a3 3 0 006 0z" />,
+};
+
+/** The product mark: a rising line on the action azure. */
+function BrandMark() {
+  return (
+    <div className="flex shrink-0 items-center gap-2.5">
+      <span className="grid h-9 w-9 place-items-center rounded-xl bg-action text-on-action elevation-raised">
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          className="h-5 w-5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 17l5-5 4 4 7-8" />
+          <path d="M15 8h5v5" />
+        </svg>
+      </span>
+      <span className="hidden font-display text-lg font-extrabold tracking-tight sm:inline">
+        Dynasty Utility
+      </span>
+    </div>
+  );
+}
 
 /**
  * What the two trade tabs show in a league that has trading switched off.
@@ -319,10 +368,29 @@ function App() {
         them in full — the desktop view was the degraded one. See
         docs/DESIGN-SYSTEM.md §2.
       */}
-      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-16">
-        <div className="mb-6 flex justify-end">
-          <ThemeToggle />
-        </div>
+      {/*
+        Bottom padding on a phone clears the fixed tab bar (#120); from `sm` up
+        the tabs are back in the flow.
+      */}
+      <div className="mx-auto max-w-6xl px-4 pt-4 pb-28 sm:px-6 sm:pt-6 sm:pb-16">
+        {/*
+          The header (#120): the mark, then the league and its scoring check as
+          pills that open onto their detail, then the theme. The league's
+          badges and the scoring paragraph used to stand over every tab; the
+          verdicts stay here and the evidence is a tap away.
+        */}
+        <header className="mb-8 flex items-center gap-2 sm:gap-3">
+          <BrandMark />
+          <div className="ml-auto flex min-w-0 items-center gap-2">
+            {ready && (
+              <>
+                <LeagueHeader league={league} onReset={() => changeLeague(null)} />
+                <ScoringBadge fidelity={scoringFidelity} premium={premium} />
+              </>
+            )}
+            <ThemeToggle />
+          </div>
+        </header>
         {showImport && (
           <div className="mx-auto max-w-xl">
             <p className="text-sm font-semibold uppercase tracking-widest text-accent">
@@ -354,14 +422,6 @@ function App() {
 
         {ready && (
           <>
-            <LeagueHeader league={league} onReset={() => changeLeague(null)} />
-            {/*
-              Under the badges that state the league's rules, because it is the
-              same subject one level down: those say what the league does, this
-              says how much of it the app can actually reproduce.
-            */}
-            <ScoringNote fidelity={scoringFidelity} premium={premium} />
-
             {/*
               A real tablist, not just the roles.
 
@@ -376,19 +436,18 @@ function App() {
               role="tablist"
               aria-label="League views"
               /*
-                Scrolls sideways rather than wrapping, once it has to.
+                One tablist, two places (#120). On a phone it is a bar fixed to
+                the bottom of the screen, where a thumb already is — five equal
+                columns with an icon over each label, so nothing scrolls or
+                wraps at 320px. From `sm` up it is a segmented control in the
+                flow. Where it sits is a question about the window, so this one
+                is keyed to width; how tall each tab is stays keyed to the
+                pointer (§2).
 
-                Four labels plus padding measure ~367px, so 375px fits and
-                320px does not — and a tablist in two rows reads as two groups
-                of tabs. A strip that slides is the standard answer and, unlike
-                shortening the labels, it holds for any label and any locale.
-
-                It costs one thing: `overflow-x: auto` makes this a scroll
-                container in both axes, which would clip the 2px focus ring the
-                base layer draws *outside* each tab. The tabs therefore draw
-                theirs inside — see the button below.
+                Same element in both, so the keyboard contract below — roving
+                tabIndex, arrows, Home and End — holds in both.
               */
-              className="mt-6 flex gap-1 overflow-x-auto border-b border-line [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              className="fixed inset-x-3 bottom-3 z-20 grid grid-cols-5 rounded-card border border-line bg-surface/95 p-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] elevation-overlay backdrop-blur sm:static sm:inline-grid sm:auto-cols-max sm:grid-flow-col sm:grid-cols-none sm:rounded-2xl sm:bg-surface sm:elevation-raised"
               onKeyDown={(e) => {
                 const step =
                   e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
@@ -421,28 +480,39 @@ function App() {
                   tabIndex={tab === value ? 0 : -1}
                   onClick={() => setTab(value)}
                   /*
-                    Tighter horizontally and taller vertically on a touch
-                    device: the four labels at the pointer padding measure
-                    ~426px against a 375px phone, and `py-3` is what makes each
-                    tab a 44px target (#18).
+                    At least 44px tall on a touch device either way (#18): the
+                    phone bar stacks icon over label, and the segmented control
+                    keeps `py-3` until a fine pointer takes it down.
 
                     `whitespace-nowrap` because a tab that wraps *internally*
-                    ("Trade / calculator") is the same failure one level down,
-                    and the focus ring is inset because the scrolling strip
-                    above would clip an outset one.
+                    ("Trade / calculator") is the same failure one level down.
+                    The focus ring is inset so it stays inside the pill and
+                    does not collide with its neighbours.
                   */
-                  className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-2 py-3 text-sm font-medium transition-colors focus-visible:[outline-offset:-2px] fine:px-4 fine:py-2 ${
+                  className={`flex min-h-11 flex-col items-center justify-center gap-1 whitespace-nowrap rounded-xl px-1 py-1.5 text-[11px] font-medium transition-colors focus-visible:[outline-offset:-2px] sm:flex-row sm:gap-2 sm:px-4 sm:py-3 sm:text-sm fine:sm:py-2 ${
                     tab === value
-                      ? 'border-accent text-accent'
-                      : 'border-transparent text-subtle hover:text-ink'
+                      ? 'text-accent sm:bg-raised sm:text-ink sm:elevation-raised'
+                      : 'text-subtle hover:text-ink'
                   }`}
                 >
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    className={`h-5 w-5 sm:hidden ${tab === value ? 'text-accent' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    {TAB_ICON[value]}
+                  </svg>
                   {short === label ? (
                     label
                   ) : (
                     <>
-                      <span className="fine:hidden">{short}</span>
-                      <span className="hidden fine:inline">{label}</span>
+                      <span className="sm:hidden">{short}</span>
+                      <span className="hidden sm:inline">{label}</span>
                     </>
                   )}
                 </button>
