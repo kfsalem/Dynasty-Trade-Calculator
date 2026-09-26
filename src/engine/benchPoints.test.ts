@@ -48,6 +48,8 @@ function season(overrides: Partial<SeasonHistory> = {}): SeasonHistory {
     managers: new Map([[1, { userId: 'u1', name: 'Ann', teamName: 'Ann' }]]),
     weeks: [],
     claimed: new Map(),
+    results: [],
+    playoffs: { weekStart: 15, teams: 6, roundType: 0, winners: [], losers: [] },
     ...overrides,
   };
 }

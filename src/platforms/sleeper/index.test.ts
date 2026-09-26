@@ -19,6 +19,7 @@ const client = {
   getRosters: vi.fn(),
   getUsers: vi.fn(),
   getMatchups: vi.fn(),
+  getBracket: vi.fn(),
   getTransactions: vi.fn(),
   getPlayers: vi.fn(),
   getDraft: vi.fn(),
@@ -96,6 +97,8 @@ function stubChain(seasons: string[]) {
   ]);
   client.getUsers.mockResolvedValue([{ user_id: 'u1', display_name: 'Ann', avatar: null }]);
   client.getMatchups.mockResolvedValue(matchup());
+  // No playoffs in these seasons: the walk, not the standings, is under test.
+  client.getBracket.mockResolvedValue([]);
   client.getTransactions.mockImplementation((id: string, week: number) =>
     Promise.resolve(transaction(`${id}-${week}`, Number(id.slice(1)) * 100 + week)),
   );

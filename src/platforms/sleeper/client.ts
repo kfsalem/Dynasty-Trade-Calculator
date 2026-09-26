@@ -13,6 +13,8 @@ import {
   sleeperAccountSchema,
   sleeperMatchupsSchema,
   sleeperTransactionsSchema,
+  sleeperBracketSchema,
+  type SleeperBracketMatch,
   type SleeperMatchup,
   type SleeperTransaction,
   type SleeperLeague,
@@ -92,6 +94,19 @@ export function getDraft(draftId: string): Promise<SleeperDraft> {
  */
 export function getMatchups(leagueId: string, week: number): Promise<SleeperMatchup[]> {
   return fetchJson(`${BASE}/league/${leagueId}/matchups/${week}`, sleeperMatchupsSchema);
+}
+
+/**
+ * A season's playoff bracket, winners or losers (#52).
+ *
+ * Empty until the playoffs are seeded, which is every season still being
+ * played; the history reads it for finished seasons.
+ */
+export function getBracket(
+  leagueId: string,
+  which: 'winners' | 'losers',
+): Promise<SleeperBracketMatch[]> {
+  return fetchJson(`${BASE}/league/${leagueId}/${which}_bracket`, sleeperBracketSchema);
 }
 
 /**

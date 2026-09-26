@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  mapBracket,
+  mapTeamResults,
   mapClaimedTotals,
   mapFreeAgents,
   mapLeague,
@@ -690,5 +692,39 @@ describe('mapTransactions', () => {
   it('stamps the week the caller asked for', () => {
     // `leg` says 3 on the row; the request was for week 9.
     expect(mapTransactions('2025', 9, [row()])[0].week).toBe(9);
+  });
+});
+
+describe('mapTeamResults (#52)', () => {
+  it('reads each team’s score and who it played', () => {
+    const rows = [
+      { roster_id: 1, matchup_id: 2, points: 154.56 },
+      { roster_id: 2, matchup_id: null, points: 182.4 },
+    ] as SleeperMatchup[];
+
+    expect(mapTeamResults(15, rows)).toEqual([
+      { week: 15, rosterId: 1, matchupId: 2, points: 154.56 },
+      { week: 15, rosterId: 2, matchupId: null, points: 182.4 },
+    ]);
+  });
+
+  it('maps a week nobody has played to nothing, never a week of shutouts', () => {
+    const rows = [{ roster_id: 1, matchup_id: 1, points: 0 }] as SleeperMatchup[];
+    expect(mapTeamResults(16, rows)).toEqual([]);
+  });
+});
+
+describe('mapBracket (#52)', () => {
+  it('keeps the placement marker, so a third-place game can be told from a semifinal', () => {
+    // Two rows of the live 2025 winners bracket.
+    const bracket = mapBracket([
+      { r: 2, m: 3, t1: 2, t2: 10, w: 10, l: 2 },
+      { r: 3, m: 7, t1: 2, t2: 5, w: 2, l: 5, p: 3 },
+    ]);
+
+    expect(bracket).toEqual([
+      { round: 2, match: 3, teams: [2, 10], winner: 10, loser: 2, placement: null },
+      { round: 3, match: 7, teams: [2, 5], winner: 2, loser: 5, placement: 3 },
+    ]);
   });
 });
