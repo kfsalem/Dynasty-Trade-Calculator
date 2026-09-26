@@ -25,6 +25,20 @@ describe('describeTrade', () => {
     );
   });
 
+  // #138: a release a full roster makes to take the trade is part of it.
+  it('says who is released to make room', () => {
+    const holani = { id: 'h', name: 'George Holani' } as SuggestedTrade['drops'][number]['player'];
+    expect(
+      describeTrade({
+        ...trade(['2027 1st'], ['Trevor Lawrence']),
+        partnerRosterId: 2,
+        drops: [{ rosterId: 1, player: holani, value: 363 }],
+      }),
+    ).toBe(
+      'Send 2027 1st to DREAM TEAM 2028 for Trevor Lawrence. You release George Holani to make room. Very fair, 1% apart.',
+    );
+  });
+
   it('lists three or more assets as a sentence would', () => {
     expect(describeTrade(trade(['A', 'B', 'C'], ['D'], 'slightly_unfair', 0.12))).toBe(
       'Send A, B and C to DREAM TEAM 2028 for D. Slightly uneven, 12% apart.',

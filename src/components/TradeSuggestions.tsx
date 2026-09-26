@@ -155,6 +155,33 @@ function SuggestionCard({
         </div>
       </div>
 
+      {/*
+        The release a full roster makes to take this (#138). Named with his value
+        because it is part of the price: the figures below already assume he is
+        gone, and a manager should see who that is before opening the offer.
+      */}
+      {trade.drops.length > 0 && (
+        <ul className="mt-3 space-y-1">
+          {trade.drops.map((drop) => (
+            <li
+              key={drop.player.id}
+              className="flex flex-wrap items-center gap-x-1.5 rounded-xl border border-caution/40 bg-caution-soft px-3 py-2 text-sm text-ink"
+            >
+              <span className="font-semibold text-caution">
+                {drop.rosterId === trade.partnerRosterId
+                  ? `${trade.partnerName} releases`
+                  : 'You release'}
+              </span>
+              <PlayerName player={drop.player} className="font-medium" />
+              <span className="text-muted">
+                ({drop.player.position}, <span className="tabular">{formatValue(drop.value)}</span>)
+                to make room on a full roster.
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Outcome label="Your lineup" value={trade.myBenefit.now} />
         <Outcome label="Your 3-year" value={trade.myBenefit.future} />
