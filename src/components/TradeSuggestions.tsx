@@ -14,7 +14,7 @@ import { FAIRNESS_LABEL } from '../engine/trade';
 import { POSITION_STYLES, formatValue } from '../lib/format';
 import type { PendingTrade } from './TradeBuilder';
 import { PlayerAvatar } from './PlayerAvatar';
-import { PlayerName } from './PlayerName';
+import { PickName, PlayerName } from './PlayerName';
 
 interface Props {
   league: League;
@@ -71,7 +71,7 @@ function AssetChip({ asset }: { asset: TradeAsset }) {
       {asset.kind === 'player' ? (
         <PlayerName player={asset.player} className="min-w-0 flex-1 truncate font-medium" />
       ) : (
-        <span className="min-w-0 flex-1 truncate font-medium">{asset.label}</span>
+        <PickName pick={asset.pick} className="min-w-0 flex-1 truncate font-medium" />
       )}
       {/* Market first, to agree with the fairness verdict on this same card —
           that percentage is computed on market values, so showing only the

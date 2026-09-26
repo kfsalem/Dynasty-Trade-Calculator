@@ -5,7 +5,7 @@ import { PlayerDetail } from './PlayerDetail';
 import { PlayerName } from './PlayerName';
 import { OpenPlayerContext } from '../hooks/useOpenPlayer';
 import type { PlayerDetail as Detail } from '../engine/playerDetail';
-import { makePlayer } from '../engine/testFixtures';
+import { makePick, makePlayer } from '../engine/testFixtures';
 
 const detail = (over: Partial<Detail> = {}): Detail => ({
   player: { ...makePlayer('p1', 'WR', 24), name: 'Marvin Harrison', team: 'ARI' },
@@ -79,5 +79,45 @@ describe('PlayerName', () => {
   it('stays plain text outside the provider, rather than a button that does nothing', () => {
     render(<PlayerName player={makePlayer('p9', 'RB')} />);
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+});
+
+describe('PlayerDetail, for a draft pick', () => {
+  const pickDetail = (slotKnown: boolean) => ({
+    pick: makePick('2027-3-2', '2027', 3, 2, 140, {
+      ownerRosterId: 1,
+      marketValue: 168,
+      slot: 1,
+      slotKnown,
+      label: slotKnown ? '2027 3rd (3.01)' : '2027 3rd (proj 3.01)',
+    }),
+    holder: { rosterId: 1, teamName: 'Big 3', mine: true },
+    original: { rosterId: 2, teamName: 'Rookie SZN', mine: false },
+    teamCount: 10,
+  });
+
+  it('says whose it is, what it is worth, and how picks are priced', () => {
+    render(
+      <PlayerDetail detail={null} pick={pickDetail(false)} chartSeason={2025} onClose={() => {}} />,
+    );
+
+    expect(screen.getByRole('heading', { name: '2027 3rd (proj 3.01)' })).toBeInTheDocument();
+    expect(screen.getByText(/Held by you · originally Rookie SZN's/)).toBeInTheDocument();
+    expect(screen.getByText('168')).toBeInTheDocument();
+    // League size moves the price: a 3.01 in a ten-team draft is the 21st pick.
+    expect(screen.getByText(/a 3\.01 is the 21st pick here/)).toBeInTheDocument();
+  });
+
+  it('tells a projected slot from a published one', () => {
+    const { unmount } = render(
+      <PlayerDetail detail={null} pick={pickDetail(false)} chartSeason={2025} onClose={() => {}} />,
+    );
+    expect(screen.getByText(/Projected from how strong Rookie SZN's/)).toBeInTheDocument();
+    unmount();
+
+    render(
+      <PlayerDetail detail={null} pick={pickDetail(true)} chartSeason={2025} onClose={() => {}} />,
+    );
+    expect(screen.getByText(/published its draft order/)).toBeInTheDocument();
   });
 });

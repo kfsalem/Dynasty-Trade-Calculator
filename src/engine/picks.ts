@@ -61,7 +61,7 @@ export interface KnownDraftOrder {
  * Linear repeats the order every round. Snake reverses the even ones, so the
  * team holding 1.01 picks last in the second round — pricing its second as
  * though it picked first overstates it by roughly double, which matters
- * because the realism curve reads the absolute pick number and nothing else.
+ * because the value lookup reads the absolute pick number and nothing else.
  */
 export function overallPickNumber(
   round: number,

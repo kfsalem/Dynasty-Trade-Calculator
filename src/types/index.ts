@@ -185,12 +185,11 @@ export interface DraftPick {
   /**
    * The figure fairness is argued on, comparable to `PlayerValue.marketValue`.
    *
-   * Not the raw source quote: the rookie-pick realism curve is applied here as
-   * well as to `value`. That is deliberate. The curve corrects a market that
-   * overprices late picks, and applying it to only the league-adjusted side
-   * would let the engine hand over third-rounders that "balance" a trade while
-   * costing it nothing. The consequence to be aware of is that a third-rounder
-   * shows far below what KeepTradeCut would quote for it.
+   * DynastyProcess's quote, read at the pick's overall number in this league's
+   * draft, with nothing applied on top. There used to be a rookie-pick realism
+   * curve here; it doubled a cliff the source already has and was removed (see
+   * the note at the top of `engine/picks`). Where in the round a pick lands and
+   * how many teams the league has are what move this number.
    */
   marketValue: number;
   /** Draft slot of the original owner: the real one when known, else projected. */

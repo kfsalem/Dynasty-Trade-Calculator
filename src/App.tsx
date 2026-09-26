@@ -4,7 +4,7 @@ import { LeagueHeader } from './components/LeagueHeader';
 import { ScoringBadge } from './components/ScoringBadge';
 import { PlayerDetail } from './components/PlayerDetail';
 import { OpenPlayerContext } from './hooks/useOpenPlayer';
-import { playerDetail } from './engine/playerDetail';
+import { pickDetail, playerDetail } from './engine/playerDetail';
 import { RosterList } from './components/RosterList';
 import { TradeBuilder, type PendingTrade } from './components/TradeBuilder';
 import { TradeSuggestions } from './components/TradeSuggestions';
@@ -373,9 +373,18 @@ function App() {
   useEffect(() => setOpenPlayerId(null), [leagueId]);
   const openPlayer = useCallback((id: string) => setOpenPlayerId(id), []);
   const closePlayer = useCallback(() => setOpenPlayerId(null), []);
+  // A pick id ("2027-1-3") and a player id never collide, so one id in state
+  // serves both; the pick list is asked first because it is the shorter.
+  const openPick = useMemo(
+    () =>
+      openPlayerId && league && picks
+        ? pickDetail(openPlayerId, { league, picks, myRosterId })
+        : null,
+    [openPlayerId, league, picks, myRosterId],
+  );
   const detail = useMemo(
     () =>
-      openPlayerId && league && summaries
+      openPlayerId && !openPick && league && summaries
         ? playerDetail(openPlayerId, {
             league,
             summaries,
@@ -388,7 +397,7 @@ function App() {
             trends,
           })
         : null,
-    [openPlayerId, league, summaries, myRosterId, freeAgents, snaps, usage, roles, adjustments, trends],
+    [openPlayerId, openPick, league, summaries, myRosterId, freeAgents, snaps, usage, roles, adjustments, trends],
   );
 
   return (
@@ -680,6 +689,7 @@ function App() {
       </div>
       <PlayerDetail
         detail={detail}
+        pick={openPick}
         chartSeason={snapsMeta?.chartSeason ?? null}
         priced={priced}
         onClose={closePlayer}

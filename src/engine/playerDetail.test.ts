@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { playerDetail, type PlayerDetailSources } from './playerDetail';
+import { pickDetail, playerDetail, type PlayerDetailSources } from './playerDetail';
 import { summarizeRoster } from './rosterValue';
 import type { FreeAgent } from './freeAgents';
 import type { RoleTrend } from './roleTrend';
 import type { Player, PlayerValue } from '../types';
-import { makeLeague, makePlayer, makeRoster, makeSettings, makeValue } from './testFixtures';
+import {
+  makeLeague,
+  makePick,
+  makePlayer,
+  makeRoster,
+  makeSettings,
+  makeValue,
+} from './testFixtures';
 
 /**
  * One WR slot, three teams. Roster 1 is yours: a 3,000 starter and a 1,000
@@ -80,5 +87,23 @@ describe('playerDetail', () => {
 
   it('returns null for an id the league has never heard of', () => {
     expect(playerDetail('nobody', sources())).toBeNull();
+  });
+});
+
+describe('pickDetail', () => {
+  it('names who holds a pick and whose finish decides where it lands', () => {
+    const { league } = sources();
+    const pick = makePick('2027-1-2', '2027', 1, 2, 900, { ownerRosterId: 1 });
+
+    const detail = pickDetail('2027-1-2', { league, picks: [pick], myRosterId: 1 });
+
+    expect(detail?.holder).toEqual({ rosterId: 1, teamName: 'Team 1', mine: true });
+    expect(detail?.original).toEqual({ rosterId: 2, teamName: 'Team 2', mine: false });
+    expect(detail?.teamCount).toBe(3);
+  });
+
+  it('returns null for an id that is not a pick', () => {
+    const { league } = sources();
+    expect(pickDetail('star', { league, picks: [], myRosterId: 1 })).toBeNull();
   });
 });
