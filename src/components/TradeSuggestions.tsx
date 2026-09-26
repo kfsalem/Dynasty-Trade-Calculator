@@ -6,6 +6,7 @@ import type { FreeAgent } from '../engine/freeAgents';
 import type { RoleTrends } from '../engine/roleTrend';
 import type { ManagerModel } from '../engine/managers';
 import { countPhrase, type Countable } from '../lib/learnedText';
+import { describeTrade } from '../lib/tradeText';
 import type { SeasonOdds } from '../engine/analysis';
 import { deadlineNotice, tradeWindow } from '../engine/tradeWindow';
 import { RoleTrendPanel } from './RoleTrendPanel';
@@ -103,9 +104,6 @@ function SuggestionCard({
   rank: number;
   onOpen: () => void;
 }) {
-  const ids = (assets: TradeAsset[], kind: TradeAsset['kind']) =>
-    assets.filter((a) => a.kind === kind).map((a) => a.id);
-
   return (
     <article className="card">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -205,10 +203,7 @@ function SuggestionCard({
           Open in calculator
         </button>
       </div>
-      <p className="sr-only">
-        {ids(trade.give, 'player').length} players and {ids(trade.give, 'pick').length} picks
-        sent.
-      </p>
+      <p className="sr-only">{describeTrade(trade)}</p>
     </article>
   );
 }
