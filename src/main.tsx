@@ -7,6 +7,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 // per subset, and `unicode-range` means a browser fetches only the subset it
 // needs (~48 kB for latin) however many are emitted.
 import '@fontsource-variable/inter/wght.css'
+// The display face for verdicts and figures (#120), self-hosted the same way.
+import '@fontsource-variable/plus-jakarta-sans/wght.css'
 import './index.css'
 import App from './App.tsx'
 

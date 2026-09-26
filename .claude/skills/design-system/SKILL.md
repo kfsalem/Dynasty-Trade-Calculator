@@ -50,11 +50,10 @@ Hue is still not free: every colour in the data layer has a fixed meaning,
 listed below. If you are reaching for a colour to make something look nicer,
 use weight, size or space instead.
 
-**In transition.** The token values below are what ships today. #120's token
-pass changes page and surface values, adds an elevation scale and the display
-face (Plus Jakarta Sans, self-hosted), and updates this file as it lands. Until
-then, use the tokens as they are — do not hand-roll the new look with raw
-values in components.
+**The tokens below are the new look.** #120's token pass landed them: the
+neutral dark ground, the elevation scale, the action fill, the page glow and
+the display face. Layouts are still being moved onto the verdict-first
+structure tab by tab — build with these tokens, never raw values.
 
 ## Tokens — use these, never raw utilities
 
@@ -67,9 +66,14 @@ Never write `text-gray-500`, `bg-white`, `border-gray-200`, or any raw
 | `--color-surface` / `-raised` / `-page` | backgrounds |
 | `--color-line` | hairlines and dividers |
 | `--color-control` | input/select/checkbox boundary (3:1 — darker than it looks like it should be) |
-| `--color-accent` | interactive: links, focus, selected tab |
+| `--color-accent` | interactive text: links, focus, selected tab |
+| `--color-action` / `--color-on-action` | the solid fill of a primary action and its label — `.btn-primary`. Not `accent`: in dark, accent is too light to carry white text |
 | `--color-positive` / `-negative` / `-caution` | status only |
 | `--color-skeleton` / `-sheen` | loading placeholders; the sheen is the lighter of the two in both themes |
+| `--elevation-raised` / `--elevation-overlay` | the elevation scale — `elevation-raised` for a card on the page (`.card` has it), `elevation-overlay` for a hero or popover. The only shadows. Never `shadow-*` utilities: Tailwind bakes their values in at build time, so a dark override never applies |
+| `--radius-card` | `rounded-card`, the card radius (20px) |
+| `--font-display` | `font-display`: verdicts and headline figures. Everything else is `--font-sans` (Inter) |
+| `--page-glow` | the azure light at the top of the page, on `body` only. Never on a card or chart |
 
 Status colours are **reserved**: never a category, never a series, never
 decoration.
@@ -125,8 +129,8 @@ Every token needs both values. Dark is **selected**, not computed — never an
 automatic inversion, never `filter: invert`. Honour `prefers-color-scheme` plus
 the manual toggle.
 
-Surfaces: light page `#f9fafb` / surface `#ffffff`; dark page `#0f1115` /
-surface `#16181d`.
+Surfaces: light page `#f9fafb` / surface `#ffffff`; dark page `#0a0c10` /
+surface `#12151b` / raised `#1a1e26`. Dark is neutral near-black, never tinted.
 
 ## Motion
 
@@ -161,7 +165,7 @@ system's values as parameters:
 - categorical order: QB, RB, WR, TE (above)
 - sequential: single hue, the sky ramp, light→dark
 - diverging: emerald ↔ red, **neutral grey midpoint**, never a hue in the middle
-- surfaces: `#ffffff` light, `#16181d` dark
+- surfaces: `#ffffff` light, `#12151b` dark
 
 **One axis. Never a dual-axis chart.** Dynasty and win-now are the standing
 temptation — they are two bars or two charts, never two y-scales on one plot.
@@ -197,7 +201,7 @@ Position colours — run from the `dataviz` skill directory:
 
 ```
 node scripts/validate_palette.js "<hex,hex,…>" --mode light --pairs all --surface "#ffffff"
-node scripts/validate_palette.js "<hex,hex,…>" --mode dark  --pairs all --surface "#16181d"
+node scripts/validate_palette.js "<hex,hex,…>" --mode dark  --pairs all --surface "#12151b"
 ```
 
 **Run them. Do not reason about ΔE.** Both are in CI; neither is advisory.
