@@ -115,6 +115,19 @@ export interface SuggestedTrade {
   rationale: string[];
   /** Why the other manager accepts. The half no major calculator shows. */
   whyTheySayYes: string[];
+  /**
+   * Players a side has to release to make room, when the package brings back
+   * more bodies than a full roster holds (#138). Empty for most offers.
+   */
+  drops: RosterDrop[];
+}
+
+/** One player released to make room for a trade. See `chooseDrops`. */
+export interface RosterDrop {
+  rosterId: number;
+  player: Player;
+  /** His dynasty value — what releasing him gives up as an asset. */
+  value: number;
 }
 
 /**
@@ -545,15 +558,32 @@ function sideBenefit(
   side: TradeSideResult,
   contention: ContentionProfile,
   ctx: SuggestContext,
-): { benefit: SideBenefit; afterIds: string[]; afterStarters: Set<string> } {
+  /** Bodies over the roster limit this trade leaves the side, to be released. */
+  overBy = 0,
+): {
+  benefit: SideBenefit;
+  afterIds: string[];
+  afterStarters: Set<string>;
+  drops: RosterDrop[];
+} | null {
   const roster = ctx.league.rosters.find((r) => r.rosterId === side.rosterId);
   if (!roster) throw new Error(`Unknown roster ${side.rosterId}`);
 
   const outgoing = new Set(side.outgoingPlayers.map((p) => p.id));
-  const afterIds = [
+  const traded = [
     ...roster.playerIds.filter((id) => !outgoing.has(id)),
     ...side.incomingPlayers.map((p) => p.id),
   ];
+
+  // The lineup the trade leaves, decided before anyone is released: a drop is
+  // only ever chosen from outside it, which is what keeps `now` — computed by
+  // `evaluateTrade` without any drop — exact.
+  const afterStarters = lineupIds(traded, ctx, roster.taxiIds);
+  const drops = overBy > 0 ? chooseDrops(side, traded, afterStarters, overBy, ctx) : [];
+  if (drops === null) return null;
+
+  const released = new Set(drops.map((d) => d.player.id));
+  const afterIds = traded.filter((id) => !released.has(id));
 
   const pickDelta =
     sum(side.incomingPicks.map((p) => p.value)) - sum(side.outgoingPicks.map((p) => p.value));
@@ -572,8 +602,52 @@ function sideBenefit(
       quadrant: contention.quadrant,
     },
     afterIds,
-    afterStarters: lineupIds(afterIds, ctx, roster.taxiIds),
+    afterStarters,
+    drops,
   };
+}
+
+/** How many drops a side may be asked to make before an offer stops being one. */
+const MAX_DROPS = 2;
+
+/**
+ * Who to release so a full roster can take a trade that brings back more bodies
+ * than it sends (#138).
+ *
+ * A manager at the limit makes these trades all the time by cutting his least
+ * valuable player; the waiver advice already reasons the same way. The rule is
+ * the one a manager would use, with the three exclusions that keep it honest:
+ *
+ * - **Active roster only.** A taxi or IR player frees a taxi or IR spot, which
+ *   an incoming player cannot use, so releasing him makes no room.
+ * - **Never a player in the package.** Receiving a man to cut him is not a trade.
+ * - **Never a starter after the trade.** That keeps the lineup figure exact —
+ *   it was computed without the drop — and a trade that only works by cutting a
+ *   starter is not one to propose.
+ *
+ * Lowest dynasty value first. Null when there are not enough such players.
+ */
+function chooseDrops(
+  side: TradeSideResult,
+  afterIds: string[],
+  afterStarters: Set<string>,
+  count: number,
+  ctx: SuggestContext,
+): RosterDrop[] | null {
+  const roster = ctx.league.rosters.find((r) => r.rosterId === side.rosterId);
+  if (!roster) return null;
+
+  const held = new Set([...roster.taxiIds, ...roster.reserveIds]);
+  const incoming = new Set(side.incomingPlayers.map((p) => p.id));
+  const candidates = afterIds
+    .filter((id) => !held.has(id) && !incoming.has(id) && !afterStarters.has(id))
+    .flatMap((id) => {
+      const player = ctx.players.get(id);
+      return player ? [{ rosterId: side.rosterId, player, value: ctx.values.get(id)?.value ?? 0 }] : [];
+    })
+    .sort((a, b) => a.value - b.value || a.player.id.localeCompare(b.player.id));
+
+  return candidates.length >= count ? candidates.slice(0, count) : null;
 }
 
 const round = (n: number): string => Math.round(n).toLocaleString('en-US');
@@ -997,18 +1071,18 @@ const playersIn = (assets: TradeAsset[]): number =>
  * `evaluateTrade` makes when it warns about the cap — a roster already over the
  * limit is not made illegal by a trade that leaves it the same size or smaller.
  */
-function fitsRoster(
+function overRoster(
   rosterId: number,
   out: TradeAsset[],
   incoming: TradeAsset[],
   ctx: SuggestContext,
-): boolean {
+): number {
   const roster = ctx.league.rosters.find((r) => r.rosterId === rosterId);
-  if (!roster) return false;
+  if (!roster) return Infinity;
 
   const before = roster.playerIds.length;
   const after = before - playersIn(out) + playersIn(incoming);
-  return after <= rosterCap(ctx.league.settings) || after <= before;
+  return Math.max(0, after - Math.max(rosterCap(ctx.league.settings), before));
 }
 
 /**
@@ -1156,10 +1230,14 @@ function buildSuggestion(
     this load-bearing for the first time, and it is counting on numbers already
     in hand where `evaluateTrade` is two lineup rebuilds.
   */
-  if (
-    !fitsRoster(myRosterId, balanced.give, balanced.get, ctx) ||
-    !fitsRoster(partner.summary.rosterId, balanced.get, balanced.give, ctx)
-  ) {
+  /*
+    Since #138 a side that would end over the limit is asked to release its
+    least valuable players rather than the package being thrown away — up to
+    `MAX_DROPS`, and only from players who make room; see `chooseDrops`.
+  */
+  const myOver = overRoster(myRosterId, balanced.give, balanced.get, ctx);
+  const theirOver = overRoster(partner.summary.rosterId, balanced.get, balanced.give, ctx);
+  if (myOver > MAX_DROPS || theirOver > MAX_DROPS) {
     rejections.overRoster++;
     return null;
   }
@@ -1176,8 +1254,13 @@ function buildSuggestion(
   );
 
   const [mySide, theirSide] = analysis.sides;
-  const my = sideBenefit(mySide, mine.analysis.contention, ctx);
-  const their = sideBenefit(theirSide, partner.analysis.contention, ctx);
+  const my = sideBenefit(mySide, mine.analysis.contention, ctx, myOver);
+  const their = sideBenefit(theirSide, partner.analysis.contention, ctx, theirOver);
+  // Over the limit with nobody who could be released to make room.
+  if (!my || !their) {
+    rejections.overRoster++;
+    return null;
+  }
 
   // The guard against the obvious failure mode. An engine that optimizes only
   // your side generates offers nobody accepts, which is the same as generating
@@ -1296,6 +1379,7 @@ function buildSuggestion(
       ctx.trends,
       socialLines(ctx.managers, myRosterId, partner.summary.rosterId, acceptance),
     ),
+    drops: [...my.drops, ...their.drops],
   };
 }
 

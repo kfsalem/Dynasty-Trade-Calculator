@@ -11,11 +11,18 @@ import { joinWords } from './scoringText';
  * what arrives or who from (#100). A summary is the version someone can act on.
  */
 export function describeTrade(
-  trade: Pick<SuggestedTrade, 'give' | 'get' | 'partnerName' | 'analysis'>,
+  trade: Pick<SuggestedTrade, 'give' | 'get' | 'partnerName' | 'analysis'> &
+    Partial<Pick<SuggestedTrade, 'drops' | 'partnerRosterId'>>,
 ): string {
   const labels = (side: SuggestedTrade['give']) => joinWords(side.map((a) => a.label));
   const apart = Math.round(trade.analysis.valueDifferencePct * 100);
-  return `Send ${labels(trade.give)} to ${trade.partnerName} for ${labels(trade.get)}. ${
+  // A release a full roster makes to take the trade is part of it (#138).
+  const drops = (trade.drops ?? []).map((drop) =>
+    drop.rosterId === trade.partnerRosterId
+      ? ` ${trade.partnerName} releases ${drop.player.name} to make room.`
+      : ` You release ${drop.player.name} to make room.`,
+  );
+  return `Send ${labels(trade.give)} to ${trade.partnerName} for ${labels(trade.get)}.${drops.join('')} ${
     FAIRNESS_LABEL[trade.analysis.fairnessRating]
   }, ${apart}% apart.`;
 }

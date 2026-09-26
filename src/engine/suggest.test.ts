@@ -1244,38 +1244,64 @@ describe('uneven packages', () => {
     expect(shapes(suggestTrades(1, world(CONSOLIDATION)))[0]).toEqual([2, 1]);
   });
 
-  it('does not propose a package that would put a roster over its limit', () => {
-    // Cap is `allSlots` (3 starters + 6 bench) with no taxi or IR: nine men.
-    // Team 2 is already at nine, so taking two for one would make ten.
-    const full: Spec[] = CONSOLIDATION.map((spec) =>
-      spec.rosterId === 2
-        ? {
-            ...spec,
-            players: [
-              ...spec.players,
-              ...([
-                ['f1', 'WR', 60, 25],
-                ['f2', 'WR', 55, 25],
-                ['f3', 'WR', 50, 25],
-                ['f4', 'WR', 45, 25],
-                ['f5', 'WR', 40, 25],
-              ] as Spec['players']),
-            ],
-          }
-        : spec,
-    );
+  /*
+    A full roster makes an uneven trade by releasing someone (#138). Cap is
+    `allSlots` (3 starters + 6 bench) with no taxi or IR: nine men. Team 2 is
+    at nine, so taking two for one would make ten — and it is proposed anyway,
+    with its least valuable non-starter released to make room.
+  */
+  const full: Spec[] = CONSOLIDATION.map((spec) =>
+    spec.rosterId === 2
+      ? {
+          ...spec,
+          players: [
+            ...spec.players,
+            ...([
+              ['f1', 'WR', 60, 25],
+              ['f2', 'WR', 55, 25],
+              ['f3', 'WR', 50, 25],
+              ['f4', 'WR', 45, 25],
+              ['f5', 'WR', 40, 25],
+            ] as Spec['players']),
+          ],
+        }
+      : spec,
+  );
 
+  it('lets a full roster take two for one by releasing its least valuable player', () => {
     const result = suggestTrades(1, world(full));
-
-    // Every offer leaves them at nine or fewer: two-for-one is now illegal for
-    // them, though the same package was proposed when they had room for it.
-    const overCap = result.trades.filter(
-      (t) =>
-        t.get.filter((a) => a.kind === 'player').length -
-          t.give.filter((a) => a.kind === 'player').length >
-        0,
+    const consolidation = result.trades.find(
+      (t) => t.give.filter((a) => a.kind === 'player').length === 2,
     );
-    expect(overCap).toEqual([]);
+
+    expect(consolidation).toBeDefined();
+    expect(consolidation!.drops.map((d) => [d.rosterId, d.player.id])).toEqual([
+      [2, 't2_f5'],
+    ]);
+  });
+
+  it('never leaves a side over its limit once its drops are made', () => {
+    const ctx = world(full);
+    const cap = 9;
+    for (const trade of suggestTrades(1, ctx).trades) {
+      for (const rosterId of [1, trade.partnerRosterId]) {
+        const roster = ctx.league.rosters.find((r) => r.rosterId === rosterId)!;
+        const sends = rosterId === 1 ? trade.give : trade.get;
+        const takes = rosterId === 1 ? trade.get : trade.give;
+        const bodies = (assets: typeof sends) => assets.filter((a) => a.kind === 'player').length;
+        const released = trade.drops.filter((d) => d.rosterId === rosterId).length;
+        const after = roster.playerIds.length - bodies(sends) + bodies(takes) - released;
+        expect(after).toBeLessThanOrEqual(Math.max(cap, roster.playerIds.length));
+      }
+    }
+  });
+
+  it('never releases a player in the package or one who would start', () => {
+    const result = suggestTrades(1, world(full));
+    for (const trade of result.trades) {
+      const moved = new Set([...trade.give, ...trade.get].map((a) => a.id));
+      for (const drop of trade.drops) expect(moved.has(drop.player.id)).toBe(false);
+    }
   });
 });
 
