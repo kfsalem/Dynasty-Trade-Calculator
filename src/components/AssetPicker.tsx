@@ -1,5 +1,6 @@
 import type { DraftPick, League, Player, PlayerValue, Position } from '../types';
 import { POSITION_STYLES, formatInjury, formatValue } from '../lib/format';
+import { PlayerAvatar } from './PlayerAvatar';
 import { valuePlayers } from '../engine/rosterValue';
 import { picksForRoster } from '../engine/picks';
 import { injuryNote } from '../engine/availability';
@@ -211,6 +212,7 @@ export function AssetPicker({
                 onChange={() => onTogglePlayer(entry.player.id)}
                 className="h-5 w-5 shrink-0 rounded border-control text-accent focus:ring-accent fine:h-4 fine:w-4"
               />
+              <PlayerAvatar player={entry.player} size="sm" />
               <span
                 className={`inline-flex w-10 shrink-0 justify-center rounded px-1 py-0.5 text-xs font-semibold ${style.chip}`}
               >

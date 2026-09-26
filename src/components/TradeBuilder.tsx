@@ -399,10 +399,13 @@ function StickyVerdict({
   return (
     <div
       /*
-        `env(safe-area-inset-bottom)` so the bar clears the home indicator on a
-        modern iPhone rather than sitting under it.
+        Above the phone tab bar (#120), which is fixed to the bottom of the
+        screen below `sm` and sits in the flow above it — pinned at the bottom
+        as well, this bar would lie on top of the tabs. From `sm` to `md`
+        there is no tab bar down there, so it returns to the edge, clearing the
+        home indicator with `env(safe-area-inset-bottom)`.
       */
-      className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:hidden"
+      className="fixed inset-x-3 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-20 rounded-card border border-line bg-surface/95 px-4 py-2 elevation-overlay backdrop-blur sm:inset-x-0 sm:bottom-0 sm:rounded-none sm:border-x-0 sm:border-b-0 sm:pt-3 sm:pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:hidden"
     >
       <button
         type="button"
@@ -478,22 +481,32 @@ function Verdict({
   const verdictMoved = useChanged(analysis.fairnessRating);
 
   return (
-    <div className="card rise-in mt-4">
-      <div className="flex flex-wrap items-center gap-3">
+    /*
+      The answer to the tab (#120): the fairness rating in display type, how
+      far apart the two sides are, and the sentence behind it — then each
+      side's view. The rating stays in its status chip as well, since the chip
+      is what the pinned bar on a phone repeats.
+    */
+    <section
+      aria-label="Verdict"
+      className="rise-in mt-6 rounded-card border border-line bg-surface p-5 elevation-overlay sm:p-8"
+    >
+      <p className="text-xs font-semibold uppercase tracking-wide text-subtle">Verdict</p>
+      <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-2">
+        <h3 className="font-display text-4xl font-extrabold tracking-tight sm:text-5xl">
+          {FAIRNESS_LABEL[analysis.fairnessRating]}
+        </h3>
         <span
-          className={`rounded-full px-3 py-1 text-sm font-semibold ${
+          className={`rounded-full px-3 py-1 text-sm font-semibold tabular-nums ${
             verdictMoved ? 'flash-change' : ''
           } ${fairnessChip(analysis.fairnessRating)}`}
         >
-          {FAIRNESS_LABEL[analysis.fairnessRating]}
-        </span>
-        <span className="text-sm text-subtle tabular-nums">
-          {formatValue(analysis.valueDifference)} apart (
-          {Math.round(analysis.valueDifferencePct * 100)}%)
+          {formatValue(analysis.valueDifference)} apart ·{' '}
+          {Math.round(analysis.valueDifferencePct * 100)}%
         </span>
       </div>
 
-      <p className="mt-3 text-muted">{analysis.summary}</p>
+      <p className="mt-3 max-w-2xl text-base text-muted">{analysis.summary}</p>
 
       <div className="mt-5 grid gap-6 border-t border-line pt-5 sm:grid-cols-2">
         {analysis.sides.map((side) => (
@@ -507,7 +520,7 @@ function Verdict({
           />
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -710,8 +723,10 @@ export function TradeBuilder({
     <div className={analysis ? 'pb-24 md:pb-0' : undefined}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold tracking-tight">Trade calculator</h2>
-          <p className="mt-1 text-sm text-subtle">
+          <h2 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
+            Trade calculator
+          </h2>
+          <p className="mt-1 text-sm text-muted">
             Check the assets each team sends. Values reflect this league's format.
           </p>
         </div>
