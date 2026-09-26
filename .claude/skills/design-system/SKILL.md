@@ -10,9 +10,9 @@ what to do, and what never to do.
 
 ## Precedence
 
-**This file wins.** Other design skills are installed in `.claude/skills/` —
-`frontend-design` and `impeccable` are general-purpose and know nothing about
-this app. Where they disagree with this file, this file governs, for two
+**This file wins.** Other design skills are installed — `frontend-design` in
+`.claude/skills/` and the `ui-ux-pro-max` plugin skills — and are
+general-purpose and know nothing about this app. Where they disagree with this file, this file governs, for two
 reasons:
 
 - The palette here is **validated**, not chosen by taste. Changing a position
