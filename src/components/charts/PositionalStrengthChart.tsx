@@ -8,7 +8,7 @@ import { useChartWidth } from './useChartWidth';
 import { MARK, barPath } from './scale';
 
 /**
- * Strengths and weaknesses, as a diverging bar around the league median.
+ * Starting value by position, as a diverging bar around the league median.
  *
  * The form was already right — `docs/DESIGN-SYSTEM.md` §4.4 says so — so this
  * is the same shape drawn to the mark specs, plus the one thing it was missing.
@@ -51,9 +51,19 @@ const PLOT_LEFT = CHIP.width + 12 + LABEL_GUTTER;
 /** The axis caption under the centre line. */
 const FOOTER = 22;
 
+/**
+ * Worded as a position's standing, not as the roster's weakness.
+ *
+ * Weakness detection moved to the slot under #64: a position sum can read
+ * neutral while one slot in it is ninth of ten. With this chart titled
+ * "Strengths and weaknesses", it contradicted "What to focus on" two panels
+ * below whenever the two measures disagreed, which on a live league was four
+ * of twenty-one weak slots (#101). So it says what it measures, positional
+ * value, and leaves weaknesses to the slot measure.
+ */
 const VERDICT_WORD = {
-  strength: 'Strength',
-  weakness: 'Weakness',
+  strength: 'Above the league',
+  weakness: 'Below the league',
   neutral: 'Even with the league',
 } as const;
 
@@ -78,8 +88,8 @@ export function PositionalStrengthChart({ positions }: Props) {
 
   return (
     <ChartFigure
-      title="Strengths and weaknesses"
-      description="Starting value at each position against the league median. Flex slots count toward the position of whoever fills them."
+      title="Starting value by position"
+      description="Each position's starters against the league median, with flex slots counted toward whoever fills them. A position can hold plenty of value and still have one weak slot; those are named under What to focus on."
       table={{
         columns: ['Position', 'Starting value', 'League median', 'Difference', 'Verdict'],
         rows: positions.map((item) => [
