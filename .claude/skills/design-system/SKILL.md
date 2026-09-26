@@ -19,20 +19,42 @@ reasons:
   colour on aesthetic grounds reintroduces a colourblindness failure that was
   measured and fixed. See §4.2 of the brief.
 - The register was chosen by the project owner and recorded in
-  `docs/DESIGN-SYSTEM.md`. A general skill that urges a distinctive identity is
-  right in general and moot here — the identity is settled.
+  `docs/DESIGN-SYSTEM.md` §1 (replaced 2026-09-26 by #120). A general skill that
+  urges some other identity is right in general and moot here.
 
 Use the general skills where this file is silent: inventing a layout for a new
 surface, copywriting, motion, critique. Do not use them to relitigate tokens,
 the position palette, density, or the accessibility rules.
 
-## The one-line register
+## The register
 
-**Loud with type and scale. Disciplined with hue.**
+**Premium, verdict first — quiet chrome, loud answers. Disciplined with hue.**
 
-Weight, size and fill are free. Hue is not: every colour in the data layer has a
-fixed meaning, listed below. If you are reaching for a colour to make something
-look nicer, use weight or size instead.
+Sleeper's clarity crossed with SalemWare's dark depth; the approved mockup is
+linked from #120. It replaced "Broadcast" on 2026-09-26 — do not restore
+Broadcast's filled header blocks or give every panel the same volume.
+
+- **Every tab answers before it explains:** one verdict sentence in display
+  type, at most four figures as tiles, then actions as cards — one per row, each
+  with a collapsible **Why?** holding the reasoning. Method is never a
+  paragraph above the answer.
+- **Detail lives in the player panel** (#68), not in every table row.
+- **Provenance is a badge you can open**, not a paragraph atop every tab.
+- **Dark depth, neutral data.** One soft azure glow at the top of the page; data
+  surfaces stay neutral. Never the violet-tinted black of the SalemWare
+  marketing site behind data — it shifts every data colour on it.
+- **Type does the emphasis.** Display face for verdicts and figures, Inter for
+  the rest.
+
+Hue is still not free: every colour in the data layer has a fixed meaning,
+listed below. If you are reaching for a colour to make something look nicer,
+use weight, size or space instead.
+
+**In transition.** The token values below are what ships today. #120's token
+pass changes page and surface values, adds an elevation scale and the display
+face (Plus Jakarta Sans, self-hosted), and updates this file as it lands. Until
+then, use the tokens as they are — do not hand-roll the new look with raw
+values in components.
 
 ## Tokens — use these, never raw utilities
 
@@ -188,4 +210,6 @@ node scripts/validate_palette.js "<hex,hex,…>" --mode dark  --pairs all --surf
   dependencies with zero imports; if you need icons, pick one and use it.)
 - Re-add the Google Fonts `@import`. Inter is self-hosted.
 - Recreate `.player-card`, or add a second card style.
-- Use `shadow-lg` as the default card treatment — borders and a small radius.
+- Use ad-hoc shadows (`shadow-lg` and friends) for depth. Elevation comes from
+  the hairline border plus the elevation tokens #120 adds — one scale, not a
+  shadow per component.
