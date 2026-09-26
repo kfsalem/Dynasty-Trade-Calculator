@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import type { Position } from '../types';
-import type { PlayerDetail as Detail } from '../engine/playerDetail';
+import type { PickDetail, PlayerDetail as Detail } from '../engine/playerDetail';
 import { injuryNote } from '../engine/availability';
 import { POSITION_STYLES, formatAge, formatInjury, formatValue } from '../lib/format';
 import { describeRole } from '../lib/roleText';
@@ -9,8 +9,10 @@ import { UnvaluedCell } from './UnvaluedCell';
 import { PlayerAvatar } from './PlayerAvatar';
 
 interface Props {
-  /** The player to show, or null when the panel is closed. */
+  /** The player to show, or null. */
   detail: Detail | null;
+  /** The pick to show, or null. At most one of the two is set. */
+  pick?: PickDetail | null;
   chartSeason: number | null;
   priced?: Set<Position>;
   onClose: () => void;
@@ -39,6 +41,104 @@ function Figure({ label, caption, value }: { label: string; caption: string; val
 
 const teams = (n: number) => `${n} ${n === 1 ? 'team' : 'teams'}`;
 
+function CloseButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Close"
+      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line text-muted hover:bg-raised hover:text-ink fine:h-9 fine:w-9"
+    >
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        className="h-4 w-4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      >
+        <path d="M6 6l12 12M18 6L6 18" />
+      </svg>
+    </button>
+  );
+}
+
+/** 1st, 2nd, 3rd, 4th … 11th, 12th, 13th, 21st. */
+const ordinal = (n: number) => {
+  const teen = n % 100 >= 11 && n % 100 <= 13;
+  const suffix = teen ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
+  return `${n}${suffix}`;
+};
+
+const whose = (side: PickDetail['holder']) => (side.mine ? 'you' : side.teamName);
+
+/**
+ * A draft pick, and why it is priced where it is (#68, #49).
+ *
+ * The question a pick's number raises is "why that figure", because pick
+ * value swings ninefold inside one round. The answer is three facts the pick
+ * already carries — where in the round it lands, how many teams the league
+ * has, and whether that slot is published or projected — so this says them.
+ */
+function PickContent({ detail, onClose }: { detail: PickDetail; onClose: () => void }) {
+  const { pick, holder, original, teamCount } = detail;
+  return (
+    <div className="rise-in space-y-4 p-5 pb-8">
+      <header className="flex items-start gap-3">
+        <span className="mt-1 inline-flex w-11 shrink-0 justify-center rounded bg-line px-1.5 py-0.5 text-xs font-semibold text-muted">
+          PICK
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 id="asset-detail-name" className="font-display text-2xl font-bold tracking-tight">
+            {pick.label}
+          </h2>
+          <p className="mt-0.5 text-sm text-subtle">
+            Held by {whose(holder)}
+            {holder.rosterId !== original.rosterId && ` · originally ${whose(original)}'s`}
+          </p>
+        </div>
+        <CloseButton onClick={onClose} />
+      </header>
+
+      <dl className="grid grid-cols-2 gap-3">
+        <Figure label="Dynasty" caption="What it is worth to hold, in this league." value={pick.value} />
+        <Figure label="Market" caption="What the pick market quotes for it." value={pick.marketValue} />
+      </dl>
+
+      <Section title="Where it lands">
+        {pick.slot === null ? (
+          <p>
+            No slot yet: there are no standings to project from and no published draft
+            order, so it is priced at the middle of its round.
+          </p>
+        ) : pick.slotKnown ? (
+          <p>
+            The league has published its draft order, so this is the real slot, not a
+            guess.
+          </p>
+        ) : (
+          <p>
+            Projected from how strong {whose(original) === 'you' ? 'your' : `${original.teamName}'s`}{' '}
+            roster is — the slot is decided by where that roster finishes. The league has
+            not published an order yet, and leagues often set one by lottery or by decree,
+            so a projection can be confidently wrong.
+          </p>
+        )}
+      </Section>
+
+      <Section title="How picks are priced">
+        <p>
+          From DynastyProcess's rookie-pick values, read at this pick's overall number in
+          a {teamCount}-team draft. Where in the round a pick lands matters — value falls
+          steeply through the first round and beyond — and so does league size: a 3.01 is
+          the {ordinal(2 * teamCount + 1)} pick here.
+        </p>
+      </Section>
+    </div>
+  );
+}
+
 /**
  * One player, everything the app knows about him, in one place (#68).
  *
@@ -54,10 +154,10 @@ const teams = (n: number) => `${n} ${n === 1 ? 'team' : 'teams'}`;
  * the main reading surface; a panel from the right from `sm` up, so the table
  * that opened it stays in view.
  */
-export function PlayerDetail({ detail, chartSeason, priced, onClose }: Props) {
+export function PlayerDetail({ detail, pick = null, chartSeason, priced, onClose }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const returnTo = useRef<HTMLElement | null>(null);
-  const open = detail !== null;
+  const open = detail !== null || pick !== null;
 
   useEffect(() => {
     const dialog = ref.current;
@@ -98,13 +198,14 @@ export function PlayerDetail({ detail, chartSeason, priced, onClose }: Props) {
   return (
     <dialog
       ref={ref}
-      aria-labelledby="player-detail-name"
+      aria-labelledby="asset-detail-name"
       // A press on the backdrop lands on the dialog element itself.
       onClick={(event) => {
         if (event.target === ref.current) close();
       }}
       className="fixed inset-x-0 top-auto bottom-0 m-0 max-h-[88vh] w-full max-w-none overflow-y-auto rounded-t-card border border-line bg-surface p-0 text-ink elevation-overlay backdrop:bg-black/60 sm:inset-y-0 sm:right-0 sm:left-auto sm:h-full sm:max-h-none sm:w-[28rem] sm:rounded-none sm:rounded-l-card"
     >
+      {pick && <PickContent detail={pick} onClose={close} />}
       {detail && (
         <div className="rise-in space-y-4 p-5 pb-8">
           <header className="flex items-start gap-3">
@@ -118,7 +219,7 @@ export function PlayerDetail({ detail, chartSeason, priced, onClose }: Props) {
             </span>
             <div className="min-w-0 flex-1">
               <h2
-                id="player-detail-name"
+                id="asset-detail-name"
                 className="font-display text-2xl font-bold tracking-tight"
               >
                 {detail.player.name}
@@ -134,24 +235,7 @@ export function PlayerDetail({ detail, chartSeason, priced, onClose }: Props) {
                   : 'free agent'}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={close}
-              aria-label="Close"
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line text-muted hover:bg-raised hover:text-ink fine:h-9 fine:w-9"
-            >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              >
-                <path d="M6 6l12 12M18 6L6 18" />
-              </svg>
-            </button>
+            <CloseButton onClick={close} />
           </header>
 
           {detail.player.injury && (

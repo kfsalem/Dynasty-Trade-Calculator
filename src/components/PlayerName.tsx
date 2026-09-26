@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Player } from '../types';
+import type { DraftPick, Player } from '../types';
 import { useOpenPlayer } from '../hooks/useOpenPlayer';
 
 /**
@@ -37,6 +37,27 @@ export function PlayerName({
       className={`text-left decoration-line underline-offset-4 hover:underline ${className}`}
     >
       {children ?? player.name}
+    </button>
+  );
+}
+
+/**
+ * A draft pick's label that opens its panel (#68, #49), where the price is
+ * explained: where it lands, how sure that is, and how picks are valued.
+ */
+export function PickName({ pick, className = '' }: { pick: DraftPick; className?: string }) {
+  const open = useOpenPlayer();
+  if (!open) return <span className={className}>{pick.label}</span>;
+
+  return (
+    <button
+      type="button"
+      aria-haspopup="dialog"
+      onClick={() => open(pick.id)}
+      title={pick.label}
+      className={`text-left decoration-line underline-offset-4 hover:underline ${className}`}
+    >
+      {pick.label}
     </button>
   );
 }

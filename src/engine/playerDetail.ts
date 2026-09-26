@@ -1,4 +1,4 @@
-import type { League, Player } from '../types';
+import type { DraftPick, League, Player } from '../types';
 import type { RosterSummary, ValuedPlayer } from './rosterValue';
 import type { FreeAgent } from './freeAgents';
 import type { SnapShare } from './snapShare';
@@ -123,5 +123,45 @@ export function playerDetail(id: string, sources: PlayerDetailSources): PlayerDe
     role: sources.roles?.get(id),
     adjustment: sources.adjustments?.get(id) ?? agent?.adjustment,
     trend: buy ? { side: 'buy-low', trend: buy } : sell ? { side: 'sell-high', trend: sell } : null,
+  };
+}
+
+export interface PickDetail {
+  pick: DraftPick;
+  /** Who holds the pick now. */
+  holder: { rosterId: number; teamName: string; mine: boolean };
+  /** Whose finish decides where it lands: the roster it originally belonged to. */
+  original: { rosterId: number; teamName: string; mine: boolean };
+  teamCount: number;
+}
+
+/**
+ * One draft pick, read out of the league's pick list (#68, #49).
+ *
+ * The panel's job for a pick is to make its price legible: a pick's value
+ * depends on where in the round it lands and on how many teams the league
+ * has, and whether that slot is the published draft order or a projection.
+ * All three are already on the pick; this only names the two rosters.
+ */
+export function pickDetail(
+  id: string,
+  sources: { league: League; picks: DraftPick[]; myRosterId: number | null },
+): PickDetail | null {
+  const pick = sources.picks.find((p) => p.id === id);
+  if (!pick) return null;
+
+  const named = (rosterId: number) => ({
+    rosterId,
+    teamName:
+      sources.league.rosters.find((r) => r.rosterId === rosterId)?.teamName ??
+      `Team ${rosterId}`,
+    mine: rosterId === sources.myRosterId,
+  });
+
+  return {
+    pick,
+    holder: named(pick.ownerRosterId),
+    original: named(pick.originalRosterId),
+    teamCount: sources.league.rosters.length,
   };
 }
