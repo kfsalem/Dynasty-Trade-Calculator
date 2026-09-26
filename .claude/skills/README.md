@@ -44,7 +44,8 @@ mockup, a one-off visualisation, a prototype to look at before committing to
 ## Not vendored: `impeccable`
 
 [pbakaus/impeccable](https://github.com/pbakaus/impeccable) (Apache-2.0) is
-installed as a **plugin**, not vendored here. It is ~3.2 MB across 147 files,
+**not currently installed**. If added, it goes in as a plugin rather than
+vendored here. It is ~3.2 MB across 147 files,
 mostly executable `.mjs` — an anti-pattern detector and a live-browser harness
 with its own `npx` entry point — and the author ships a marketplace manifest for
 exactly this purpose. Copying it in would bloat the repo and freeze it at one

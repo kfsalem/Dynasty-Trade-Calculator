@@ -254,7 +254,8 @@ Three general design skills are vendored alongside it from
 `frontend-design` for aesthetic direction on new surfaces, `webapp-testing` for
 Playwright viewport and interaction checks, and `web-artifacts-builder` for
 standalone artifacts built *beside* the project rather than inside it.
-[Impeccable](https://github.com/pbakaus/impeccable) is installed as a plugin.
+[Impeccable](https://github.com/pbakaus/impeccable) is not installed;
+`.claude/skills/README.md` says how to add it as a plugin.
 
 **Where the general skills stop.** They know nothing about this app. The
 position palette here is validated, not chosen — restyling QB back to blue on
