@@ -1,6 +1,6 @@
 import type { ScoringFidelity } from '../engine/scoringCheck';
 import type { ScoringPremium } from '../engine/scoringPremium';
-import { describeRules, joinWords, premiumSentence } from '../lib/scoringText';
+import { describeRules, joinWords, premiumSentence, scoringBadge } from '../lib/scoringText';
 
 interface Props {
   fidelity: ScoringFidelity | undefined;
@@ -40,8 +40,10 @@ export function ScoringNote({ fidelity, premium }: Props) {
 
   // Nothing has been played, and nothing is wrong. Saying "checked 0 of 0" or
   // claiming success would both be worse than staying silent — the header
-  // badges already say what the league's rules are.
-  if (verdict === 'unchecked' && missing.length === 0 && !priced) return null;
+  // badges already say what the league's rules are. Asked of `scoringBadge`, so
+  // the header badge and this note can never disagree about whether there is
+  // anything to say.
+  if (!scoringBadge(fidelity, premium)) return null;
 
   const checked =
     compared > 0

@@ -24,7 +24,7 @@ export function ThemeToggle() {
         this is a corner control reached with a thumb. The icon stays 16px; the
         padding grows to meet the hand and shrinks back on a pointer.
       */
-      className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-line text-muted transition-colors hover:bg-page hover:text-ink fine:h-9 fine:w-9"
+      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-muted transition-colors hover:bg-raised hover:text-ink fine:h-9 fine:w-9"
     >
       {dark ? (
         // Sun — clicking returns to light.

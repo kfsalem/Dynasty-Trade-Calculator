@@ -312,7 +312,9 @@ describe('App — switching leagues', () => {
 
     // League 2 has neither roster 1 nor player p1. Rendering at all is the
     // assertion; the old code threw `Unknown roster 1` from `buildSide`.
-    expect(await screen.findByText('League 222222')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'League 222222' }),
+    ).toBeInTheDocument();
     expect(window.location.search).not.toContain('ap=p1');
   });
 });

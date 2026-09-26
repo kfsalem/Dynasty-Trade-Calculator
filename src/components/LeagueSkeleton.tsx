@@ -29,31 +29,19 @@ export function LeagueSkeleton() {
      * and has no text of its own to read.
      */
     <div role="status" aria-label="Loading league" className="rise-in">
-      {/* Header: league name, format badges, the change-league button. */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <Block className="h-8 w-64 max-w-full sm:h-9" />
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <Block className="h-6 w-20 rounded-full" />
-            <Block className="h-6 w-16 rounded-full" />
-            <Block className="h-6 w-20 rounded-full" />
-            <Block className="h-6 w-14 rounded-full" />
-            <Block className="h-6 w-14 rounded-full" />
-          </div>
-        </div>
-        <Block className="h-10 w-32 shrink-0 rounded-lg" />
-      </div>
-
-      {/* Tablist. */}
-      <div className="mt-6 flex gap-1 border-b border-line pb-2">
-        <Block className="h-6 w-20" />
-        <Block className="h-6 w-24" />
-        <Block className="h-6 w-20" />
-        <Block className="h-6 w-28" />
+      {/* The segmented tab control. The league and scoring pills arrive in the
+          header, which is already drawn; on a phone the tabs are a bottom bar,
+          so there is nothing to hold a place for here. */}
+      <div className="hidden gap-1 rounded-2xl border border-line p-1 sm:inline-flex">
+        <Block className="h-9 w-24 rounded-xl" />
+        <Block className="h-9 w-28 rounded-xl" />
+        <Block className="h-9 w-20 rounded-xl" />
+        <Block className="h-9 w-28 rounded-xl" />
+        <Block className="h-9 w-36 rounded-xl" />
       </div>
 
       {/* The contention panel, which is the tallest thing on the default tab. */}
-      <div className="mt-6 rounded-xl border border-line p-5">
+      <div className="mt-6 rounded-card border border-line p-5">
         <Block className="h-3 w-32" />
         <Block className="mt-2 h-7 w-48" />
         <Block className="mt-3 h-4 w-full max-w-lg" />
