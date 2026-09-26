@@ -73,14 +73,21 @@ export function compareToLeague(perWeek: number, leaguePerWeek: number): string 
  * which the reader has no way to know, and a manager reading his own record
  * should not have to work out which way the number points. Counting the
  * managers who do better says it once and cannot be read backwards.
+ *
+ * The count is over everyone the history covers, not the league as it stands:
+ * a four-season record ranks against the four seasons' managers. So the
+ * sentence names that population. Left unsaid, "the other 11 managers" sat a
+ * few panels from the header's "the other 9 teams" and read as a mistake (#99).
  */
 export function describeRank(rank: number, total: number): string {
   if (total <= 1) return '';
-  if (rank === 1) return 'Nobody in your league leaves less.';
-  if (rank === total) return 'Every other manager leaves less.';
+  if (rank === 1) return 'Nobody who has played in this league leaves less.';
+  if (rank === total) return 'Every other manager who has played in this league leaves less.';
 
   const better = rank - 1;
-  return `${better} of the other ${total - 1} managers leave less.`;
+  return `${better} of the other ${total - 1} managers who have played in this league ${
+    better === 1 ? 'leaves' : 'leave'
+  } less.`;
 }
 
 /**

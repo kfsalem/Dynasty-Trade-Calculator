@@ -47,7 +47,33 @@ describe('BenchPoints', () => {
 
     expect(screen.getByText(/You leave 24.2 points a week on your bench/)).toBeInTheDocument();
     expect(screen.getByText(/The league average is 21.1/)).toBeInTheDocument();
-    expect(screen.getByText(/Every other manager leaves less/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Every other manager who has played in this league leaves less/),
+    ).toBeInTheDocument();
+  });
+
+  // #99: the history spans seasons, so its managers are not the league's
+  // current teams. The rank has to say which group it counts.
+  it('says the rank is over everyone who has played in the league', () => {
+    const managers = ['a', 'b', 'u1', 'c'].map((userId, i) =>
+      manager({ userId, name: userId, perWeek: 10 + i }),
+    );
+    render(<BenchPoints {...props} report={report({ managers })} />);
+
+    expect(
+      screen.getByText(/2 of the other 3 managers who have played in this league leave less/),
+    ).toBeInTheDocument();
+  });
+
+  it('agrees the verb with a single better manager', () => {
+    const managers = ['a', 'u1', 'b'].map((userId, i) =>
+      manager({ userId, name: userId, perWeek: 10 + i }),
+    );
+    render(<BenchPoints {...props} report={report({ managers })} />);
+
+    expect(
+      screen.getByText(/1 of the other 2 managers who have played in this league leaves less/),
+    ).toBeInTheDocument();
   });
 
   /**
