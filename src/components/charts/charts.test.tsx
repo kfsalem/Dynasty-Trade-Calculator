@@ -87,8 +87,17 @@ describe('the table view reaches every value without a pointer', () => {
     // The sign is the encoding that survives a monochrome screen.
     expect(within(table).getByText('+500')).toBeInTheDocument();
     expect(within(table).getByText('−300')).toBeInTheDocument();
-    expect(within(table).getByText('Weakness')).toBeInTheDocument();
-    expect(within(table).getByText('Strength')).toBeInTheDocument();
+    expect(within(table).getByText('Below the league')).toBeInTheDocument();
+    expect(within(table).getByText('Above the league')).toBeInTheDocument();
+  });
+
+  // #101: weaknesses are the slot measure's job. This chart plots positional
+  // value, and its title has to stop claiming otherwise.
+  it('titles the position chart as value, not as weaknesses', () => {
+    render(<PositionalStrengthChart positions={positions} />);
+
+    expect(screen.getByText('Starting value by position')).toBeInTheDocument();
+    expect(screen.queryByText(/weakness/i)).not.toBeInTheDocument();
   });
 
   it('carries both scales for every position in the scarcity table', async () => {
@@ -123,7 +132,7 @@ describe('marks are reachable and announced', () => {
 
     expect(screen.getByLabelText(/^RB:/)).toHaveAttribute(
       'aria-label',
-      expect.stringContaining('Weakness'),
+      expect.stringContaining('Below the league'),
     );
     expect(screen.getByLabelText(/^RB:/)).toHaveAttribute(
       'aria-label',
