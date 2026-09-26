@@ -4,7 +4,6 @@ import type { RosterSummary } from '../engine/rosterValue';
 import {
   analyzeTeam,
   leagueContention,
-  type Quadrant,
   type SeasonOdds,
 } from '../engine/analysis';
 import { fieldedStanding, leagueFielded } from '../engine/fielded';
@@ -23,6 +22,7 @@ import { ContentionScatter } from './charts/ContentionScatter';
 import { PositionalStrengthChart } from './charts/PositionalStrengthChart';
 import { ScarcityChart } from './charts/ScarcityChart';
 import { WeeklyLineup } from './WeeklyLineup';
+import { PlayerName } from './PlayerName';
 import type { BidModel } from '../engine/bids';
 
 interface Props {
@@ -118,12 +118,32 @@ const BUCKETS: { key: Bucket; label: string; note: string }[] = [
   { key: 'dead', label: 'Dead weight', note: 'Nobody in this league would start him.' },
 ];
 
-const QUADRANT_STYLE: Record<Quadrant, string> = {
-  juggernaut: 'bg-positive-soft border-positive text-positive',
-  win_now: 'bg-caution-soft border-caution text-caution',
-  rebuilding: 'bg-accent-soft border-accent text-accent',
-  danger: 'bg-negative-soft border-negative text-negative',
+/**
+ * The holdings bar's segments, darkest to lightest in the order the buckets
+ * are listed. Shades of ink, not hues — see the bar itself.
+ */
+const BUCKET_SHADE: Record<Bucket, string> = {
+  core: 'bg-ink',
+  depth: 'bg-ink/70',
+  depreciating: 'bg-ink/45',
+  lottery: 'bg-ink/25',
+  dead: 'bg-ink/12',
 };
+
+/**
+ * One figure under the verdict. The contention card used to tint itself by
+ * quadrant in the status colours, which are reserved; the verdict is carried by
+ * its words now, and the tiles are neutral.
+ */
+function Tile({ label, value, note }: { label: string; value: string; note?: string | null }) {
+  return (
+    <div className="rounded-xl border border-line bg-raised p-4">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-subtle">{label}</dt>
+      <dd className="mt-2 font-display text-3xl font-bold tracking-tight tabular">{value}</dd>
+      {note && <dd className="mt-1 text-sm text-muted tabular">{note}</dd>}
+    </div>
+  );
+}
 
 export function TeamAnalysis({
   league,
@@ -218,248 +238,295 @@ export function TeamAnalysis({
 
   const { contention, positions, surpluses, focus } = analysis;
   const summary = summaries.find((s) => s.rosterId === myRosterId);
+  const showFielded = fielded !== null && !fielded.unset && fielded.gap > 0;
 
   return (
-    <div>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight">{roster.teamName}</h2>
-          <p className="mt-1 text-sm text-subtle">
-            Measured against the other {contention.teamCount - 1} teams in this league.
-          </p>
-        </div>
-        <button type="button" onClick={onChangeTeam} className="btn-secondary text-sm">
-          Not my team
-        </button>
-      </div>
-
+    <div className="space-y-6">
       {/*
-        Above the contention window, which is the deliberate part. The window is
-        the more interesting number and it moves twice a season; the lineup has
-        a deadline this Sunday. A returning manager should land on the thing he
-        can still do something about.
+        The verdict first (#120). The contention window is the one answer this
+        tab exists to give — contender, rebuilder, or somewhere in between — so
+        it leads in display type, with its advice under it and the ranks behind
+        it as tiles. The ranks' caveat, which lineup they grade, is one tap
+        away rather than a paragraph under every figure.
       */}
-      {summary && (
-        <div className="mt-5">
-          <WeeklyLineup
-            roster={roster}
-            summary={summary}
-            settings={league.settings}
-            seasonPhase={seasonPhase}
-            currentWeek={currentWeek}
-            byeTeams={byeTeams}
-            board={freeAgents}
-            activityCurrent={activityCurrent}
-            bids={bids}
-          />
+      <section
+        aria-labelledby="verdict-heading"
+        className="rounded-card border border-line bg-surface p-5 elevation-overlay sm:p-8"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="min-w-0 truncate text-sm text-muted">
+            <span className="font-semibold text-ink">{roster.teamName}</span>
+            <span className="tabular">
+              {' · '}
+              {roster.wins}–{roster.losses}
+              {roster.ties > 0 ? `–${roster.ties}` : ''}
+            </span>
+            {' · measured against the other '}
+            {contention.teamCount - 1} teams
+          </p>
+          <button type="button" onClick={onChangeTeam} className="btn-secondary text-sm">
+            Not my team
+          </button>
         </div>
-      )}
 
-      <div className={`mt-5 rounded-xl border p-5 ${QUADRANT_STYLE[contention.quadrant]}`}>
-        <p className="text-xs font-semibold uppercase tracking-wide opacity-70">
+        <p className="mt-6 text-xs font-semibold uppercase tracking-wide text-subtle">
           Contention window
         </p>
-        <h3 className="mt-1 text-2xl font-bold">{contention.label}</h3>
-        <p className="mt-2 text-sm">{contention.advice}</p>
+        <h2
+          id="verdict-heading"
+          className="mt-1 font-display text-4xl font-extrabold tracking-tight sm:text-5xl"
+        >
+          {contention.label}
+        </h2>
+        <p className="mt-3 max-w-2xl text-base text-muted sm:text-lg">{contention.advice}</p>
 
-        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 border-t border-current/15 pt-3 text-sm">
-          <div>
-            <span className="opacity-70">Now</span>{' '}
-            <span className="font-semibold tabular-nums">
-              #{contention.nowRank} of {contention.teamCount}
-            </span>
-            {marginPhrase(contention.nowGrade) && (
-              <span className="tabular opacity-70"> · {marginPhrase(contention.nowGrade)}</span>
-            )}
-          </div>
-          <div>
-            <span className="opacity-70">In 3 years</span>{' '}
-            <span className="font-semibold tabular-nums">
-              #{contention.futureRank} of {contention.teamCount}
-            </span>
-            {marginPhrase(contention.laterGrade) && (
-              <span className="tabular opacity-70"> · {marginPhrase(contention.laterGrade)}</span>
-            )}
-          </div>
+        <dl className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Tile
+            label="Lineup now"
+            value={`#${contention.nowRank} of ${contention.teamCount}`}
+            note={marginPhrase(contention.nowGrade)}
+          />
+          <Tile
+            label="In 3 years"
+            value={`#${contention.futureRank} of ${contention.teamCount}`}
+            note={marginPhrase(contention.laterGrade)}
+          />
           {/*
-            The rank the two above are silent about. "Now" is `starterValue`,
-            which `summarizeRoster` builds from `bestLineup` rather than from
-            the platform's starters — so it grades the eleven this roster *can*
-            field. That is the right number for a roster, and it is not the team
-            being put on the field. Shown only when the two disagree: a manager
-            already fielding his best does not need a second rank telling him so.
-          */}
-          {fielded && !fielded.unset && fielded.gap > 0 && (
-            <div>
-              <span className="opacity-70">Fielding</span>{' '}
-              <span className="font-semibold tabular-nums">
-                #{fielded.fieldedRank} of {fielded.ranked}
-              </span>
-            </div>
-          )}
-          {/*
-            The evidence behind the sentence above, whenever there is a season
-            to read. The advice quotes this figure, and a claim as strong as
-            "this season is not the one to spend on" should show the number it
-            rests on rather than asking to be taken on trust.
-
-            The two ranks either side of it are roster quantities and this one
-            is not, which is exactly why it earns its place: it is the only
-            thing on the card that knows the team has been losing.
+            The evidence behind the advice, whenever there is a season to read.
+            The only figure here that knows the team has been losing.
           */}
           {contention.season && (
-            <div>
-              <span className="opacity-70">Playoff odds</span>{' '}
-              <span className="font-semibold tabular-nums">
-                {Math.round(contention.season.playoffOdds * 100)}%
-              </span>
-              <span className="opacity-70">
-                {' '}
-                after {contention.season.weeksPlayed} of {contention.season.weeksTotal}
-              </span>
-            </div>
+            <Tile
+              label="Playoff odds"
+              value={`${Math.round(contention.season.playoffOdds * 100)}%`}
+              note={`after ${contention.season.weeksPlayed} of ${contention.season.weeksTotal}`}
+            />
           )}
-        </div>
+          {/*
+            The rank the two above are silent about: the eleven actually set,
+            not the eleven this roster can field. Only when the two disagree.
+          */}
+          {showFielded && (
+            <Tile
+              label="Fielding"
+              value={`#${fielded.fieldedRank} of ${fielded.ranked}`}
+              note="as set this week"
+            />
+          )}
+        </dl>
 
-        {/*
-          The sentence the ranks cannot carry. A bare "#7 of 12" beside "#1 of
-          12" reads as a contradiction rather than as two different questions,
-          and the whole point is that both are true at once.
-        */}
-        {fielded && !fielded.unset && fielded.gap > 0 && (
-          <p className="mt-3 border-t border-current/15 pt-3 text-sm">
-            Every rank above grades the best lineup this roster can field. What you have set
-            for this week is worth {formatValue(fielded.gap)} less than that.
-          </p>
-        )}
-        {fielded?.unset && (
-          <p className="mt-3 border-t border-current/15 pt-3 text-sm">
-            Every rank above grades the best lineup this roster can field. You have no lineup
-            set, so there is nothing to compare it against.
-          </p>
-        )}
-      </div>
-
-      {/*
-        What the roster is made of, after what it is worth. `totalValue` is a sum
-        and `futureScore` is one coordinate; neither can say what a manager is
-        actually holding, and that is what makes advice specific.
-      */}
-      {buckets && buckets.total > 0 && (
-        <div className="card mt-5">
-          <h3 className="font-semibold">What you are holding</h3>
-          <p className="mt-1 text-sm text-muted">
-            Every asset in one bucket and no more than one. Dynasty value, so this is a
-            question about holding rather than about Sunday.
-            {!picksSettled && ' Picks are still loading and are not counted yet.'}
-          </p>
-
-          <dl className="mt-4 space-y-2">
-            {BUCKETS.filter(({ key }) => buckets.count[key] > 0).map(({ key, label, note }) => (
-              <div key={key} className="flex items-baseline justify-between gap-4 border-t border-line pt-2 first:border-t-0 first:pt-0">
-                <div className="min-w-0">
-                  <dt className="font-semibold">{label}</dt>
-                  <dd className="text-xs text-subtle">{note}</dd>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="tabular font-semibold">{formatValue(buckets.value[key])}</div>
-                  <div className="tabular text-xs text-subtle">
-                    {buckets.count[key]} {buckets.count[key] === 1 ? 'asset' : 'assets'} ·{' '}
-                    {Math.round((buckets.value[key] / buckets.total) * 100)}%
-                  </div>
-                </div>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
-
-      {/*
-        After the window, and deliberately not before it. Everything above this
-        point is about a decision still open — the lineup on Sunday, the trades
-        this season is worth making. This is the seasons already played, and it
-        is the one panel on the tab a manager cannot act on.
-      */}
-      <BenchPoints
-        report={bench.report}
-        loading={bench.loading}
-        failed={bench.failed}
-        truncated={bench.truncated}
-        userId={roster.ownerId}
-        bestBall={league.settings.bestBall}
-      />
-
-      <ContentionScatter
-        contention={contentionPoints}
-        teamNames={teamNames}
-        myRosterId={myRosterId}
-      />
-
-      <PositionalStrengthChart positions={positions} />
-
-      {scarcity && <ScarcityChart scarcity={scarcity} teamCount={contention.teamCount} />}
-
-      <section className="card mt-4">
-        <h3 className="font-semibold">Tradeable surplus</h3>
-        <p className="mt-1 text-sm text-subtle">
-          Players who don't crack your lineup but would start elsewhere. These are what
-          you trade from.
-        </p>
-        {surpluses.length === 0 ? (
-          <p className="mt-4 text-sm text-subtle">
-            No clear surplus — every player good enough to start somewhere is already in
-            your lineup.
-          </p>
-        ) : (
-          /*
-            Four columns is one too many for 375px: the chip, the two
-            right-hand figures and the gaps left the name 81px, so the list that
-            names your tradeable players rendered them "Christ…", "Rhamo…". The
-            two figures move to a second line below `sm`, indented under the
-            name so the chip still reads as the row's marker rather than as a
-            bullet for two rows.
-          */
-          <ul className="mt-4 space-y-2">
-            {surpluses.map((surplus) => (
-              <li
-                key={surplus.player.id}
-                className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm"
+        {(showFielded || fielded?.unset) && (
+          <details className="group mt-4 text-sm text-muted">
+            <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 font-medium text-accent fine:min-h-8 [&::-webkit-details-marker]:hidden">
+              Which lineup these grade
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="h-4 w-4 transition-transform group-open:rotate-180"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
               >
-                <span
-                  className={`inline-flex w-11 shrink-0 justify-center rounded px-1.5 py-0.5 text-xs font-semibold ${
-                    POSITION_STYLES[surplus.player.position].chip
-                  }`}
-                >
-                  {surplus.player.position}
-                </span>
-                <span className="min-w-0 flex-1 truncate font-medium">
-                  {surplus.player.name}
-                </span>
-                <span className="order-last flex w-full items-baseline justify-between gap-3 pl-14 text-subtle sm:order-none sm:w-auto sm:justify-end sm:pl-0">
-                  <span className="shrink-0">
-                    starts on {surplus.wouldStartOn}{' '}
-                    {surplus.wouldStartOn === 1 ? 'team' : 'teams'}
-                  </span>
-                  <span className="w-16 shrink-0 text-right tabular-nums">
-                    {formatValue(surplus.value)}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </summary>
+            <p className="mt-1 max-w-2xl">
+              {fielded?.unset
+                ? 'Every rank above grades the best lineup this roster can field. You have no lineup set, so there is nothing to compare it against.'
+                : `Every rank above grades the best lineup this roster can field. What you have set for this week is worth ${formatValue(
+                    fielded?.gap ?? 0,
+                  )} less than that.`}
+            </p>
+          </details>
         )}
       </section>
 
-      <section className="card mt-4">
-        <h3 className="font-semibold">What to focus on</h3>
-        <ul className="mt-3 space-y-2.5">
-          {focus.map((item) => (
-            <li key={item} className="flex gap-2 text-sm text-muted">
-              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
+      {/*
+        The lineup, straight after the verdict. The window moves twice a season;
+        the lineup has a deadline this Sunday, and a returning manager should
+        land on the thing he can still do something about.
+      */}
+      {summary && (
+        <WeeklyLineup
+          roster={roster}
+          summary={summary}
+          settings={league.settings}
+          seasonPhase={seasonPhase}
+          currentWeek={currentWeek}
+          byeTeams={byeTeams}
+          board={freeAgents}
+          activityCurrent={activityCurrent}
+          bids={bids}
+        />
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-6">
+          <section className="card">
+            <h3 className="font-display text-xl font-bold tracking-tight">What to focus on</h3>
+            <ul className="mt-4 space-y-3">
+              {focus.map((item) => (
+                <li
+                  key={item}
+                  className="flex gap-3 rounded-xl border border-line bg-raised p-3 text-sm text-muted"
+                >
+                  <span
+                    className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent"
+                    aria-hidden="true"
+                  />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {/*
+            The seasons already played: the one panel on the tab a manager
+            cannot act on, so it sits under the ones he can.
+          */}
+          <BenchPoints
+            report={bench.report}
+            loading={bench.loading}
+            failed={bench.failed}
+            truncated={bench.truncated}
+            userId={roster.ownerId}
+            bestBall={league.settings.bestBall}
+          />
+        </div>
+
+        <div className="min-w-0 space-y-6">
+          <section className="card">
+            <h3 className="font-display text-xl font-bold tracking-tight">Your trade chips</h3>
+            <p className="mt-1 text-sm text-muted">
+              Benched here, starters somewhere else. These are what you trade from.
+            </p>
+            {surpluses.length === 0 ? (
+              <p className="mt-4 text-sm text-subtle">
+                No clear surplus — every player good enough to start somewhere is already in
+                your lineup.
+              </p>
+            ) : (
+              <ul className="mt-4 space-y-2">
+                {surpluses.map((surplus) => (
+                  <li
+                    key={surplus.player.id}
+                    className="flex items-center gap-3 rounded-xl border border-line bg-raised p-3 text-sm"
+                  >
+                    <span
+                      className={`inline-flex w-11 shrink-0 justify-center rounded px-1.5 py-0.5 text-xs font-semibold ${
+                        POSITION_STYLES[surplus.player.position].chip
+                      }`}
+                    >
+                      {surplus.player.position}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <PlayerName
+                        player={surplus.player}
+                        className="block max-w-full truncate font-semibold"
+                      />
+                      <span className="block text-xs text-subtle">
+                        starts on {surplus.wouldStartOn}{' '}
+                        {surplus.wouldStartOn === 1 ? 'team' : 'teams'}
+                      </span>
+                    </span>
+                    <span className="shrink-0 font-display text-base font-bold tabular">
+                      {formatValue(surplus.value)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/*
+            What the roster is made of, after what it is worth. A sum cannot say
+            what a manager is actually holding; this can, and it is what makes
+            advice specific.
+          */}
+          {buckets && buckets.total > 0 && (
+            <section className="card">
+              <div>
+                <h3 className="font-display text-xl font-bold tracking-tight">
+                  What you are holding
+                </h3>
+                <p className="mt-1 text-sm text-muted">
+                  {formatValue(buckets.total)} in dynasty value, every asset in exactly one
+                  bucket.
+                  {!picksSettled && ' Picks are still loading and are not counted yet.'}
+                </p>
+
+                {/*
+                  One stacked bar, with a 2px gap in the surface colour between
+                  segments as the design system requires of every stacked bar.
+                  Shades of ink rather than hues: buckets are a new categorical
+                  dimension and there is no palette to spare for one, so the
+                  order and the labels below carry identity.
+                */}
+                <div className="mt-4 flex h-3 gap-0.5 overflow-hidden rounded-full" aria-hidden="true">
+                  {BUCKETS.filter(({ key }) => buckets.count[key] > 0).map(({ key }) => (
+                    <span
+                      key={key}
+                      className={BUCKET_SHADE[key]}
+                      style={{ width: `${(buckets.value[key] / buckets.total) * 100}%` }}
+                    />
+                  ))}
+                </div>
+
+                <dl className="mt-4 space-y-2">
+                  {BUCKETS.filter(({ key }) => buckets.count[key] > 0).map(
+                    ({ key, label, note }) => (
+                      <div
+                        key={key}
+                        className="flex items-baseline justify-between gap-4 border-t border-line pt-2 first:border-t-0 first:pt-0"
+                      >
+                        <div className="flex min-w-0 items-baseline gap-2">
+                          <span
+                            className={`h-2.5 w-2.5 shrink-0 rounded-sm ${BUCKET_SHADE[key]}`}
+                            aria-hidden="true"
+                          />
+                          <div className="min-w-0">
+                            <dt className="font-semibold">{label}</dt>
+                            <dd className="text-xs text-subtle">{note}</dd>
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="tabular font-semibold">
+                            {formatValue(buckets.value[key])}
+                          </div>
+                          <div className="tabular text-xs text-subtle">
+                            {buckets.count[key]} {buckets.count[key] === 1 ? 'asset' : 'assets'}{' '}
+                            · {Math.round((buckets.value[key] / buckets.total) * 100)}%
+                          </div>
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </dl>
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
+
+      {/*
+        The league around the verdict. Context rather than answer, so it comes
+        last: where every team sits, what each position holds here, and what a
+        position is worth to replace.
+      */}
+      <section aria-labelledby="league-context-heading" className="space-y-4">
+        <h3
+          id="league-context-heading"
+          className="font-display text-xl font-bold tracking-tight"
+        >
+          How the league compares
+        </h3>
+        <ContentionScatter
+          contention={contentionPoints}
+          teamNames={teamNames}
+          myRosterId={myRosterId}
+        />
+        <PositionalStrengthChart positions={positions} />
+        {scarcity && <ScarcityChart scarcity={scarcity} teamCount={contention.teamCount} />}
       </section>
     </div>
   );
