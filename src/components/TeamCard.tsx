@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { PlayerName } from './PlayerName';
+import { PlayerAvatar } from './PlayerAvatar';
 import type { RosterSummary, ValuedPlayer } from '../engine/rosterValue';
 import type { SnapShare } from '../engine/snapShare';
 import type { Opportunity } from '../engine/opportunity';
@@ -41,6 +42,12 @@ interface Props {
   adjustments?: Map<string, ActivityAdjustment>;
   /** Positions the value source prices, so an unvalued player can say which. */
   priced?: Set<Position>;
+  /**
+   * Whether rows carry the snap, usage and activity columns (#68). Off by
+   * default: the player panel holds all three in full, so the columns are for
+   * scanning a roster, not a cost every row pays.
+   */
+  showUsage?: boolean;
 }
 
 function PlayerLine({
@@ -52,6 +59,7 @@ function PlayerLine({
   chartSeason,
   adjustments,
   priced,
+  showUsage = false,
 }: {
   entry: ValuedPlayer;
   /**
@@ -66,11 +74,13 @@ function PlayerLine({
   chartSeason?: number | null;
   adjustments?: Map<string, ActivityAdjustment>;
   priced?: Set<Position>;
+  showUsage?: boolean;
 }) {
   const role = roles?.get(entry.player.id);
   const style = POSITION_STYLES[entry.player.position];
   return (
     <>
+      <PlayerAvatar player={entry.player} size="sm" />
       <span
         className={`inline-flex w-11 shrink-0 justify-center rounded px-1.5 py-0.5 text-xs font-semibold ${style.chip}`}
       >
@@ -104,9 +114,13 @@ function PlayerLine({
       {/* Outside the name span on purpose: inside it, a long name truncated
           the badge away entirely. */}
       <RoleMarker role={role} chartSeason={chartSeason ?? null} />
-      <SnapShareCell share={snaps?.get(entry.player.id)} role={role} chartSeason={chartSeason} />
-      <UsageCell usage={usage?.get(entry.player.id)} />
-      <ActivityMarker adjustment={adjustments?.get(entry.player.id)} />
+      {showUsage && (
+        <>
+          <SnapShareCell share={snaps?.get(entry.player.id)} role={role} chartSeason={chartSeason} />
+          <UsageCell usage={usage?.get(entry.player.id)} />
+          <ActivityMarker adjustment={adjustments?.get(entry.player.id)} />
+        </>
+      )}
       {entry.valued ? (
         /* Both scales, always, with the one this list totals in the darker
            weight. Showing only the list's own scale meant the same player read
@@ -149,6 +163,7 @@ export function TeamCard({
   chartSeason,
   adjustments,
   priced,
+  showUsage = false,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -195,7 +210,7 @@ export function TeamCard({
         */
         className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 p-4 text-left transition-colors hover:bg-page sm:flex-nowrap sm:gap-x-4 sm:p-5"
       >
-        <span className="w-6 shrink-0 text-lg font-bold tabular-nums text-subtle">
+        <span className="w-7 shrink-0 font-display text-2xl font-extrabold tabular-nums text-subtle">
           {rank}
         </span>
 
@@ -232,7 +247,7 @@ export function TeamCard({
           when it sits beside it.
         */}
         <span className="order-last flex w-full items-baseline justify-between gap-2 pl-9 sm:order-none sm:block sm:w-auto sm:shrink-0 sm:pl-0 sm:text-right">
-          <span className="block text-lg font-bold tabular-nums">
+          <span className="block font-display text-xl font-bold tabular-nums">
             {formatValue(summary.starterValue)}
           </span>
           {/* Say how much of the lineup the number covers whenever it is not all
@@ -329,6 +344,7 @@ export function TeamCard({
                         chartSeason={chartSeason}
                         adjustments={adjustments}
                         priced={priced}
+                        showUsage={showUsage}
                       />
                     ) : (
                       <span className="flex-1 italic text-subtle">empty</span>
@@ -378,6 +394,7 @@ export function TeamCard({
                       chartSeason={chartSeason}
                       adjustments={adjustments}
                       priced={priced}
+                      showUsage={showUsage}
                     />
                   </li>
                 ))}
