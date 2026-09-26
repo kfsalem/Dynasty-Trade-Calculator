@@ -401,13 +401,24 @@ describe('suggestTrades', () => {
     expect(swap!.analysis.valueDifferencePct).toBeLessThanOrEqual(0.1);
   });
 
+  it('counts every package it rejects, once, under the test it failed', () => {
+    const ctx = world(COMPLEMENTARY, 1200);
+    const result = suggestTrades(1, ctx, { minBenefitShare: 0.5, maxResults: 20 });
+    const { unbalanced, overRoster, someoneWorse, tooSmall } = result.rejections;
+
+    expect(result.trades).toHaveLength(0);
+    expect(unbalanced + overRoster + someoneWorse + tooSmall).toBe(result.considered);
+  });
+
   it('drops offers too small to be worth proposing', () => {
     const ctx = world(COMPLEMENTARY, 1200);
 
     // Every side must gain at least this share of its own starting value.
     const strict = suggestTrades(1, ctx, { minBenefitShare: 0.5, maxResults: 20 });
     expect(strict.trades).toHaveLength(0);
-    expect(strict.note).toContain('too small');
+    // Counted under "too small" — both sides gain, just not by enough — rather
+    // than guessed at in the note (#133).
+    expect(strict.rejections.tooSmall).toBeGreaterThan(0);
 
     const normal = suggestTrades(1, ctx, { maxResults: 20 });
     expect(normal.trades.length).toBeGreaterThan(0);
@@ -723,12 +734,13 @@ describe('league rules the engine has to obey', () => {
     // demonstrably *not* the cause — and the note still has to mention it
     // without claiming it is.
     const ctx = underRules(world(COMPLEMENTARY, 1200), { pickTrading: false });
-    const { trades, note } = suggestTrades(1, ctx, { minBenefitShare: 1 });
+    const { trades, note, rejections } = suggestTrades(1, ctx, { minBenefitShare: 1 });
 
     expect(trades).toHaveLength(0);
     expect(note).toContain('also has pick trading switched off');
-    // The reason offered stays the honest one.
-    expect(note).toContain('too small on both sides');
+    // The reason offered stays the honest one: it is counted where it
+    // happened, and the ban is not what emptied the list.
+    expect(rejections.tooSmall + rejections.someoneWorse).toBeGreaterThan(0);
   });
 
   it('does not tell a pick-banned league that its pick values failed to load', () => {

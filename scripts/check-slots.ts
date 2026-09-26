@@ -190,7 +190,10 @@ async function main() {
       `  ${pad(name(summary.rosterId))} considered ${String(result.considered).padStart(4)}  ` +
         `found ${result.trades.length}  [${
           result.trades.map((t) => `${bodies(t.give)}-for-${bodies(t.get)}`).join(', ') || '-'
-        }]`,
+        }]` +
+        // Why the rest failed, as the empty Trade ideas tab now says (#133).
+        `  rejected: uneven ${result.rejections.unbalanced}, worse ${result.rejections.someoneWorse}, ` +
+        `roster ${result.rejections.overRoster}, small ${result.rejections.tooSmall}`,
     );
 
     // The uneven ones in full, since they are the shapes #65 added and the only
