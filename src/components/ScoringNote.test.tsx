@@ -86,6 +86,18 @@ describe('ScoringNote', () => {
 
     expect(screen.getByText(/come from market prices/)).toBeInTheDocument();
   });
+
+  // #98: the tail alone passed while the head read "this app reproduces 300 of
+  // 1,200 player-weeks match…". Read the whole opening sentence.
+  it('reads as one sentence when it cannot reproduce the league', () => {
+    render(<ScoringNote fidelity={fidelity({ verdict: 'unreliable', exact: 300 })} />);
+
+    expect(
+      screen.getByText(
+        /^Scoring check: 300 of 1,200 player-weeks match Sleeper's own totals exactly — too far off to price anything on\./,
+      ),
+    ).toBeInTheDocument();
+  });
 });
 
 describe('LeagueHeader — scoring badges', () => {

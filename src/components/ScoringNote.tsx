@@ -67,10 +67,13 @@ export function ScoringNote({ fidelity, premium }: Props) {
     );
   }
 
+  // `checked` is a whole clause, so it stands after the colon on its own, as it
+  // does in the two branches below. It cannot be the object of "reproduces":
+  // that spliced two sentences together whenever a week had been played (#98).
   if (verdict === 'unreliable') {
     return (
       <p className="mt-3 rounded-lg border border-caution bg-caution-soft p-3 text-sm text-caution">
-        Scoring check: this app reproduces {checked ?? 'none of your league'} — too far
+        Scoring check: {checked ?? 'this app reproduces none of your league'} — too far
         off to price anything on. Player values here come from market prices, which is
         what they would have done regardless.
       </p>
