@@ -57,15 +57,32 @@ Every tab answers its question before it explains itself.
 
 **Hue is still not free.** Every colour in the data layer means one thing, and
 the meanings in §4 are fixed. The new look adds exactly one decorative colour —
-the azure of the glow and of actions — and it already has a role: `accent`.
+the azure of the glow and of actions — and it has roles: `accent` for
+interactive text and `action` for a primary button's fill.
 
-### What has not changed yet
+### The tokens it added
 
-§2–§5 describe what ships today. The token pass in #120 changes the page and
-surface values, adds an elevation scale and a display face, and will update
-those sections as it lands. Until it does, the values below are current — and
-the rules around them (validation, contrast, pointer density, the motion
-budget) are not up for renegotiation when it happens.
+The token pass in #120 landed these; §5 carries the new surfaces.
+
+| token | what it is |
+|---|---|
+| dark `page` / `surface` / `raised` | `#0a0c10` / `#12151b` / `#1a1e26`: neutral near-black in three steps, no tint |
+| `action` / `on-action` | `#2563eb` under white, 5.17:1, the same in both themes. Split from `accent` because in dark the accent is a light blue that cannot carry a white label |
+| `--elevation-raised` / `--elevation-overlay` | the elevation scale, as `elevation-*` utilities; soft in light, deep in dark. The hairline border still does the separating. Not `--shadow-*` theme keys, which Tailwind inlines at build time |
+| `--radius-card` | 20px |
+| `--font-display` | Plus Jakarta Sans, self-hosted, for verdicts and headline figures |
+| `--page-glow` | one radial azure light at the top of `body`; never on a data surface |
+
+The same pass fixed `--font-sans`: it asked for `Inter`, but the self-hosted
+package registers `Inter Variable`, so the bundled font had never applied and
+readers without Inter installed got the system face.
+
+`npm run check:contrast` now also checks text on `raised` and labels on
+`action`; the position palette re-validates on the new dark surface with the
+same result as before (§4.3).
+
+The rules around the values — validation, contrast, pointer density, the
+motion budget — did not move.
 
 ## 2. Layout and density
 
@@ -210,7 +227,7 @@ Parameters it needs from this system:
 - **Diverging:** emerald ↔ red with a *neutral grey* midpoint, never a hue at the
   middle. This is the "strengths and weaknesses" bar, which is diverging around
   the league median and currently reads green/grey/red — the shape is right.
-- **Surfaces for validation:** `#ffffff` light, `#16181d` dark.
+- **Surfaces for validation:** `#ffffff` light, `#12151b` dark.
 
 **One axis, always.** Never a dual-axis chart. The dynasty and win-now scales are
 the standing temptation here and they are two charts or two bars, never two
@@ -225,9 +242,9 @@ status colours.
 
 | | light | dark |
 |---|---|---|
-| page | `#f9fafb` | `#0f1115` |
-| surface | `#ffffff` | `#16181d` |
-| raised | `#ffffff` + border | `#1f242b` |
+| page | `#f9fafb` | `#0a0c10` |
+| surface | `#ffffff` | `#12151b` |
+| raised | `#ffffff` + border | `#1a1e26` |
 
 Honour `prefers-color-scheme`, plus a manual toggle that persists to
 localStorage — the same place the league id and claimed team already live, per
@@ -343,7 +360,7 @@ Run from the `dataviz` skill directory. Node 20.12+ required.
 node scripts/validate_palette.js "#0ea5e9,#10b981,#f59e0b,#8b5cf6" \
   --mode light --pairs all --surface "#ffffff"
 node scripts/validate_palette.js "#0284c7,#059669,#d97706,#7c3aed" \
-  --mode dark  --pairs all --surface "#16181d"
+  --mode dark  --pairs all --surface "#12151b"
 ```
 
 Both report ALL CHECKS PASS, with the two warnings §4.3 turns into rules.

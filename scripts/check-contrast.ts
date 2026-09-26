@@ -6,8 +6,10 @@
  * hand-maintained duplicate always eventually reaches.
  *
  * Checks, per theme:
- *   - text tokens clear WCAG AA (4.5:1) against both `surface` and `page`
- *   - the control border and focus ring clear WCAG 1.4.11 (3:1)
+ *   - text tokens clear WCAG AA (4.5:1) against `surface`, `page` and `raised`
+ *   - labels on filled controls (`on-accent`, `on-action`) clear 4.5:1
+ *   - the control border and focus ring clear WCAG 1.4.11 (3:1) on `surface`
+ *     and `raised`
  *
  * Position colours are NOT checked here. They are a categorical scale, and the
  * thing that matters for them is colour-vision-deficiency separation rather
@@ -38,6 +40,7 @@ const TEXT_TOKENS = [
 
 /** Non-text tokens: UI boundaries under WCAG 1.4.11. */
 const UI_TOKENS = ['control', 'accent'] as const;
+const UI_BACKGROUNDS = ['surface', 'raised'] as const;
 
 /**
  * Text drawn on a filled background rather than on the page.
@@ -45,7 +48,10 @@ const UI_TOKENS = ['control', 'accent'] as const;
  * Worth its own check because the obvious value is wrong in one theme: the
  * dark-mode accent is a light blue, and white on it is 2.17:1.
  */
-const ON_FILL: Array<[fg: string, bg: string]> = [['on-accent', 'accent']];
+const ON_FILL: Array<[fg: string, bg: string]> = [
+  ['on-accent', 'accent'],
+  ['on-action', 'action'],
+];
 
 const AA_TEXT = 4.5;
 const AA_NON_TEXT = 3;
@@ -102,7 +108,9 @@ interface Failure {
 }
 
 function checkTheme(theme: string, tokens: Tokens, failures: Failure[]): void {
-  const backgrounds = ['surface', 'page'] as const;
+  // `raised` since #120: the redesign puts text on raised panels as well as on
+  // cards and the page, and a token that clears two of the three still fails.
+  const backgrounds = ['surface', 'page', 'raised'] as const;
   console.log(`\n${theme}`);
 
   for (const token of TEXT_TOKENS) {
@@ -133,16 +141,16 @@ function checkTheme(theme: string, tokens: Tokens, failures: Failure[]): void {
   }
 
   for (const token of UI_TOKENS) {
-    const fg = tokens[token];
-    const back = tokens.surface;
-    const ratio = contrast(fg, back);
-    const ok = ratio >= AA_NON_TEXT;
-    if (!ok) failures.push({ theme, token, against: 'surface', ratio, need: AA_NON_TEXT });
-    console.log(
-      `  ${ok ? 'pass' : 'FAIL'}  ${token.padEnd(9)} on surface  ${ratio
-        .toFixed(2)
-        .padStart(6)}:1  (UI ${AA_NON_TEXT})`,
-    );
+    for (const bg of UI_BACKGROUNDS) {
+      const ratio = contrast(tokens[token], tokens[bg]);
+      const ok = ratio >= AA_NON_TEXT;
+      if (!ok) failures.push({ theme, token, against: bg, ratio, need: AA_NON_TEXT });
+      console.log(
+        `  ${ok ? 'pass' : 'FAIL'}  ${token.padEnd(9)} on ${bg.padEnd(8)} ${ratio
+          .toFixed(2)
+          .padStart(6)}:1  (UI ${AA_NON_TEXT})`,
+      );
+    }
   }
 }
 
@@ -171,6 +179,6 @@ if (failures.length > 0) {
 
 console.log(
   `\nAll contrast checks pass (${
-    TEXT_TOKENS.length * 2 + ON_FILL.length + UI_TOKENS.length
+    TEXT_TOKENS.length * 3 + ON_FILL.length + UI_TOKENS.length * UI_BACKGROUNDS.length
   } per theme).`,
 );

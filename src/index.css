@@ -89,6 +89,15 @@
   /* Label on an accent fill. Flips with the theme: the dark-mode accent is a
    * light blue, and white on it is 2.17:1 — a fail this token exists to stop. */
   --color-on-accent: #ffffff;
+  /* The solid fill of a primary action, and the label on it (#120).
+   *
+   * Split from `accent` because the two jobs want different blues in the dark:
+   * accent is text, links and the focus ring, so it has to be light enough to
+   * read on the surface; a button is a fill carrying white text, so it has to be
+   * dark enough to hold that label. One azure in both themes — the control
+   * meaning "go" looks the same everywhere — at 5.17:1 under white. */
+  --color-action: #2563eb;
+  --color-on-action: #ffffff;
   --color-positive: #047857;
   --color-negative: #b91c1c;
   --color-caution: #b45309;
@@ -104,38 +113,85 @@
    * decorative surfaces that never carry text, so neither has a contrast
    * requirement — but the sheen must be *lighter* than the block in both
    * themes or the sweep reads as a shadow crossing the card. Dark is picked
-   * against #16181d, not lifted from light; `--color-line` is too dim there to
+   * against the dark surface, not lifted from light; `--color-line` is too dim there to
    * read as a shape at all.
    */
   --color-skeleton: #e5e7eb;
   --color-skeleton-sheen: #f3f4f6;
 
-  --font-sans: Inter, system-ui, sans-serif;
+  /* The families the self-hosted packages register, first. Fontsource names its
+   * variable faces "… Variable"; this list asked for plain "Inter", so the
+   * bundled font never applied and every reader without Inter installed got
+   * the system face instead. */
+  --font-sans: 'Inter Variable', Inter, system-ui, sans-serif;
+  /* Verdicts and figures (#120). Self-hosted beside Inter. */
+  --font-display: 'Plus Jakarta Sans Variable', 'Inter Variable', system-ui, sans-serif;
+
+  --radius-card: 1.25rem;
 }
 
 /*
- * Dark. Selected against #16181d, not flipped.
+ * Values that differ per theme but are not colours, so they live outside
+ * @theme (#120).
+ *
+ * Depth: one elevation scale rather than a shadow per component. `raised` is a
+ * card resting on the page; `overlay` is something above it — a hero, a
+ * popover. A hairline border does the separating in both themes; the shadow
+ * only says which way is up, so it is soft in light and deep in dark, where a
+ * light shadow would be invisible.
+ *
+ * These are deliberately NOT `--shadow-*` theme keys. Tailwind copies a
+ * `--shadow-*` value into the utility at build time, so a dark override of it
+ * never reaches the page — the first cut of this shipped light shadows in both
+ * themes. The `elevation-*` utilities below read the variable at runtime.
+ *
+ * The glow: one soft azure light at the top edge of the page, and nowhere
+ * else. It sits behind everything, never on a data surface, so it tints no
+ * chart or position colour.
+ */
+@layer theme {
+  :root {
+    --elevation-raised: 0 1px 2px rgb(16 24 40 / 0.04), 0 8px 24px -12px rgb(16 24 40 / 0.1);
+    --elevation-overlay: 0 1px 2px rgb(16 24 40 / 0.04), 0 24px 48px -16px rgb(16 24 40 / 0.16);
+    --page-glow: radial-gradient(60% 420px at 50% -80px, rgb(37 99 235 / 0.1), transparent 70%);
+  }
+}
+
+@utility elevation-raised {
+  box-shadow: var(--elevation-raised);
+}
+
+@utility elevation-overlay {
+  box-shadow: var(--elevation-overlay);
+}
+
+/*
+ * Dark. Selected against #12151b, not flipped.
  *
  * `.dark` rather than a bare media query because the toggle has to be able to
  * beat the OS preference in both directions; the class is set on <html> before
  * first paint by the inline script in index.html. The media query below only
  * supplies the default for someone who has never touched the toggle.
+ *
+ * #120 moved the ground darker and kept it neutral: a near-black page, cards a
+ * step up from it, raised panels a step above those. No violet or navy tint —
+ * a tinted black shifts every data colour sitting on it.
  */
 @layer theme {
   .dark {
-    --color-page: #0f1115;
-    --color-surface: #16181d;
-    --color-raised: #1f242b;
+    --color-page: #0a0c10;
+    --color-surface: #12151b;
+    --color-raised: #1a1e26;
 
-    --color-ink: #f3f4f6;
+    --color-ink: #f2f4f8;
     --color-muted: #c3c9d2;
     --color-subtle: #98a1ae;
 
-    --color-line: #2a2f37;
+    --color-line: #262c36;
     --color-control: #626b78;
 
     --color-accent: #7cb2ff;
-    --color-on-accent: #0f1115;
+    --color-on-accent: #0a0c10;
     --color-positive: #34d399;
     --color-negative: #f87171;
     --color-caution: #fbbf24;
@@ -160,8 +216,12 @@
     --color-pos-none-soft: #21252c;
 
     /* A step above `raised`, so a skeleton sits on the card rather than in it. */
-    --color-skeleton: #272c34;
-    --color-skeleton-sheen: #333a45;
+    --color-skeleton: #232833;
+    --color-skeleton-sheen: #2f3642;
+
+    --elevation-raised: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 24px 48px -24px rgb(0 0 0 / 0.7);
+    --elevation-overlay: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 34px 66px -26px rgb(0 0 0 / 0.8);
+    --page-glow: radial-gradient(60% 420px at 50% -80px, rgb(59 130 246 / 0.26), transparent 70%);
   }
 }
 
@@ -176,6 +236,8 @@
   body {
     font-family: var(--font-sans);
     background-color: var(--color-page);
+    background-image: var(--page-glow);
+    background-repeat: no-repeat;
     color: var(--color-ink);
   }
 
@@ -215,7 +277,7 @@
    * See docs/DESIGN-SYSTEM.md §2.
    */
   .btn-primary {
-    @apply bg-accent text-on-accent font-medium py-3 px-4 rounded-lg transition-colors duration-200 fine:py-2;
+    @apply bg-action text-on-action font-semibold py-3 px-4 rounded-xl transition-colors duration-200 fine:py-2;
   }
 
   .btn-secondary {
@@ -224,11 +286,13 @@
 
   /*
    * One card. The old `.card` leaned on shadow-lg and `.player-card` was a
-   * near-duplicate nobody used; a border and a small radius read better and
-   * survive dark mode, where a drop shadow is invisible.
+   * near-duplicate nobody used. The hairline border still does the separating,
+   * which is what survives dark mode; #120 adds the `raised` step of the
+   * elevation scale for depth and a larger radius, rather than a shadow of the
+   * card's own.
    */
   .card {
-    @apply bg-surface border border-line rounded-xl p-5;
+    @apply bg-surface border border-line rounded-card p-5 elevation-raised;
   }
 
   /* ---- Motion -------------------------------------------------------------
