@@ -6,7 +6,7 @@ import type { PlayerRole } from '../engine/role';
 import type { ActivityAdjustment } from '../engine/activityFactor';
 import { TeamCard } from './TeamCard';
 import { formatValue } from '../lib/format';
-import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useState } from 'react';
 
 interface Props {
   league: League;
@@ -33,9 +33,13 @@ export function RosterList({
   adjustments,
   priced,
 }: Props) {
-  // `md`, matching the Tailwind breakpoint the summary is hidden at, so the
-  // control and the thing it controls agree about where the layout changes.
-  const wide = useMediaQuery('(min-width: 768px)');
+  /*
+    The activity columns, off by default (#68). Every player's snaps and usage
+    are one tap away in his panel now, in full sentences; the columns stay for
+    anyone who wants to scan them down a roster, which is a choice rather than
+    a cost every row pays.
+  */
+  const [showUsage, setShowUsage] = useState(false);
   const topStarterValue = summaries[0]?.starterValue ?? 0;
 
   // Kickers and defenses have no dynasty market, so their absence is expected.
@@ -52,24 +56,47 @@ export function RosterList({
   return (
     <div>
       {/*
-        The explanation, folded away on a phone and open on a desktop.
-
-        Five paragraphs is the right amount of writing — every one answers a
-        question the standings genuinely raise — but at 375px they measured
-        about a screen and a half between the tab bar and the first roster.
-        Someone opening this tab wants the table; someone wondering why a
-        32-year-old receiver outranks a rookie wants the prose, and will go
-        looking for it.
-
-        `<details>` because it is keyboard- and screen-reader-complete with no
-        help, and because folding is exactly what this is. `open` is an
-        attribute with no CSS equivalent, which is the one thing here that has
-        to reach JavaScript — hence `useMediaQuery` rather than a `md:` variant.
-        The summary is hidden above `md`, where the paragraphs are simply there
-        as before.
+        The answer first (#120): what this is and how it is ranked, in a line.
+        The five paragraphs of method used to open the tab on a desktop — a
+        screen and a half of prose before the first team. They are still all
+        here, one tap away, for whoever wonders why a 32-year-old receiver
+        outranks a rookie.
       */}
-      <details className="group" open={wide}>
-        <summary className="-mx-2 cursor-pointer list-none rounded-lg px-2 py-3 text-sm font-medium text-muted hover:bg-surface md:hidden [&::-webkit-details-marker]:hidden">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
+            Power rankings
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            Every roster ranked by the best lineup it can field this season.{' '}
+            <span className="tabular">
+              {formatValue(summaries.reduce((sum, s) => sum + s.totalValue, 0))}
+            </span>{' '}
+            in value across {summaries.length} rosters.
+          </p>
+        </div>
+        {snapsMeta && (
+          <button
+            type="button"
+            aria-pressed={showUsage}
+            onClick={() => setShowUsage((on) => !on)}
+            className={`hidden min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors sm:inline-flex fine:min-h-9 ${
+              showUsage
+                ? 'border-accent bg-accent-soft text-accent'
+                : 'border-line bg-surface text-muted hover:bg-raised hover:text-ink'
+            }`}
+          >
+            Snaps &amp; usage
+          </button>
+        )}
+      </div>
+
+      {/*
+        `<details>` because it is keyboard- and screen-reader-complete with no
+        help, and because folding is exactly what this is.
+      */}
+      <details className="group mt-3">
+        <summary className="-mx-2 inline-flex min-h-11 cursor-pointer list-none items-center rounded-lg px-2 text-sm font-medium text-accent hover:bg-surface fine:min-h-8 [&::-webkit-details-marker]:hidden">
           <span className="inline-flex items-center gap-2">
             <svg
               aria-hidden="true"
@@ -111,7 +138,7 @@ export function RosterList({
 
       {snapsMeta && (
         <p className="mt-2 text-sm text-subtle">
-          Expand a team to see each player's offensive snap share
+          Open any player for his offensive snap share
           {snapsMeta.throughWeek === null
             ? ` (${snapsMeta.season})`
             : `, ${snapsMeta.season} through Week ${snapsMeta.throughWeek}`}
@@ -123,7 +150,8 @@ export function RosterList({
           anyone's role. Where that change is big enough to matter, a signed
           percentage shows how much it moved the value itself — always a fraction of the
           move in snap share, because a dynasty price is mostly a bet on future role and
-          already carries most of this. Hover any number for the full breakdown.
+          already carries most of this. Turn on Snaps &amp; usage to see them as columns
+          down each roster.
           {snapsMeta.chartSeason === snapsMeta.season
             ? ' A PLAYS UP or PLAYS DOWN badge marks someone the depth chart and the field disagree about — the chart is the slower of the two.'
             : ` Depth chart positions are ${snapsMeta.chartSeason ?? 'a later season'}, so they are not compared against ${snapsMeta.season} snaps.`}
@@ -154,14 +182,10 @@ export function RosterList({
             chartSeason={snapsMeta?.chartSeason ?? null}
             adjustments={adjustments}
             priced={priced}
+            showUsage={showUsage}
           />
         ))}
       </div>
-
-      <p className="mt-8 text-center text-xs text-subtle">
-        League total: {formatValue(summaries.reduce((sum, s) => sum + s.totalValue, 0))}{' '}
-        across {summaries.length} rosters
-      </p>
     </div>
   );
 }
