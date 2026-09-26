@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { LeagueImport } from './components/LeagueImport';
 import { LeagueHeader } from './components/LeagueHeader';
 import { ScoringBadge } from './components/ScoringBadge';
+import { PlayerDetail } from './components/PlayerDetail';
+import { OpenPlayerContext } from './hooks/useOpenPlayer';
+import { playerDetail } from './engine/playerDetail';
 import { RosterList } from './components/RosterList';
 import { TradeBuilder, type PendingTrade } from './components/TradeBuilder';
 import { TradeSuggestions } from './components/TradeSuggestions';
@@ -360,7 +363,36 @@ function App() {
    */
   const firstRun = !leagueId;
 
+  /*
+    The player panel (#68). One id in state for the whole app, and the detail
+    read out of what is already loaded — so opening a player costs a lookup,
+    never a request. Cleared with the league, since an id means nothing in
+    another one.
+  */
+  const [openPlayerId, setOpenPlayerId] = useState<string | null>(null);
+  useEffect(() => setOpenPlayerId(null), [leagueId]);
+  const openPlayer = useCallback((id: string) => setOpenPlayerId(id), []);
+  const closePlayer = useCallback(() => setOpenPlayerId(null), []);
+  const detail = useMemo(
+    () =>
+      openPlayerId && league && summaries
+        ? playerDetail(openPlayerId, {
+            league,
+            summaries,
+            myRosterId,
+            freeAgents: freeAgents?.all,
+            snaps,
+            usage,
+            roles,
+            adjustments,
+            trends,
+          })
+        : null,
+    [openPlayerId, league, summaries, myRosterId, freeAgents, snaps, usage, roles, adjustments, trends],
+  );
+
   return (
+    <OpenPlayerContext.Provider value={openPlayer}>
     <main className="min-h-screen bg-page text-ink">
       {/*
         max-w-6xl, not 4xl. At 896px the trade calculator truncated player names
@@ -646,7 +678,14 @@ function App() {
           </>
         )}
       </div>
+      <PlayerDetail
+        detail={detail}
+        chartSeason={snapsMeta?.chartSeason ?? null}
+        priced={priced}
+        onClose={closePlayer}
+      />
     </main>
+    </OpenPlayerContext.Provider>
   );
 }
 
