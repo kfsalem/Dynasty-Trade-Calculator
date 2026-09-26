@@ -167,7 +167,7 @@ export function RoleTrendPanel({
 
   return (
     <section className="card">
-      <h3 className="text-lg font-semibold tracking-tight">Role trends</h3>
+      <h3 className="font-display text-xl font-bold tracking-tight">Role trends</h3>
       <p className="mt-1 text-sm text-subtle">
         The market reprices a role change slowly, so the gap between what a player costs and
         what his current role is worth is the edge. Two things have to be true: his role

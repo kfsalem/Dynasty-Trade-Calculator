@@ -10,6 +10,7 @@ import {
 } from '../engine/testFixtures';
 import type { Player, PlayerValue } from '../types';
 import type { ManagerModel } from '../engine/managers';
+import { summarizeRoster } from '../engine/rosterValue';
 
 /**
  * These are about the one thing the panel says before the list is trustworthy.
@@ -101,5 +102,25 @@ describe('TradeSuggestions, while the manager walk is out', () => {
 
     expect(screen.queryByText(/until it lands/)).not.toBeInTheDocument();
     expect(screen.queryByText(/weighted the same/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * An empty result is an answer too (#120): it says what happened and why,
+ * rather than leaving the tab's main feature a dead end.
+ */
+describe('TradeSuggestions, when there is nothing to offer', () => {
+  it('heads the empty state with an answer and keeps the engine’s reason', () => {
+    // Two one-slot rosters of one starter each: nothing on yours is spare, so
+    // the engine stops before it searches.
+    const summaries = league.rosters.map((r) => summarizeRoster(r, players, values, settings));
+    renderPanel({ summaries });
+
+    expect(screen.getByRole('heading', { name: 'No offers to make' })).toBeInTheDocument();
+    expect(screen.getByText(/Nothing on your roster is spare/)).toBeInTheDocument();
+    // Nothing was searched, so there is no count to report and no search to
+    // hand over to the calculator.
+    expect(screen.queryByText(/Searched/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Build one in the calculator' })).toBeNull();
   });
 });

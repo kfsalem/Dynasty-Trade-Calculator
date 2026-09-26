@@ -13,6 +13,8 @@ import { RoleTrendPanel } from './RoleTrendPanel';
 import { FAIRNESS_LABEL } from '../engine/trade';
 import { POSITION_STYLES, formatValue } from '../lib/format';
 import type { PendingTrade } from './TradeBuilder';
+import { PlayerAvatar } from './PlayerAvatar';
+import { PlayerName } from './PlayerName';
 
 interface Props {
   league: League;
@@ -59,13 +61,18 @@ function AssetChip({ asset }: { asset: TradeAsset }) {
   const badge = asset.kind === 'player' ? asset.player.position : 'PICK';
 
   return (
-    <li className="flex items-center gap-2 text-sm">
+    <li className="flex min-h-11 items-center gap-2.5 text-sm fine:min-h-9">
+      {asset.kind === 'player' && <PlayerAvatar player={asset.player} size="sm" />}
       <span
         className={`inline-flex w-11 shrink-0 justify-center rounded px-1.5 py-0.5 text-xs font-semibold ${style}`}
       >
         {badge}
       </span>
-      <span className="min-w-0 flex-1 truncate font-medium">{asset.label}</span>
+      {asset.kind === 'player' ? (
+        <PlayerName player={asset.player} className="min-w-0 flex-1 truncate font-medium" />
+      ) : (
+        <span className="min-w-0 flex-1 truncate font-medium">{asset.label}</span>
+      )}
       {/* Market first, to agree with the fairness verdict on this same card —
           that percentage is computed on market values, so showing only the
           league-adjusted figure made an even trade look wildly lopsided. */}
@@ -82,16 +89,23 @@ function AssetChip({ asset }: { asset: TradeAsset }) {
   );
 }
 
-function Delta({ value }: { value: number }) {
+/**
+ * One of the card's four outcomes. The sign always rides the figure, so the
+ * direction never depends on the green or the red.
+ */
+function Outcome({ label, value }: { label: string; value: number }) {
   return (
-    <span
-      className={`font-semibold tabular-nums ${
-        value > 0 ? 'text-positive' : value < 0 ? 'text-negative' : 'text-subtle'
-      }`}
-    >
-      {value > 0 ? '+' : ''}
-      {formatValue(value)}
-    </span>
+    <div className="rounded-xl border border-line bg-raised p-3">
+      <dt className="text-xs text-subtle">{label}</dt>
+      <dd
+        className={`mt-1 font-display text-lg font-bold tabular-nums ${
+          value > 0 ? 'text-positive' : value < 0 ? 'text-negative' : 'text-subtle'
+        }`}
+      >
+        {value > 0 ? '+' : value < 0 ? '−' : ''}
+        {formatValue(Math.abs(value))}
+      </dd>
+    </div>
   );
 }
 
@@ -106,13 +120,15 @@ function SuggestionCard({
 }) {
   return (
     <article className="card">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-semibold">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-display text-xl font-bold tracking-tight">
           <span className="text-subtle">#{rank}</span> Offer to {trade.partnerName}
         </h3>
-        <span className="text-xs text-subtle">
-          {FAIRNESS_LABEL[trade.analysis.fairnessRating]} —{' '}
-          {Math.round(trade.analysis.valueDifferencePct * 100)}% apart
+        <span className="rounded-full border border-line bg-raised px-3 py-1 text-xs font-medium text-muted">
+          {FAIRNESS_LABEL[trade.analysis.fairnessRating]} ·{' '}
+          <span className="tabular">
+            {Math.round(trade.analysis.valueDifferencePct * 100)}% apart
+          </span>
         </span>
       </div>
 
@@ -121,7 +137,7 @@ function SuggestionCard({
           <p className="text-xs font-semibold uppercase tracking-wide text-subtle">
             You send <span className="float-right normal-case text-accent">market · yours</span>
           </p>
-          <ul className="mt-2 space-y-1.5">
+          <ul className="mt-2 space-y-1">
             {trade.give.map((asset) => (
               <AssetChip key={asset.id} asset={asset} />
             ))}
@@ -131,7 +147,7 @@ function SuggestionCard({
           <p className="text-xs font-semibold uppercase tracking-wide text-subtle">
             You get <span className="float-right normal-case text-accent">market · yours</span>
           </p>
-          <ul className="mt-2 space-y-1.5">
+          <ul className="mt-2 space-y-1">
             {trade.get.map((asset) => (
               <AssetChip key={asset.id} asset={asset} />
             ))}
@@ -139,42 +155,20 @@ function SuggestionCard({
         </div>
       </div>
 
-      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-line pt-3 text-sm">
-        <div className="flex justify-between gap-2">
-          <dt className="text-subtle">Your lineup</dt>
-          <dd>
-            <Delta value={trade.myBenefit.now} />
-          </dd>
-        </div>
-        <div className="flex justify-between gap-2">
-          <dt className="text-subtle">Their lineup</dt>
-          <dd>
-            <Delta value={trade.theirBenefit.now} />
-          </dd>
-        </div>
-        <div className="flex justify-between gap-2">
-          <dt className="text-subtle">Your 3-year</dt>
-          <dd>
-            <Delta value={trade.myBenefit.future} />
-          </dd>
-        </div>
-        <div className="flex justify-between gap-2">
-          <dt className="text-subtle">Their 3-year</dt>
-          <dd>
-            <Delta value={trade.theirBenefit.future} />
-          </dd>
-        </div>
+      <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Outcome label="Your lineup" value={trade.myBenefit.now} />
+        <Outcome label="Your 3-year" value={trade.myBenefit.future} />
+        <Outcome label="Their lineup" value={trade.theirBenefit.now} />
+        <Outcome label="Their 3-year" value={trade.theirBenefit.future} />
       </dl>
 
       {/* The half no other calculator shows. An offer that gets declined on
           sight is worth nothing, so this is given more weight than our own. */}
-      <section className="mt-4 rounded-lg border border-accent bg-accent-soft/60 p-4">
-        <h4 className="text-sm font-semibold text-accent">
-          Why {trade.partnerName} says yes
-        </h4>
+      <section className="mt-4 rounded-xl border border-accent/40 bg-accent-soft p-4">
+        <h4 className="text-sm font-semibold text-accent">Why {trade.partnerName} says yes</h4>
         <ul className="mt-2 space-y-1.5">
           {trade.whyTheySayYes.map((line) => (
-            <li key={line} className="flex gap-2 text-sm text-accent/90">
+            <li key={line} className="flex gap-2 text-sm text-ink">
               <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
               <span>{line}</span>
             </li>
@@ -182,9 +176,21 @@ function SuggestionCard({
         </ul>
       </section>
 
-      <section className="mt-3">
-        <h4 className="text-sm font-semibold text-muted">Why it works for you</h4>
-        <ul className="mt-2 space-y-1.5">
+      <details className="group mt-3">
+        <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 text-sm font-medium text-muted hover:text-ink fine:min-h-8 [&::-webkit-details-marker]:hidden">
+          Why it works for you
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            className="h-4 w-4 transition-transform group-open:rotate-180"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </summary>
+        <ul className="mt-1 space-y-1.5">
           {trade.rationale.map((line) => (
             <li key={line} className="flex gap-2 text-sm text-muted">
               <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-line" />
@@ -192,14 +198,10 @@ function SuggestionCard({
             </li>
           ))}
         </ul>
-      </section>
+      </details>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          className="btn-secondary text-sm"
-          onClick={onOpen}
-        >
+        <button type="button" className="btn-primary text-sm" onClick={onOpen}>
           Open in calculator
         </button>
       </div>
@@ -207,6 +209,19 @@ function SuggestionCard({
     </article>
   );
 }
+
+const selectionOf = (myRosterId: number, trade: SuggestedTrade): PendingTrade => ({
+  teamA: myRosterId,
+  teamB: trade.partnerRosterId,
+  givesA: {
+    playerIds: trade.give.filter((a) => a.kind === 'player').map((a) => a.id),
+    pickIds: trade.give.filter((a) => a.kind === 'pick').map((a) => a.id),
+  },
+  givesB: {
+    playerIds: trade.get.filter((a) => a.kind === 'player').map((a) => a.id),
+    pickIds: trade.get.filter((a) => a.kind === 'pick').map((a) => a.id),
+  },
+});
 
 export function TradeSuggestions({
   league,
@@ -251,104 +266,137 @@ export function TradeSuggestions({
     return window.open ? deadlineNotice(window) : null;
   }, [league, odds]);
 
+  const partners = summaries.length - 1;
+  const firstPartner = summaries.find((s) => s.rosterId !== myRosterId)?.rosterId;
+  // The search ran and found nothing, as against a rule that stopped it
+  // before it started (trading off, deadline passed, a spare-less roster).
+  const searched = result.considered > 0;
+
   return (
-    <div>
-      <h2 className="text-xl font-bold tracking-tight">Trade ideas</h2>
-      <p className="mt-1 text-sm text-subtle">
-        Offers where both teams come out ahead — measured in what each team actually
-        wants, which is not the same thing for a contender and a rebuilder.
-      </p>
-
-      {/* Said once, here, rather than on every card: what the ordering counts,
-          and the one thing the feed behind it cannot see. A reader who knows an
-          offer is ranked partly on who receives it can weigh the list properly;
-          a reader who does not will read the ordering as a claim about value. */}
-      {managers && managers.trades > 0 && (
-        <p className="mt-2 text-sm text-subtle">
-          Ranked by how much good an offer does, which counts how often each manager
-          actually trades — {countPhrase(managers.trades, TRADES)}
-          {managers.seasons[0] ? ` since ${managers.seasons[0]}` : ''}
-          {/* The walk stops at `MAX_SEASONS` or at the first season Sleeper has
-              dropped, and the figure is then a floor rather than a total. Said
-              in the same words the bench panel uses for the same walk. */}
-          {managers.truncated ? ', as far back as Sleeper still publishes' : ''}. Only completed
-          trades are published, never a declined one, so a quiet manager may be asking
-          and being turned down.
-        </p>
-      )}
-
+    <div className="space-y-6">
       {/*
-        The walk is seventy-odd requests and the list re-sorts when it lands.
-        Told nothing, a reader watches the card he was about to click move under
-        the cursor; told this, he knows to give it a moment. Said here and not
-        as a spinner because the list below is real and usable meanwhile — it is
-        the ordering that is provisional, not the offers.
+        The answer first (#120): what these are, in a line. How they are
+        ordered — and the one thing the league's feed cannot see — is one tap
+        away rather than two paragraphs over the offers.
       */}
-      {!managers && managersLoading && (
-        <p className="mt-2 text-sm text-subtle">
-          Reading this league's trade history. These are ranked on value alone until
-          it lands, and will re-order once it does.
+      <div>
+        <h2 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
+          Trade ideas
+        </h2>
+        <p className="mt-1 text-sm text-muted">
+          Offers where both teams come out ahead — measured in what each team actually
+          wants, which is not the same thing for a contender and a rebuilder.
         </p>
-      )}
 
-      {/* Same cost as the bench walk failing: this panel and nothing else. */}
-      {!managers && managersFailed && (
-        <p className="mt-2 text-sm text-subtle">
-          This league's trade history didn't load, so these are ranked on value alone
-          — every manager is weighted the same. Nothing else on this page is affected.
-        </p>
-      )}
+        {(managers || managersLoading || managersFailed) && (
+          <details className="group mt-2">
+            <summary className="-mx-2 inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-2 text-sm font-medium text-accent hover:bg-surface fine:min-h-8 [&::-webkit-details-marker]:hidden">
+              How offers are ranked
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="h-4 w-4 transition-transform group-open:rotate-180"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </summary>
+            <div className="mt-1 max-w-3xl space-y-2 text-sm text-subtle">
+              {managers && managers.trades > 0 && (
+                <p>
+                  Ranked by how much good an offer does, which counts how often each
+                  manager actually trades — {countPhrase(managers.trades, TRADES)}
+                  {managers.seasons[0] ? ` since ${managers.seasons[0]}` : ''}
+                  {/* The walk stops at `MAX_SEASONS` or at the first season
+                      Sleeper has dropped, and the figure is then a floor rather
+                      than a total. Said in the same words the bench panel uses. */}
+                  {managers.truncated ? ', as far back as Sleeper still publishes' : ''}.
+                  Only completed trades are published, never a declined one, so a quiet
+                  manager may be asking and being turned down.
+                </p>
+              )}
+              {/* The list is real and usable meanwhile — it is the ordering that
+                  is provisional, not the offers. */}
+              {!managers && managersLoading && (
+                <p>
+                  Reading this league's trade history. These are ranked on value alone
+                  until it lands, and will re-order once it does.
+                </p>
+              )}
+              {/* Same cost as the bench walk failing: this panel and nothing else. */}
+              {!managers && managersFailed && (
+                <p>
+                  This league's trade history didn't load, so these are ranked on value
+                  alone — every manager is weighted the same. Nothing else on this page is
+                  affected.
+                </p>
+              )}
+            </div>
+          </details>
+        )}
+      </div>
 
       {/* Caution, not a neutral note: this one is about to expire, which is
           the whole reason it is on screen. */}
       {deadline && (
-        <p className="mt-4 rounded-lg border border-caution bg-caution-soft p-3 text-sm text-caution">
+        <p className="rounded-xl border border-caution bg-caution-soft p-3 text-sm text-caution">
           {deadline}
         </p>
       )}
 
-      {/* Above the offers on purpose. These are the players the suggestions
-          below are reaching for, and seeing why makes the offers legible
-          instead of arbitrary. */}
-      <div className="mt-6">
-        <RoleTrendPanel trends={trends} league={league} season={season} />
-      </div>
-
       {result.trades.length === 0 ? (
-        <p className="mt-6 rounded-lg border border-line bg-surface p-5 text-sm text-muted">
-          {result.note}
-        </p>
-      ) : (
-        <>
-          <p className="mt-3 text-xs text-subtle">
-            Searched {result.considered.toLocaleString('en-US')} packages across{' '}
-            {summaries.length - 1} teams.
-          </p>
-          <div className="mt-4 space-y-4">
-            {result.trades.map((trade, index) => (
-              <SuggestionCard
-                key={trade.id}
-                trade={trade}
-                rank={index + 1}
-                onOpen={() =>
+        /*
+          An empty result is an answer too, and it should read like one: what
+          happened, why, and what to do next. "Found none" on its own left the
+          app's main feature a dead end.
+        */
+        <section className="rounded-card border border-line bg-surface p-6 elevation-raised sm:p-8">
+          <h3 className="font-display text-2xl font-bold tracking-tight">
+            {searched ? 'No offer works for both sides right now' : 'No offers to make'}
+          </h3>
+          {/* The engine's note already says how many packages it searched. */}
+          <p className="mt-2 max-w-2xl text-sm text-muted">{result.note}</p>
+          {searched && firstPartner !== undefined && !league.settings.tradesDisabled && (
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn-primary text-sm"
+                onClick={() =>
                   onOpenInCalculator({
                     teamA: myRosterId,
-                    teamB: trade.partnerRosterId,
-                    givesA: {
-                      playerIds: trade.give.filter((a) => a.kind === 'player').map((a) => a.id),
-                      pickIds: trade.give.filter((a) => a.kind === 'pick').map((a) => a.id),
-                    },
-                    givesB: {
-                      playerIds: trade.get.filter((a) => a.kind === 'player').map((a) => a.id),
-                      pickIds: trade.get.filter((a) => a.kind === 'pick').map((a) => a.id),
-                    },
+                    teamB: firstPartner,
+                    givesA: { playerIds: [], pickIds: [] },
+                    givesB: { playerIds: [], pickIds: [] },
                   })
                 }
-              />
-            ))}
-          </div>
-        </>
+              >
+                Build one in the calculator
+              </button>
+            </div>
+          )}
+        </section>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-xs text-subtle">
+            Searched {result.considered.toLocaleString('en-US')} packages across {partners}{' '}
+            teams.
+          </p>
+          {result.trades.map((trade, index) => (
+            <SuggestionCard
+              key={trade.id}
+              trade={trade}
+              rank={index + 1}
+              onOpen={() => onOpenInCalculator(selectionOf(myRosterId, trade))}
+            />
+          ))}
+        </div>
       )}
+
+      {/* After the offers now, as the context behind them: the players whose
+          role and price disagree, which is what several offers reach for. */}
+      <RoleTrendPanel trends={trends} league={league} season={season} />
     </div>
   );
 }
