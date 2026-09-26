@@ -23,6 +23,7 @@ import { PositionalStrengthChart } from './charts/PositionalStrengthChart';
 import { ScarcityChart } from './charts/ScarcityChart';
 import { WeeklyLineup } from './WeeklyLineup';
 import { PlayerName } from './PlayerName';
+import { PlayerAvatar } from './PlayerAvatar';
 import type { BidModel } from '../engine/bids';
 
 interface Props {
@@ -412,6 +413,7 @@ export function TeamAnalysis({
                     key={surplus.player.id}
                     className="flex items-center gap-3 rounded-xl border border-line bg-raised p-3 text-sm"
                   >
+                    <PlayerAvatar player={surplus.player} />
                     <span
                       className={`inline-flex w-11 shrink-0 justify-center rounded px-1.5 py-0.5 text-xs font-semibold ${
                         POSITION_STYLES[surplus.player.position].chip

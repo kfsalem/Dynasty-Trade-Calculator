@@ -8,6 +8,8 @@ import { playingTime } from '../engine/freeAgents';
 import { isGameWeek } from '../engine/season';
 import { injuryNote } from '../engine/availability';
 import { formatInjury, formatSlot, formatValue, POSITION_STYLES } from '../lib/format';
+import { PlayerAvatar } from './PlayerAvatar';
+import { PlayerName } from './PlayerName';
 import { changeAction, describeChange } from '../lib/lineupText';
 import { adviseBid, budgetLeft, type BidModel } from '../engine/bids';
 import { evidenceNote } from '../lib/learnedText';
@@ -244,9 +246,10 @@ export function WeeklyLineup({
                   </span>
                   {assignment.entry ? (
                     <>
+                      <PlayerAvatar player={assignment.entry.player} size="sm" />
                       <PositionChip entry={assignment.entry} />
                       <span className="min-w-0 flex-1 truncate">
-                        {assignment.entry.player.name}
+                        <PlayerName player={assignment.entry.player} />
                         {changed && (
                           <span className="ml-1.5 text-xs font-semibold text-accent">
                             new
@@ -357,9 +360,10 @@ function Wire({
                 <span className="w-12 shrink-0 text-xs font-semibold uppercase tracking-wide text-accent/70">
                   {formatSlot(upgrade.slot)}
                 </span>
+                <PlayerAvatar player={upgrade.add.player} size="sm" />
                 <span className="min-w-0 flex-1 font-medium">
                   <span className="text-accent/80">Add </span>
-                  {upgrade.add.player.name}
+                  <PlayerName player={upgrade.add.player} />
                 </span>
                 <span className="tabular shrink-0 text-sm font-semibold text-positive">
                   +{formatValue(upgrade.addValue - upgrade.replaces.winNowValue)}
@@ -465,6 +469,7 @@ function ChangeRow({ change }: { change: LineupChange }) {
         </span>
         {change.start ? (
           <>
+            <PlayerAvatar player={change.start.player} size="sm" />
             <PositionChip entry={change.start} />
             {/*
               Wraps rather than truncates, unlike the roster tables. Those are
@@ -475,7 +480,7 @@ function ChangeRow({ change }: { change: LineupChange }) {
             */}
             <span className="min-w-0 flex-1 font-medium">
               <span className="text-muted">{changeAction(change)} </span>
-              {change.start.player.name}
+              <PlayerName player={change.start.player} />
             </span>
           </>
         ) : (

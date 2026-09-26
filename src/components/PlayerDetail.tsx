@@ -6,6 +6,7 @@ import { POSITION_STYLES, formatAge, formatInjury, formatValue } from '../lib/fo
 import { describeRole } from '../lib/roleText';
 import { describeAdjustment, describeMetric, describeSnaps } from '../lib/activityText';
 import { UnvaluedCell } from './UnvaluedCell';
+import { PlayerAvatar } from './PlayerAvatar';
 
 interface Props {
   /** The player to show, or null when the panel is closed. */
@@ -107,6 +108,7 @@ export function PlayerDetail({ detail, chartSeason, priced, onClose }: Props) {
       {detail && (
         <div className="rise-in space-y-4 p-5 pb-8">
           <header className="flex items-start gap-3">
+            <PlayerAvatar player={detail.player} size="lg" />
             <span
               className={`mt-1 inline-flex w-11 shrink-0 justify-center rounded px-1.5 py-0.5 text-xs font-semibold ${
                 POSITION_STYLES[detail.player.position].chip
