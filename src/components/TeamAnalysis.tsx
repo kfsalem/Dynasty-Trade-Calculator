@@ -20,6 +20,7 @@ import { POSITION_STYLES, formatValue } from '../lib/format';
 import { BenchPoints } from './BenchPoints';
 import { ContentionScatter } from './charts/ContentionScatter';
 import { PositionalStrengthChart } from './charts/PositionalStrengthChart';
+import { SlotStrengthChart } from './charts/SlotStrengthChart';
 import { ScarcityChart } from './charts/ScarcityChart';
 import { WeeklyLineup } from './WeeklyLineup';
 import { PlayerName } from './PlayerName';
@@ -237,7 +238,7 @@ export function TeamAnalysis({
     );
   }
 
-  const { contention, positions, surpluses, focus } = analysis;
+  const { contention, positions, surpluses, focus, slots } = analysis;
   const summary = summaries.find((s) => s.rosterId === myRosterId);
   const showFielded = fielded !== null && !fielded.unset && fielded.gap > 0;
 
@@ -380,6 +381,14 @@ export function TeamAnalysis({
               ))}
             </ul>
           </section>
+
+          {/*
+            The picture behind the weakest spot named above (#101): every
+            starting slot against the same slot league-wide. Beside the focus
+            list rather than with the league charts, because it is about this
+            lineup and something a manager can act on.
+          */}
+          <SlotStrengthChart slots={slots} />
 
           {/*
             The seasons already played: the one panel on the tab a manager

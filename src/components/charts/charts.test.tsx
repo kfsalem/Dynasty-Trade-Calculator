@@ -7,6 +7,8 @@ import type { LeagueContention, PositionalStrength } from '../../engine/analysis
 import { ContentionScatter } from './ContentionScatter';
 import { PositionalStrengthChart } from './PositionalStrengthChart';
 import { ScarcityChart } from './ScarcityChart';
+import { SlotStrengthChart } from './SlotStrengthChart';
+import type { SlotStrength } from '../../engine/rosterDepth';
 
 /**
  * The contract every chart in this app signs, asserted once per chart.
@@ -194,5 +196,63 @@ describe('degenerate leagues', () => {
     expect(
       render(<ScarcityChart scarcity={{}} teamCount={10} />).container.firstChild,
     ).toBeNull();
+  });
+});
+
+describe('the slot chart (#101)', () => {
+  const slot = (
+    label: string,
+    slotKind: SlotStrength['slot'],
+    value: number,
+    leagueMedian: number,
+    rank: number,
+    z: number,
+    verdict: SlotStrength['verdict'],
+  ): SlotStrength => ({
+    slot: slotKind,
+    ordinal: 1,
+    label,
+    entry: null,
+    value,
+    leagueMedian,
+    rank,
+    teamCount: 10,
+    share: 1 - rank / 10,
+    z,
+    verdict,
+  });
+
+  // A receiver room that is strong in total and has a hole at WR3: the case the
+  // position chart could not show.
+  const slots = [
+    slot('WR1', 'WR', 5800, 3900, 1, 1.6, 'strength'),
+    slot('WR3', 'WR', 283, 1193, 9, -1.4, 'weakness'),
+    slot('K', 'K', 0, 0, 1, 0, 'neutral'),
+  ];
+
+  it('shows the weak slot the position sum hides, with its rank', async () => {
+    render(<SlotStrengthChart slots={slots} />);
+
+    await userEvent.click(screen.getByText('Show the numbers'));
+    const table = screen.getByRole('table');
+    expect(within(table).getByText('WR3')).toBeInTheDocument();
+    expect(within(table).getByText('9th of 10')).toBeInTheDocument();
+    expect(within(table).getByText('Weak here')).toBeInTheDocument();
+    expect(within(table).getByText('−910')).toBeInTheDocument();
+  });
+
+  it('leaves out kickers and defences, which have no market to rank', async () => {
+    render(<SlotStrengthChart slots={slots} />);
+
+    await userEvent.click(screen.getByText('Show the numbers'));
+    expect(within(screen.getByRole('table')).queryByText('K')).not.toBeInTheDocument();
+  });
+
+  it('labels every bar with its slot, value, standing and verdict', () => {
+    render(<SlotStrengthChart slots={slots} />);
+
+    const wr3 = screen.getByLabelText(/^WR3:/);
+    expect(wr3).toHaveAttribute('aria-label', expect.stringContaining('below the league median'));
+    expect(wr3).toHaveAttribute('aria-label', expect.stringContaining('9th of 10'));
   });
 });
