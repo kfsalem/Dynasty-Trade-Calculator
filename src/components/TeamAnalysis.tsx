@@ -15,6 +15,8 @@ import type { DraftPick } from '../types';
 import { isGameWeek } from '../engine/season';
 import type { PositionScarcity } from '../engine/replacement';
 import type { FreeAgentBoard } from '../engine/freeAgents';
+import type { WeekProjections } from '../platforms/types';
+import type { WeekEvidence } from '../engine/weekEvidence';
 import type { BenchReport } from '../engine/benchPoints';
 import { POSITION_STYLES, formatValue } from '../lib/format';
 import { BenchPoints } from './BenchPoints';
@@ -39,8 +41,19 @@ interface Props {
   byeTeams: ReadonlySet<string> | null;
   /** Live playoff odds. Undefined out of season, and the advice then ignores them. */
   season: SeasonOdds | undefined;
-  /** The priced waiver wire, so the lineup panel can look past the roster. */
+  /**
+   * The waiver wire, so the lineup panel can look past the roster — with the
+   * undrafted rookie class taken off (`lineupBoard`).
+   */
   freeAgents: FreeAgentBoard | undefined;
+  /** This week's projected points in the league's scoring, when there are any. */
+  projected?: ReadonlyMap<string, number>;
+  /** This week's raw projections, for each row's opponent. */
+  projections?: WeekProjections;
+  /** What each player has done this season, shown beside the lineup's calls. */
+  evidence?: ReadonlyMap<string, WeekEvidence>;
+  /** The last week that evidence covers. */
+  evidenceWeek?: number | null;
   /** Whether the activity data describes the season being played. */
   activityCurrent: boolean;
   /**
@@ -157,6 +170,10 @@ export function TeamAnalysis({
   byeTeams,
   season,
   freeAgents,
+  projected,
+  projections,
+  evidence,
+  evidenceWeek,
   activityCurrent,
   bench,
   bids,
@@ -357,6 +374,10 @@ export function TeamAnalysis({
           currentWeek={currentWeek}
           byeTeams={byeTeams}
           board={freeAgents}
+          projected={projected}
+          projections={projections}
+          evidence={evidence}
+          evidenceWeek={evidenceWeek}
           activityCurrent={activityCurrent}
           bids={bids}
         />

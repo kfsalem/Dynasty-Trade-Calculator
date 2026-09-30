@@ -10,6 +10,7 @@ import {
   sleeperDraftSchema,
   sleeperDraftsSchema,
   sleeperStateSchema,
+  sleeperProjectionsSchema,
   sleeperAccountSchema,
   sleeperMatchupsSchema,
   sleeperTransactionsSchema,
@@ -23,6 +24,7 @@ import {
   type SleeperTradedPick,
   type SleeperDraft,
   type SleeperState,
+  type SleeperProjection,
   type SleeperAccount,
 } from './schema';
 
@@ -124,6 +126,26 @@ export function getTransactions(
   return fetchJson(
     `${BASE}/league/${leagueId}/transactions/${week}`,
     sleeperTransactionsSchema,
+  );
+}
+
+/**
+ * Every projected stat line for one week, at the positions asked for (#149).
+ *
+ * Its own host path, outside `/v1`: see `sleeperProjectionSchema` for what is
+ * and is not guaranteed about it. Asking only for the positions a league starts
+ * matters — all six is two megabytes a week.
+ */
+export function getProjections(
+  season: string,
+  week: number,
+  positions: readonly string[],
+): Promise<SleeperProjection[]> {
+  const query = new URLSearchParams({ season_type: 'regular' });
+  for (const position of positions) query.append('position[]', position);
+  return fetchJson(
+    `https://api.sleeper.app/projections/nfl/${season}/${week}?${query.toString()}`,
+    sleeperProjectionsSchema,
   );
 }
 

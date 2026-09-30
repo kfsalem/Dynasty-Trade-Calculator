@@ -251,3 +251,54 @@ describe('wireUpgrades — who makes room', () => {
     expect(upgrades[1].drop?.player.id).toBe('spare');
   });
 });
+
+describe('wireUpgrades on projections (#149)', () => {
+  const lineupOn = (entries: ValuedPlayer[], projected: Map<string, number>) =>
+    bestLineup(
+      entries.map((e) => ({ ...e, winNowValue: projected.get(e.player.id) ?? 0 })),
+      SLOTS,
+    );
+  const entries = roster();
+  const projected = new Map([
+    ['qb1', 18],
+    ['rb1', 14],
+    ['wr1', 12],
+    ['wr2', 8],
+    ['rook', 2],
+    ['spare', 3],
+  ]);
+
+  it('offers an unpriced free agent when his projection clearly beats a starter', () => {
+    const [upgrade] = claims({
+      lineup: lineupOn(entries, projected),
+      entries,
+      board: { priced: [], unpriced: [agent('fa_wr', 'WR', null)], all: [agent('fa_wr', 'WR', null)] },
+      projected: new Map([...projected, ['fa_wr', 14]]),
+    });
+
+    expect(upgrade.add.player.id).toBe('fa_wr');
+    expect(upgrade.replaces.player.id).toBe('wr2');
+    expect(upgrade.chance).toBeGreaterThan(0.6);
+  });
+
+  it('says nothing about a free agent only a point or two better', () => {
+    const upgrades = claims({
+      lineup: lineupOn(entries, projected),
+      entries,
+      board: board(agent('fa_wr', 'WR', 5000)),
+      projected: new Map([...projected, ['fa_wr', 9.5]]),
+    });
+
+    expect(upgrades).toEqual([]);
+  });
+
+  it('keeps the value rule when there are no projections: unpriced agents stay out', () => {
+    const upgrades = claims({
+      lineup: lineupFor(entries),
+      entries,
+      board: { priced: [], unpriced: [agent('fa_wr', 'WR', null)], all: [agent('fa_wr', 'WR', null)] },
+    });
+
+    expect(upgrades).toEqual([]);
+  });
+});

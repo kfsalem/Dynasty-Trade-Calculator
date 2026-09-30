@@ -1,5 +1,8 @@
 import type { LineupChange } from '../engine/startSit';
 import { INJURY_LABEL } from '../engine/availability';
+import { COIN_FLIP } from '../engine/projections';
+import type { WeekEvidence } from '../engine/weekEvidence';
+import { formatChance, formatPoints } from './format';
 
 /**
  * Why a slot changes, in a sentence.
@@ -47,6 +50,14 @@ export function describeChange(change: LineupChange): string {
       return 'The same players, in different slots. Worth nothing on its own.';
 
     default:
+      if (change.chance !== null && change.start && change.sit && !change.sitStays) {
+        return outscoreSentence(
+          change.chance,
+          name as string,
+          change.start.winNowValue,
+          change.sit.winNowValue,
+        );
+      }
       // Deliberately not "worth more *this week*". The same rows render in the
       // offseason, where there is no this week, and the panel's own header is
       // the thing that says which register it is speaking in.
@@ -66,3 +77,56 @@ export function describeChange(change: LineupChange): string {
  */
 export const changeAction = (change: LineupChange): string =>
   change.startIsNew ? 'Start' : 'Move';
+
+/**
+ * How sure a projection call is, in a sentence.
+ *
+ * The chance comes first because it is the answer; the two projections come
+ * after because they are how a manager checks it. Below `COIN_FLIP` the
+ * sentence says so outright — across 60,000 measured pairs a gap that small
+ * goes the other way almost half the time, and a confident "start him" there
+ * is the app claiming a precision nobody has.
+ */
+export function outscoreSentence(
+  chance: number,
+  otherName: string,
+  projected: number,
+  otherProjected: number,
+): string {
+  const figures = `${formatPoints(projected)} projected against ${formatPoints(otherProjected)}`;
+  return chance < COIN_FLIP
+    ? `A coin flip with ${otherName}: ${figures}.`
+    : `${formatChance(chance)} likely to outscore ${otherName}: ${figures}.`;
+}
+
+/**
+ * The facts behind a player's projection, as one short line.
+ *
+ * Opponent first, since it is the one thing that changes week to week; then
+ * role — snaps, and targets or carries, whichever he gets more of — and then
+ * what he has scored. Each part is left out when it is not known rather than
+ * shown as a zero, and the whole line is null when nothing is.
+ *
+ * A quarterback gets no role at all. Every starter plays every snap, and his
+ * handful of scrambles counted as "carries" read as though they were his job,
+ * which is what the live panel said about Patrick Mahomes the first time it ran.
+ */
+export function evidenceLine(
+  opponent: string | null | undefined,
+  evidence: WeekEvidence | undefined,
+  position?: string,
+): string | null {
+  const parts: string[] = [];
+  if (opponent) parts.push(`vs ${opponent}`);
+  if (evidence && position !== 'QB') {
+    if (evidence.snapShare !== null) parts.push(`${Math.round(evidence.snapShare * 100)}% of snaps`);
+    const targets = evidence.targetsPerGame ?? 0;
+    const carries = evidence.carriesPerGame ?? 0;
+    if (targets >= 1 && targets >= carries) parts.push(`${targets.toFixed(1)} targets a game`);
+    else if (carries >= 1) parts.push(`${carries.toFixed(1)} carries a game`);
+  }
+  if (evidence?.pointsPerGame != null) {
+    parts.push(`${formatPoints(evidence.pointsPerGame)} points a game`);
+  }
+  return parts.length > 0 ? parts.join(' · ') : null;
+}

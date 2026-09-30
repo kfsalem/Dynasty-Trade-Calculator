@@ -9,6 +9,7 @@ import {
 } from './rosterValue';
 import { availability, canPlayThisWeek } from './availability';
 import { onBye } from './byes';
+import { outscoreChance, WORTH_ACTING } from './projections';
 
 /**
  * The lineup you have set, against the lineup you could field.
@@ -28,11 +29,12 @@ import { onBye } from './byes';
  * can catch. `canPlayThisWeek` is that inversion, and it is the whole reason
  * this file is not a two-line diff of `summarizeRoster`.
  *
- * **What this does not know, and does not pretend to.** Values here are
- * season-long win-now prices, corrected for role and availability. They are not
- * weekly projections: no opponent and no game script. So it answers "who are my
- * best eligible players" and not "who scores most this Sunday", and the UI says
- * so rather than letting a confident-looking list imply otherwise.
+ * **Two bases, and the plan says which it used.** Given this week's projected
+ * points (#149) it ranks on them: a weekly number with the opponent in it,
+ * which beat the manager's own lineup over 520 replayed team-weeks where
+ * points-per-game lost to it. Without them it falls back to season-long
+ * win-now value, which answers "who are my best eligible players" rather than
+ * "who scores most this Sunday" — and the UI says which question it answered.
  *
  * Byes are the one exception, and they are not a projection. A team that is off
  * scores nothing with certainty, which puts a bye in the same class as an empty
@@ -120,6 +122,11 @@ export interface LineupChange {
    */
   startIsNew: boolean;
   cause: ChangeCause;
+  /**
+   * The chance `start` outscores `sit` this week, from their projection gap.
+   * Null on a value-ranked plan, and where there is nobody to compare against.
+   */
+  chance: number | null;
   /** The designation behind a `sidelined` cause, for naming it exactly. */
   status?: InjuryStatus['status'];
   /**
@@ -147,7 +154,8 @@ export interface LineupChange {
    * `empty`, `dropped`, `bye` and `sidelined` are *facts* about the roster and
    * always qualify, however small the value involved, because a slot scoring
    * zero is worth saying whoever is in it. An `upgrade` is an *opinion*, and its
-   * chain has to clear `CLEAR_MARGIN` to be stated as one. A chain that moves
+   * chain has to clear `CLEAR_MARGIN` on value, or `WORTH_ACTING` as a chance
+   * on projections, to be stated as one. A chain that moves
    * nobody in or out of the lineup never qualifies: it is the same eleven men
    * differently arranged, and the engine's own accounting puts it at zero.
    */
@@ -161,7 +169,18 @@ export interface LineupChange {
   gain: number;
 }
 
+/** What a plan ranked on: this week's projected points, or season-long value. */
+export type LineupBasis = 'projection' | 'value';
+
 export interface StartSitPlan {
+  /**
+   * Which figure `winNowValue` holds on every entry in this plan.
+   *
+   * On a projection plan the entries are copies carrying projected points in
+   * that field, so every sum and gain below is in points; on a value plan it
+   * is the win-now price it always was.
+   */
+  basis: LineupBasis;
   /**
    * The lineup to field, slot by slot — arranged to agree with the set one
    * wherever that is legal, so the only rows that differ are rows that matter.
@@ -221,6 +240,14 @@ export interface StartSitInput {
    * whether to promise the reader that byes were checked. See `engine/byes`.
    */
   byeTeams?: ReadonlySet<string> | null;
+  /**
+   * This week's projected points by player id, in the league's scoring.
+   *
+   * When present the plan ranks on these, and a player with no projection
+   * counts as projected for nothing. Absent until the week's projections load,
+   * or when they fail — the plan is then the value-ranked one, as before.
+   */
+  projected?: ReadonlyMap<string, number>;
 }
 
 /**
@@ -305,11 +332,21 @@ function arrangeLike(
 }
 
 export function startSit({
-  entries,
+  entries: given,
   startingSlots,
   setLineup,
   byeTeams,
+  projected,
 }: StartSitInput): StartSitPlan {
+  const basis: LineupBasis = projected ? 'projection' : 'value';
+  /*
+    Projected points go into `winNowValue` on copies, rather than threading a
+    second figure through every sum below: the arithmetic is the same whichever
+    number it is, and `basis` is what tells a reader which one it holds.
+  */
+  const entries = projected
+    ? given.map((entry) => ({ ...entry, winNowValue: projected.get(entry.player.id) ?? 0 }))
+    : given;
   const off = byeTeams ?? new Set<string>();
   const rostered = new Map(entries.map((entry) => [entry.player.id, entry]));
 
@@ -396,6 +433,10 @@ export function startSit({
       */
       const margin =
         start && sit ? relativeMargin(start.winNowValue, sit.winNowValue) : 0;
+      const chance =
+        basis === 'projection' && start && sit
+          ? outscoreChance(start.winNowValue - sit.winNowValue)
+          : null;
 
       changes.push({
         slot,
@@ -407,6 +448,7 @@ export function startSit({
         cause: why,
         ...(status ? { status } : {}),
         margin,
+        chance,
         // Both filled in once every row exists — a chain cannot be identified
         // from inside one of its members.
         chain: -1,
@@ -416,7 +458,7 @@ export function startSit({
     }
   }
 
-  linkChains(changes, playing);
+  linkChains(changes, playing, basis);
   changes.sort((a, b) => b.gain - a.gain || a.index - b.index);
 
   const watch = lineup
@@ -427,6 +469,7 @@ export function startSit({
     );
 
   return {
+    basis,
     lineup,
     changes,
     decisive: changes.filter((change) => change.decisive),
@@ -458,6 +501,7 @@ export function startSit({
 function linkChains(
   changes: LineupChange[],
   playing: (entry: ValuedPlayer) => boolean,
+  basis: LineupBasis,
 ): void {
   /** Row indices keyed by a player who is only changing slots. */
   const movers = new Map<string, number[]>();
@@ -516,7 +560,17 @@ function linkChains(
 
     const inert = rows.every((change) => !change.startIsNew && change.sitStays);
     const fact = rows.some((change) => FACTS.includes(change.cause));
-    const decisive = fact || (!inert && relativeMargin(joining, leaving) >= CLEAR_MARGIN);
+    /*
+      On projections the bar is a chance rather than a share: the measured odds
+      that the men joining outscore the men leaving. A 10% value edge and a
+      three-in-five chance are the same idea — worth acting on, not a coin flip
+      — expressed in each basis's own units.
+    */
+    const clears =
+      basis === 'projection'
+        ? outscoreChance(joining - leaving) >= WORTH_ACTING
+        : relativeMargin(joining, leaving) >= CLEAR_MARGIN;
+    const decisive = fact || (!inert && clears);
 
     for (const change of rows) {
       change.chain = id;
