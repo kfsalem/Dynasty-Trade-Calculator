@@ -743,8 +743,16 @@ function explain(
       different argument, and an offer that arrives with no argument at all is
       the failure this function exists to prevent.
     */
+    /*
+      "Without costing" is only true at zero. Until picks could lead a package
+      nothing reached this branch with a lineup loss, so the sentence was never
+      wrong; since #97 a contender selling a starter for two firsts arrives here
+      at -459, and has to be told what it is giving up.
+    */
     lines.push(
-      `${they} ${is} ${window}, and this adds to ${their} future without costing ${their} lineup this year.`,
+      Math.round(benefit.now) < 0
+        ? `${they} ${is} ${window}, and this trades some of ${their} lineup this year for more of ${their} future.`
+        : `${they} ${is} ${window}, and this adds to ${their} future without costing ${their} lineup this year.`,
     );
   } else if (
     !contending &&
@@ -1142,6 +1150,34 @@ function depthPairs(assets: TradeAsset[], limit: number): TradeAsset[][] {
 }
 
 /**
+ * Pairs of draft picks to spend together (#97).
+ *
+ * `balancePackage` adds at most one pick, and only as change, so until this
+ * existed a pick could never be the point of a package — "two firsts for your
+ * receiver" was unreachable however good a trade it was, and in the test
+ * league's own history 82% of completed trades move a pick.
+ *
+ * Drawn from the same pool as everything else a side will move, so only a
+ * contender in a league that allows pick trading has any: `movableAssets` is
+ * already where both of those rules live, and restating them here would let the
+ * two drift. Top three by value and their three pairs, as `depthPairs` does for
+ * players, so a team holding eight picks offers its best combinations rather
+ * than all twenty-eight.
+ */
+function pickPairs(assets: TradeAsset[], limit: number): TradeAsset[][] {
+  const top = assets
+    .filter((asset) => asset.kind === 'pick')
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 3);
+
+  const pairs: TradeAsset[][] = [];
+  for (let i = 0; i < top.length; i++) {
+    for (let j = i + 1; j < top.length; j++) pairs.push([top[i], top[j]]);
+  }
+  return pairs.slice(0, limit);
+}
+
+/**
  * The best men a roster holds who could fill a given slot, best first.
  *
  * Drawn from the whole roster rather than from `movableAssets`, and that is the
@@ -1471,6 +1507,8 @@ export function suggestTrades(
   // Mine do not change from partner to partner, so they are built once.
   const myWeakest = weakestSlot(myAnalysis);
   const myDepthPairs = depthPairs(myAssets, candidatesPerTeam);
+  const myPickPairs = pickPairs(myAssets, candidatesPerTeam);
+  const myIds = new Set(myAssets.map((asset) => asset.id));
 
   for (const summary of ctx.summaries) {
     if (summary.rosterId === myRosterId) continue;
@@ -1525,16 +1563,52 @@ export function suggestTrades(
       53% of completed trades are uneven and one-for-two alone is 26%, the
       single most common shape the engine could not previously express.
     */
+    const theirIds = new Set(theirAssets.map((asset) => asset.id));
+    const theirPickPairs = pickPairs(theirAssets, candidatesPerTeam);
+
+    /*
+      What pays for a man at the slot a roster is thinnest at.
+
+      Until #97 only a pair of same-position players could, so the two shapes
+      that most often buy a starter in a real league were unreachable: picks
+      spent as the point of the offer, and one spare plus a pick. A single
+      movable asset covers the second — `balancePackage` adds the pick — and a
+      single pick covers "two picks" the same way. Pick pairs are the deliberate
+      version, for a man one pick and its change cannot reach.
+
+      A single already in the other side's movable pool was offered by the
+      one-for-one loop above, so it is skipped here rather than counted twice.
+    */
     const theirTargets = slotCandidates(summary, myWeakest, ctx, candidatesPerTeam);
-    for (const pair of myDepthPairs) {
-      for (const get of theirTargets) offer(pair, [get]);
+    for (const give of [...myDepthPairs, ...myPickPairs, ...myAssets.map((a) => [a])]) {
+      for (const get of theirTargets) {
+        if (give.length === 1 && theirIds.has(get.id)) continue;
+        offer(give, [get]);
+      }
     }
 
     const theirWeakest = weakestSlot(analysis);
     const myTargets = slotCandidates(mySummary, theirWeakest, ctx, candidatesPerTeam);
     const theirDepthPairs = depthPairs(theirAssets, candidatesPerTeam);
     for (const give of myTargets) {
-      for (const pair of theirDepthPairs) offer([give], pair);
+      for (const get of [...theirDepthPairs, ...theirPickPairs, ...theirAssets.map((a) => [a])]) {
+        if (get.length === 1 && myIds.has(give.id)) continue;
+        offer([give], get);
+      }
+    }
+
+    /*
+      And picks for the men a team is already selling: the rebuilder's aging
+      starter, the contender's spare. The one-for-one loop reaches one pick plus
+      the balancer's one more; a pair here reaches the player worth two picks
+      *before* the change, which is the shape of a veteran sold for two firsts.
+    */
+    for (const pair of myPickPairs) {
+      for (const get of theirAssets) if (get.kind === 'player') offer(pair, [get]);
+    }
+    for (const give of myAssets) {
+      if (give.kind !== 'player') continue;
+      for (const pair of theirPickPairs) offer([give], pair);
     }
 
     /*
