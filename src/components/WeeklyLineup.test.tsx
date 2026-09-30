@@ -75,6 +75,7 @@ function panel(
     values: overrideValues = values as Map<string, PlayerValue>,
     bids = undefined as BidModel | undefined,
     faabUsed = null as number | null,
+    leagueSettings = settings,
   } = {},
 ) {
   const withInjuries = new Map(players);
@@ -86,13 +87,13 @@ function panel(
   }
 
   const target = { ...roster(setLineup), faabUsed };
-  const summary = summarizeRoster(target, withInjuries, overrideValues, settings);
+  const summary = summarizeRoster(target, withInjuries, overrideValues, leagueSettings);
 
   return render(
     <WeeklyLineup
       roster={target}
       summary={summary}
-      settings={settings}
+      settings={leagueSettings}
       seasonPhase={phase}
       currentWeek={week}
       byeTeams={byeTeams}
@@ -264,9 +265,22 @@ describe('WeeklyLineup', () => {
     expect(screen.queryByText(/too close to call/)).not.toBeInTheDocument();
   });
 
+  it('names no drop when the roster has an open spot', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], {
+      board: wire(freeAgent('purdy', 'QB', 2000)),
+    });
+
+    expect(screen.getByText(/You have an open roster spot, so nobody has to go/)).toBeInTheDocument();
+    expect(screen.queryByText(/Drop Player/)).not.toBeInTheDocument();
+  });
+
   it('names a free agent who beats a starter, and who to drop for him', () => {
     panel(['qb1', 'rb1', 'wr1', 'wr2'], {
       board: wire(freeAgent('purdy', 'QB', 2000)),
+      // Four starters and one bench spot: the five-man roster is full.
+      leagueSettings: makeSettings(['QB', 'RB', 'WR', 'FLEX'], {
+        allSlots: ['QB', 'RB', 'WR', 'FLEX', 'BN'],
+      }),
     });
 
     expect(screen.getByText(/beats your lineup/)).toBeInTheDocument();

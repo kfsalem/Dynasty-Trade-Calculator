@@ -43,14 +43,24 @@ export interface WireUpgrade {
   /** Same measure the change rows use, against the same bar. */
   margin: number;
   /**
-   * Who comes off the roster to make room, or null when nothing is spare.
+   * Who comes off the roster to make room, or null when nobody has to.
    *
    * Named because nearly every add is an add/drop, and a recommendation that
-   * ignores the cost is only half of one. Null is an honest answer: a roster
-   * with no droppable player is being told the claim costs something it has to
-   * choose, which is not this panel's decision to make.
+   * ignores the cost is only half of one. Null has two meanings, told apart by
+   * `room`: an open roster spot takes the claim with no drop at all, or there
+   * is genuinely nobody who could go, which is a choice this panel is not
+   * entitled to make for him.
    */
   drop: ValuedPlayer | null;
+  /** True when an open spot on the active roster takes this claim, so nobody goes. */
+  room: boolean;
+}
+
+/** The roster the claims land on. `Roster` narrowed to what room depends on. */
+export interface WireRoster {
+  playerIds: string[];
+  taxiIds: string[];
+  reserveIds: string[];
 }
 
 export interface WireInput {
@@ -61,6 +71,13 @@ export interface WireInput {
   board: FreeAgentBoard | undefined;
   /** Teams with no game this week, so a claim is not made for one of them. */
   byeTeams?: ReadonlySet<string> | null;
+  /** Whose roster the claims land on, for who takes up a spot. */
+  roster: WireRoster;
+  /**
+   * Players the active roster holds: starters plus bench, `allSlots.length`.
+   * Taxi and IR are separate allowances and are not counted against it.
+   */
+  activeLimit: number;
 }
 
 /**
@@ -72,15 +89,21 @@ export interface WireInput {
  * role ahead of a 31-year-old bench body, which is backwards: the rookie is the
  * asset and the veteran is the roster spot.
  *
- * Nobody in the recommended lineup is ever a candidate, including anyone the
- * wire is about to displace — a slot cannot be filled by dropping the man
- * filling it.
+ * Only a player on the active roster makes room. Releasing a man from IR or
+ * the taxi squad frees an IR or taxi spot, which a claimed player cannot use,
+ * so the claim still does not fit — the same rule `suggest.chooseDrops` applies
+ * to trades. Before it was applied here the panel told one manager to drop an
+ * injured player who was taking up no space at all.
+ *
+ * Nobody who stays in the recommended lineup is a candidate. The man the claim
+ * displaces is: once the free agent takes his slot he is a bench body like any
+ * other, and he is often exactly the one to cut.
  */
 function dropCandidate(
   entries: ValuedPlayer[],
-  keep: ReadonlySet<string>,
+  eligible: (entry: ValuedPlayer) => boolean,
 ): ValuedPlayer | null {
-  const spare = entries.filter((entry) => !keep.has(entry.player.id));
+  const spare = entries.filter(eligible);
   if (spare.length === 0) return null;
 
   return spare.reduce((worst, entry) => (entry.value < worst.value ? entry : worst));
@@ -105,6 +128,8 @@ export function wireUpgrades({
   entries,
   board,
   byeTeams,
+  roster,
+  activeLimit,
 }: WireInput): WireUpgrade[] {
   if (!board) return [];
 
@@ -147,6 +172,7 @@ export function wireUpgrades({
         replaces: entry,
         margin,
         drop: null,
+        room: false,
         sort: addValue - entry.winNowValue,
       });
     }
@@ -164,13 +190,34 @@ export function wireUpgrades({
    */
   const dropped = new Set<string>();
 
+  const held = new Set([...roster.taxiIds, ...roster.reserveIds]);
+  const active = roster.playerIds.filter((id) => !held.has(id)).length;
+  /** Open spots on the active roster, spent one claim at a time, best claim first. */
+  let open = Math.max(0, activeLimit - active);
+
+  /** Starters who stay starters, once every claim so far has taken its slot. */
+  const displaced = new Set<string>();
+
   for (const candidate of candidates) {
     if (taken.has(candidate.add.player.id) || filled.has(candidate.index)) continue;
     taken.add(candidate.add.player.id);
     filled.add(candidate.index);
+    displaced.add(candidate.replaces.player.id);
 
-    const drop = dropCandidate(entries, new Set([...starting, ...dropped]));
-    if (drop) dropped.add(drop.player.id);
+    const room = open > 0;
+    let drop: ValuedPlayer | null = null;
+    if (room) {
+      open--;
+    } else {
+      drop = dropCandidate(
+        entries,
+        (entry) =>
+          !held.has(entry.player.id) &&
+          !dropped.has(entry.player.id) &&
+          (!starting.has(entry.player.id) || displaced.has(entry.player.id)),
+      );
+      if (drop) dropped.add(drop.player.id);
+    }
 
     upgrades.push({
       slot: candidate.slot,
@@ -180,6 +227,7 @@ export function wireUpgrades({
       replaces: candidate.replaces,
       margin: candidate.margin,
       drop,
+      room,
     });
   }
 

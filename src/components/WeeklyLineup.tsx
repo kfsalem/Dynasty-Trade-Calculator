@@ -95,8 +95,10 @@ export function WeeklyLineup({
         entries: summary.players,
         board,
         byeTeams,
+        roster,
+        activeLimit: settings.allSlots.length,
       }),
-    [plan.lineup, summary.players, board, byeTeams],
+    [plan.lineup, summary.players, board, byeTeams, roster, settings.allSlots.length],
   );
 
   const gameWeek = isGameWeek(seasonPhase ?? 'unknown');
@@ -388,9 +390,11 @@ function Wire({
                       time.recent ? ' lately' : ''
                     }${activityCurrent ? '' : ' last season'}.`
                   : ''}
-                {upgrade.drop
-                  ? ` Drop ${upgrade.drop.player.name} for him.`
-                  : ' Nothing on your roster is obviously spare, so the claim costs you a choice.'}
+                {upgrade.room
+                  ? ' You have an open roster spot, so nobody has to go.'
+                  : upgrade.drop
+                    ? ` Drop ${upgrade.drop.player.name} for him.`
+                    : ' Nothing on your roster is obviously spare, so the claim costs you a choice.'}
               </p>
               <BidLine upgrade={upgrade} bids={bids} roster={roster} />
             </li>
