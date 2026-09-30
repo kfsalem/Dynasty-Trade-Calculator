@@ -1381,7 +1381,7 @@ describe('uneven packages, the other direction and the edges', () => {
  * every card cannot be dodged by picking a different one.
  */
 describe('the card cannot contradict its own numbers', () => {
-  const WORLDS = [COMPLEMENTARY, WITH_BENCH, CONSOLIDATION, TWINS, FUTURE_BUY];
+  const WORLDS = [COMPLEMENTARY, WITH_BENCH, CONSOLIDATION, TWINS, FUTURE_BUY, PICK_LED, SLIVER];
 
   /**
    * Every card in every world, with the benefit it is describing.
@@ -1481,6 +1481,19 @@ describe('the card cannot contradict its own numbers', () => {
     }
   });
 
+  it('only says a trade costs nothing this year when it costs nothing', () => {
+    // Since #97 a contender can sell a starter for picks, and the line written
+    // for a future buy at exactly zero reached a card at -459 on a live league.
+    const cards = allCards();
+    expect(cards.some((card) => card.lines.some((l) => l.includes('trades some of')))).toBe(true);
+
+    for (const card of cards) {
+      if (card.lines.some((line) => line.includes('without costing'))) {
+        expect(Math.round(card.benefit.now)).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
   it('still explains a contender who is buying the future rather than the year', () => {
     // The branch that replaced the false one. A contender taking on future
     // value is a good trade and a different argument; leaving it unexplained
@@ -1518,6 +1531,126 @@ const FUTURE_BUY: Spec[] = [
   { rosterId: 3, players: [['qb', 'QB', 700, 30], ['rb', 'RB', 700, 30], ['wr', 'WR', 350, 30]] },
   { rosterId: 4, players: [['qb', 'QB', 650, 30], ['rb', 'RB', 650, 30], ['wr', 'WR', 320, 30]] },
 ];
+
+/**
+ * Picks as the point of the package (#97).
+ *
+ * Team 1 is a juggernaut with a hole at back and nothing spare: its only
+ * currency is picks. Team 2 is rebuilding around a young back who starts for it
+ * — not surplus, not past the cliff, so in no movable pool — with a younger one
+ * behind him. The trade both want is two firsts for the starter, and before #97
+ * the search could not name it: a slot target was only ever offered a pair of
+ * players.
+ */
+const PICK_LED: Spec[] = [
+  {
+    rosterId: 1,
+    players: [
+      ['qb', 'QB', 5000, 25],
+      ['wr', 'WR', 5000, 25],
+      ['rb', 'RB', 300, 25],
+    ],
+  },
+  {
+    rosterId: 2,
+    players: [
+      ['rb1', 'RB', 2400, 25],
+      ['rb2', 'RB', 1800, 23],
+      ['qb', 'QB', 400, 24],
+      ['wr', 'WR', 400, 24],
+    ],
+  },
+  {
+    rosterId: 3,
+    players: [
+      ['qb', 'QB', 3000, 24],
+      ['rb', 'RB', 3000, 24],
+      ['wr', 'WR', 3000, 24],
+    ],
+  },
+  {
+    rosterId: 4,
+    players: [
+      ['qb', 'QB', 2000, 24],
+      ['rb', 'RB', 2000, 24],
+      ['wr', 'WR', 2000, 24],
+    ],
+  },
+];
+
+/**
+ * A contender that can sell a starter for picks and lose almost nothing.
+ *
+ * Team 1's receiver is barely better than the one behind him, so selling him
+ * costs this year a sliver and brings back a full price in picks. Team 2 is the
+ * other contender, with a hole at receiver and picks to spend. The card has to
+ * say the sliver out loud — no other fixture hands a contender a lineup loss.
+ */
+const SLIVER: Spec[] = [
+  {
+    rosterId: 1,
+    players: [
+      ['qb', 'QB', 5000, 25],
+      ['rb', 'RB', 5000, 25],
+      ['wr1', 'WR', 3000, 25],
+      ['wr2', 'WR', 2900, 25],
+    ],
+  },
+  {
+    rosterId: 2,
+    players: [
+      ['qb', 'QB', 4000, 25],
+      ['rb', 'RB', 4000, 25],
+      ['wr', 'WR', 300, 25],
+    ],
+  },
+  { rosterId: 3, players: [['qb', 'QB', 2000, 24], ['rb', 'RB', 2000, 24], ['wr', 'WR', 2000, 24]] },
+  { rosterId: 4, players: [['qb', 'QB', 1500, 24], ['rb', 'RB', 1500, 24], ['wr', 'WR', 1500, 24]] },
+];
+
+describe('packages that lead with picks', () => {
+  const picksFor = (rosterId: number) =>
+    suggestTrades(rosterId, world(PICK_LED, 1200)).trades.find(
+      (t) =>
+        t.get.some((a) => a.id === 't2_rb1') || t.give.some((a) => a.id === 't2_rb1'),
+    );
+
+  it('spends picks on a starter no single spare could reach', () => {
+    const trade = picksFor(1);
+
+    expect(trade).toBeDefined();
+    expect(trade!.give.length).toBeGreaterThanOrEqual(2);
+    expect(trade!.give.every((a) => a.kind === 'pick')).toBe(true);
+    expect(trade!.get.map((a) => a.id)).toEqual(['t2_rb1']);
+    expect(trade!.rationale.join(' ')).toContain('lands on your weakest slot');
+  });
+
+  it('offers the rebuilder the same trade from its own chair', () => {
+    const trade = picksFor(2);
+
+    expect(trade).toBeDefined();
+    expect(trade!.give.map((a) => a.id)).toEqual(['t2_rb1']);
+    expect(trade!.get.every((a) => a.kind === 'pick')).toBe(true);
+    expect(trade!.rationale.join(' ')).toContain('picks are exactly what your team should be collecting');
+  });
+
+  it('never leads with a pick in a league that forbids trading them', () => {
+    const ctx = world(PICK_LED, 1200);
+    ctx.league = { ...ctx.league, settings: { ...ctx.league.settings, pickTrading: false } };
+
+    for (const rosterId of [1, 2]) {
+      for (const trade of suggestTrades(rosterId, ctx).trades) {
+        expect([...trade.give, ...trade.get].some((a) => a.kind === 'pick')).toBe(false);
+      }
+    }
+  });
+
+  it('proposes nothing built on picks before any have loaded', () => {
+    expect(suggestTrades(1, world(PICK_LED, 0)).trades.some((t) => t.get.some((a) => a.id === 't2_rb1'))).toBe(
+      false,
+    );
+  });
+});
 
 describe('a contender buying the future rather than the year', () => {
   const contenderCard = () => {
