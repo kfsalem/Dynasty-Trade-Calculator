@@ -451,4 +451,27 @@ export interface LeagueProvider {
    * about trades.
    */
   loadTransactions?(leagueId: string): Promise<TransactionHistory>;
+  /**
+   * What each player is projected to do in one week, as raw stat lines (#149).
+   *
+   * Optional, and allowed to fail, for the same reason the schedule is: the
+   * lineup panel ranks on it when it arrives and falls back to value when it
+   * does not, and nothing else waits on it.
+   */
+  loadProjections?(
+    season: string,
+    week: number,
+    positions: readonly string[],
+  ): Promise<WeekProjections>;
 }
+
+/** One player's projection for one week, before any league's scoring is applied. */
+export interface PlayerProjection {
+  /** The opposing team's code, or null when no game is projected. */
+  opponent: string | null;
+  /** Stat line keyed by the platform's scoring keys. Zeros may be absent. */
+  stats: Readonly<Record<string, number>>;
+}
+
+/** Keyed by player id — a defence by its team code, as on a roster. */
+export type WeekProjections = ReadonlyMap<string, PlayerProjection>;

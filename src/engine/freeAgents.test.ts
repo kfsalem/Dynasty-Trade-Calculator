@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   claimableFreeAgents,
   freeAgentBoard,
+  lineupBoard,
   playingTime,
   type FreeAgent,
   type FreeAgentBoard,
@@ -255,3 +256,29 @@ describe('claimableFreeAgents', () => {
     expect(claimable.some((a) => a.player.id === 'unknown')).toBe(true);
   });
 })
+
+describe('lineupBoard', () => {
+  const agent = (id: string, yearsExp: number | null, value: number | null): FreeAgent => ({
+    player: { ...makePlayer(id, 'WR', 22), yearsExp },
+    value: value === null ? null : makeValue(id, value, 'WR', value, value, value),
+    snaps: undefined,
+    usage: undefined,
+    adjustment: undefined,
+  });
+  const rookie = agent('rookie', 0, 1200);
+  const unpricedRookie = agent('rookie2', 0, null);
+  const vet = agent('vet', 6, null);
+  const board: FreeAgentBoard = { priced: [rookie], unpriced: [unpricedRookie, vet], all: [rookie, unpricedRookie, vet] };
+
+  it('takes the undrafted class off every list, priced or not, before the draft', () => {
+    const out = lineupBoard(board, { season: '2025', status: 'complete' }, '2026');
+
+    expect(out.all.map((a) => a.player.id)).toEqual(['vet']);
+    expect(out.priced).toEqual([]);
+    expect(out.unpriced.map((a) => a.player.id)).toEqual(['vet']);
+  });
+
+  it('leaves the board alone once the draft has run', () => {
+    expect(lineupBoard(board, { season: '2026', status: 'in_season' }, '2026')).toBe(board);
+  });
+});

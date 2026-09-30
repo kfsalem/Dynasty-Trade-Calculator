@@ -563,3 +563,79 @@ describe('startSit and the taxi squad', () => {
     expect(ids(plan)).not.toContain('rb_rookie');
   });
 });
+
+describe('startSit on projections (#149)', () => {
+  // A roster where value and this week disagree: wr1 is the better asset, and
+  // wr3 has the better matchup.
+  const entries = [
+    entry('qb1', 'QB', 900),
+    entry('rb1', 'RB', 800),
+    entry('wr1', 'WR', 700),
+    entry('wr2', 'WR', 600),
+    entry('wr3', 'WR', 200),
+  ];
+  const set = ['qb1', 'rb1', 'wr1', 'wr2'];
+  const week = (wr3: number) =>
+    new Map([
+      ['qb1', 20],
+      ['rb1', 15],
+      ['wr1', 9],
+      ['wr2', 12],
+      ['wr3', wr3],
+    ]);
+
+  it('ranks on this week and says that is what it did', () => {
+    const plan = startSit({ entries, startingSlots: SLOTS, setLineup: set, projected: week(14) });
+
+    expect(plan.basis).toBe('projection');
+    expect(ids(plan)).toContain('wr3');
+    expect(ids(plan)).not.toContain('wr1');
+    // Five points ahead of the man he replaces, in points rather than value.
+    expect(plan.gain).toBeCloseTo(5);
+  });
+
+  it('states a clear call as a change, with the chance it comes off', () => {
+    const plan = startSit({ entries, startingSlots: SLOTS, setLineup: set, projected: week(14) });
+    const [change] = plan.decisive;
+
+    expect(change.start?.player.id).toBe('wr3');
+    expect(change.sit?.player.id).toBe('wr1');
+    expect(change.chance).toBeGreaterThan(0.65);
+  });
+
+  it('files a one-point edge as too close to call', () => {
+    const plan = startSit({ entries, startingSlots: SLOTS, setLineup: set, projected: week(10) });
+
+    expect(plan.decisive).toEqual([]);
+    expect(plan.marginal).toHaveLength(1);
+    expect(plan.marginal[0].chance).toBeLessThan(0.55);
+  });
+
+  it('counts a player with no projection as projected for nothing', () => {
+    const projected = week(14);
+    projected.delete('wr2');
+    const plan = startSit({ entries, startingSlots: SLOTS, setLineup: set, projected });
+
+    expect(ids(plan)).not.toContain('wr2');
+  });
+
+  it('is the value plan it always was when there are no projections', () => {
+    const plan = startSit({ entries, startingSlots: SLOTS, setLineup: set });
+
+    expect(plan.basis).toBe('value');
+    expect(plan.changes).toEqual([]);
+    expect(plan.changes.every((c) => c.chance === null)).toBe(true);
+  });
+
+  it('can stream a kicker, which has no value to rank on at all', () => {
+    const withKickers = [...entries, entry('k1', 'K', 0), entry('k2', 'K', 0)];
+    const plan = startSit({
+      entries: withKickers,
+      startingSlots: [...SLOTS, 'K'],
+      setLineup: [...set, 'k1'],
+      projected: new Map([...week(9), ['k1', 5], ['k2', 11]]),
+    });
+
+    expect(plan.decisive.map((c) => c.start?.player.id)).toContain('k2');
+  });
+});

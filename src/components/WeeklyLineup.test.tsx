@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { WeeklyLineup } from './WeeklyLineup';
+import type { WeekProjections } from '../platforms/types';
+import type { WeekEvidence } from '../engine/weekEvidence';
 import { summarizeRoster } from '../engine/rosterValue';
 import { makePlayer, makeRoster, makeSettings, makeValue } from '../engine/testFixtures';
 import type {
@@ -76,6 +78,10 @@ function panel(
     bids = undefined as BidModel | undefined,
     faabUsed = null as number | null,
     leagueSettings = settings,
+    projected = undefined as ReadonlyMap<string, number> | undefined,
+    projections = undefined as WeekProjections | undefined,
+    evidence = undefined as ReadonlyMap<string, WeekEvidence> | undefined,
+    evidenceWeek = null as number | null,
   } = {},
 ) {
   const withInjuries = new Map(players);
@@ -99,6 +105,10 @@ function panel(
       byeTeams={byeTeams}
       board={board}
       bids={bids}
+      projected={projected}
+      projections={projections}
+      evidence={evidence}
+      evidenceWeek={evidenceWeek}
     />,
   );
 }
@@ -175,9 +185,11 @@ describe('WeeklyLineup', () => {
     expect(screen.getByText('Player qb1')).toBeInTheDocument();
   });
 
-  it('never promises weekly projections it does not have', () => {
+  it('says so when it is ranking a game week without projections', () => {
     panel(['qb1', 'rb1', 'wr1', 'wr2']);
-    expect(screen.getByText(/Not a weekly projection: no matchups/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/could not be loaded, so there are no matchups in it/),
+    ).toBeInTheDocument();
   });
 
   /*
@@ -195,7 +207,7 @@ describe('WeeklyLineup', () => {
   it('claims to check byes only when it has them', () => {
     panel(['qb1', 'rb1', 'wr1', 'wr2'], { byeTeams: new Set<string>() });
     expect(screen.getByText(/who is on bye/)).toBeInTheDocument();
-    expect(screen.queryByText(/could not be loaded/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/bye weeks could not be loaded/)).not.toBeInTheDocument();
   });
 
   it('benches a starter whose team is off, and says why', async () => {
@@ -475,5 +487,72 @@ describe('WeeklyLineup — what a claim costs', () => {
 
     expect(screen.getByText(/beats your lineup/)).toBeInTheDocument();
     expect(screen.queryByText(/go for about/)).not.toBeInTheDocument();
+  });
+});
+
+describe("WeeklyLineup — on this week's projections (#149)", () => {
+  // wr3 is the cheapest receiver and has the best week.
+  const week = (wr3: number) =>
+    new Map([
+      ['qb1', 20],
+      ['rb1', 15],
+      ['wr1', 9],
+      ['wr2', 12],
+      ['wr3', wr3],
+    ]);
+
+  it('says what it ranked on, and states the gain in points', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], { projected: week(14) });
+
+    expect(screen.getByText(/Ranked on this week's projections/)).toBeInTheDocument();
+    // Once in the headline, once on the one row that earns it.
+    expect(screen.getAllByText('+5.0')).toHaveLength(2);
+    expect(screen.getByText('pts')).toBeInTheDocument();
+  });
+
+  it('gives the call its chance, with both projections', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], { projected: week(14) });
+
+    expect(
+      screen.getByText(/likely to outscore Player wr1: 14.0 projected against 9.0/),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the facts behind the man it starts', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], {
+      projected: week(14),
+      projections: new Map([['wr3', { opponent: 'PIT', stats: {} }]]),
+      evidence: new Map([
+        [
+          'wr3',
+          { games: 3, snapShare: 0.78, targetsPerGame: 7, carriesPerGame: 0, pointsPerGame: 13.1 },
+        ],
+      ]),
+    });
+
+    expect(
+      screen.getByText('vs PIT · 78% of snaps · 7.0 targets a game · 13.1 points a game'),
+    ).toBeInTheDocument();
+  });
+
+  it('files a one-point edge under too close to call, and says why in chances', async () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], { projected: week(10) });
+
+    expect(screen.getByText('Your lineup is the best you can field')).toBeInTheDocument();
+    await userEvent.click(screen.getByText(/1 swap too close to call/));
+    expect(screen.getByText(/Less than a 60% chance of coming off/)).toBeInTheDocument();
+    expect(screen.getByText(/A coin flip with Player wr1/)).toBeInTheDocument();
+  });
+
+  it('dates the season stats once, under the calls', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], { projected: week(14), week: 7, evidenceWeek: 6 });
+
+    expect(screen.getByText('Snaps, targets and points a game are through week 6.')).toBeInTheDocument();
+  });
+
+  it('says so when the weekly refresh has fallen behind', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], { projected: week(14), week: 7, evidenceWeek: 4 });
+
+    expect(screen.getByText(/run only through week 4; the latest weekly refresh has not landed/)).toBeInTheDocument();
   });
 });

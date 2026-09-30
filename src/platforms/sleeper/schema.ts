@@ -341,6 +341,27 @@ export const sleeperDraftSchema = z.object({
 
 export const sleeperDraftsSchema = z.array(sleeperDraftSchema);
 
+/**
+ * One player's projected stat line for one week (#149).
+ *
+ * From `api.sleeper.app/projections`, which is **not** part of Sleeper's
+ * documented API — it is what Sleeper's own app reads, answers any origin with
+ * `access-control-allow-origin: *`, and was checked live on 2026-09-29. The
+ * stats are keyed exactly as a league's `scoring_settings` are (`rec`,
+ * `rec_yd`, `bonus_rec_te`, `pts_allow_7_13`…), which is what lets a projection
+ * be scored under a league's own rules by multiplying matching keys.
+ *
+ * `opponent` is null for players with no game projected, which is most of the
+ * payload. A defence's `player_id` is its team code, as on a roster.
+ */
+export const sleeperProjectionSchema = z.object({
+  player_id: z.string(),
+  team: z.string().nullish(),
+  opponent: z.string().nullish(),
+  stats: z.record(z.string(), z.number().nullish()),
+});
+export const sleeperProjectionsSchema = z.array(sleeperProjectionSchema);
+
 export const sleeperStateSchema = z.object({
   season: z.string(),
   season_type: z.string(),
@@ -372,6 +393,7 @@ export type SleeperUser = z.infer<typeof sleeperUserSchema>;
 export type SleeperPlayer = z.infer<typeof sleeperPlayerSchema>;
 export type SleeperTradedPick = z.infer<typeof sleeperTradedPickSchema>;
 export type SleeperState = z.infer<typeof sleeperStateSchema>;
+export type SleeperProjection = z.infer<typeof sleeperProjectionSchema>;
 export type SleeperMatchup = z.infer<typeof sleeperMatchupSchema>;
 export type SleeperBracketMatch = z.infer<typeof sleeperBracketMatchSchema>;
 export type SleeperTransaction = z.infer<typeof sleeperTransactionSchema>;

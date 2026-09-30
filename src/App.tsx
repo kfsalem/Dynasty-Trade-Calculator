@@ -217,6 +217,11 @@ function App() {
     seasonPhase,
     currentWeek,
     freeAgents,
+    wireBoard,
+    projected,
+    projections,
+    evidence,
+    evidenceWeek,
     claimable,
     activityCurrent,
     adjustments,
@@ -602,7 +607,11 @@ function App() {
                     currentWeek={currentWeek}
                     byeTeams={byeTeams}
                     season={season}
-                    freeAgents={freeAgents}
+                    freeAgents={wireBoard}
+                    projected={projected}
+                    projections={projections}
+                    evidence={evidence}
+                    evidenceWeek={evidenceWeek}
                     activityCurrent={activityCurrent}
                     bench={bench}
                     bids={bids}

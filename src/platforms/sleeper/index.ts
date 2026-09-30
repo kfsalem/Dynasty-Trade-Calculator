@@ -6,6 +6,7 @@ import type {
   LeagueHistory,
   LeagueProvider,
   LeagueTransaction,
+  PlayerProjection,
   Schedule,
   SeasonHistory,
   SeasonManager,
@@ -19,6 +20,7 @@ import {
   getMatchups,
   getBracket,
   getPlayers,
+  getProjections,
   getRosters,
   getState,
   getTradedPicks,
@@ -184,6 +186,19 @@ export const sleeperProvider: LeagueProvider = {
    * other would couple the panel nobody has to open to the odds every league
    * load computes.
    */
+  async loadProjections(season, week, positions) {
+    const rows = await getProjections(season, week, positions);
+    const out = new Map<string, PlayerProjection>();
+    for (const row of rows) {
+      const stats: Record<string, number> = {};
+      for (const [key, value] of Object.entries(row.stats)) {
+        if (typeof value === 'number' && value !== 0) stats[key] = value;
+      }
+      out.set(row.player_id, { opponent: row.opponent ?? null, stats });
+    }
+    return out;
+  },
+
   async loadHistory(leagueId: string): Promise<LeagueHistory> {
     const { seasons, truncated } = await walkSeasons(leagueId, loadSeason);
     return { seasons, players: await historyPlayers(seasons), truncated };
