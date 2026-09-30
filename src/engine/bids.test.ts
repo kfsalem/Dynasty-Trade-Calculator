@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adviseBid, budgetLeft, modelBids, priceFor, BID_PRIOR } from './bids';
+import { adviseBid, budgetLeft, contestSpread, modelBids, priceFor, BID_PRIOR } from './bids';
 import { makeHistory, makeRoster, makeSettings } from './testFixtures';
 import type { LeagueTransaction, TransactionHistory } from '../platforms/types';
 import type { LineupSlot, Position, WaiverSettings } from '../types';
@@ -252,5 +252,82 @@ describe('adviseBid', () => {
     const rolling = modelBids(history([claim('rb1', 20)], { rb1: 'RB' }), makeSettings(SLOTS, { waivers: ROLLING }));
 
     expect(adviseBid(rolling, 'RB', makeRoster(1, []))).toBeNull();
+  });
+});
+
+describe('competition', () => {
+  /** A claim on `playerId` that `rosterId` lost, in the same week as `claim`'s default. */
+  const lost = (playerId: string, rosterId: number, overrides: Partial<LeagueTransaction> = {}) =>
+    claim(playerId, 30, '2025', {
+      succeeded: false,
+      rosterIds: [rosterId],
+      adds: new Map([[playerId, rosterId]]),
+      ...overrides,
+    });
+
+  it('counts the rivals whose claim on the same player failed that week', () => {
+    const model = modelBids(
+      history(
+        [
+          claim('rb1', 5),
+          claim('rb2', 20),
+          lost('rb2', 2),
+          claim('rb3', 40),
+          lost('rb3', 2),
+          lost('rb3', 3),
+          lost('rb3', 4),
+        ],
+        { rb1: 'RB', rb2: 'RB', rb3: 'RB' },
+      ),
+      faabLeague,
+    );
+
+    expect(model.contest.map((row) => row.observations)).toEqual([1, 1, 1]);
+    expect(model.contest.map((row) => row.share)).toEqual([0.05, 0.2, 0.4]);
+  });
+
+  it('does not count a failed claim from another week, or the winner himself', () => {
+    const model = modelBids(
+      history(
+        [claim('rb1', 5), lost('rb1', 2, { week: 4 }), lost('rb1', 1)],
+        { rb1: 'RB' },
+      ),
+      faabLeague,
+    );
+
+    expect(model.contest[0].observations).toBe(1);
+  });
+
+  it('states the spread once each row has the evidence to carry it', () => {
+    const quiet = Array.from({ length: BID_PRIOR }, (_, i) => claim(`q${i}`, 5));
+    const fought = Array.from({ length: BID_PRIOR }, (_, i) => [claim(`f${i}`, 25), lost(`f${i}`, 2)]).flat();
+    const positions = Object.fromEntries(
+      [...quiet, ...fought].map((t) => [[...t.adds.keys()][0], 'RB' as Position]),
+    );
+
+    const spread = contestSpread(modelBids(history([...quiet, ...fought], positions), faabLeague))!;
+
+    expect(spread.map((row) => row.rivals)).toEqual([0, 1]);
+    // Shrunk halfway toward the league's $15, as a position is at `BID_PRIOR`.
+    expect(spread.map((row) => row.dollars)).toEqual([10, 20]);
+  });
+
+  it('says nothing until a contested row has that evidence', () => {
+    const quiet = Array.from({ length: 10 }, (_, i) => claim(`q${i}`, 5));
+    const fought = Array.from({ length: BID_PRIOR - 1 }, (_, i) => [claim(`f${i}`, 25), lost(`f${i}`, 2)]).flat();
+    const positions = Object.fromEntries(
+      [...quiet, ...fought].map((t) => [[...t.adds.keys()][0], 'RB' as Position]),
+    );
+
+    expect(contestSpread(modelBids(history([...quiet, ...fought], positions), faabLeague))).toBeNull();
+  });
+
+  it('says nothing in a league that does not run FAAB', () => {
+    const model = modelBids(
+      history([claim('rb1', 20), lost('rb1', 2)], { rb1: 'RB' }),
+      makeSettings(SLOTS, { waivers: ROLLING }),
+    );
+
+    expect(contestSpread(model)).toBeNull();
   });
 });

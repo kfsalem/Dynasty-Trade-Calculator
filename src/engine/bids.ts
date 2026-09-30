@@ -52,6 +52,28 @@ import type { LeagueSettings, Position, Roster } from '../types';
  * these leagues pay is a function of the position and not of the man, so a
  * model that scaled its answer by his price would be inventing the one
  * relationship the data says is absent.
+ *
+ * ## Competition: a spread, not a factor
+ *
+ * #47 also proposed raising the bid when rivals have a hole at the position
+ * and budget left. Measured on 2026-09-29, half of that is the strongest effect
+ * in this module and half of it is nothing:
+ *
+ * - **Rivals move the price.** Counting the other rosters whose claim on the
+ *   same player failed that week, the winning bid rises from 4.0% of budget
+ *   uncontested to 9.9% against one rival and 17.7% against two or more in the
+ *   Eternal Rebuild (ρ 0.48), and from 3.1% to 20.4% in Tight Ends (ρ 0.28) —
+ *   inside every position in both.
+ * - **Nothing visible beforehand predicts them.** Rebuilt from the weekly
+ *   lineups at the moment of each claim, rivals with a hole at the position,
+ *   with budget left, in the bottom third, or thinner in depth — and the
+ *   player's own points the week before — all correlate with the bid and with
+ *   the actual rivals inside ±0.11, with signs that flip between leagues.
+ *
+ * So the app cannot say whether a claim will be contested, and does not try.
+ * What it can say is what contested claims have cost here: `contest` is that
+ * spread, learned from the league's own failed claims, and the manager — who
+ * knows his league — decides which row he is in.
  */
 
 /** Sleeper's waiver code for a FAAB league. The other modes run no budget. */
@@ -101,6 +123,14 @@ export interface BidModel {
   /** Mean winning bid league-wide, as a share of budget. The prior. */
   leagueShare: number;
   byPosition: Map<Position, PositionBids>;
+  /**
+   * Winning bids by how many rivals also claimed the player, league-wide:
+   * none, one, and two or more. See "Competition" above.
+   *
+   * League-wide rather than per position, because split four ways the
+   * contested rows would be a handful of claims each.
+   */
+  contest: [PositionBids, PositionBids, PositionBids];
   /** Winning bids behind the whole model. */
   observations: number;
   /** Seasons that contributed a bid, newest first. */
@@ -155,13 +185,35 @@ export function modelBids(
     minBid: settings.waivers.minBid,
     leagueShare: 0,
     byPosition: new Map(),
+    contest: [
+      { observations: 0, share: 0 },
+      { observations: 0, share: 0 },
+      { observations: 0, share: 0 },
+    ],
     observations: 0,
     seasons: [],
     truncated: history?.truncated ?? false,
   };
   if (!history) return empty;
 
-  const shares: { position: Position; share: number }[] = [];
+  /*
+    Who else claimed each player, keyed by the week the claims were processed
+    in. A failed claim names the manager who lost it in `rosterIds`, and its one
+    add is the player he asked for.
+  */
+  const claimKey = (season: string, week: number, playerId: string) =>
+    `${season}|${week}|${playerId}`;
+  const losers = new Map<string, Set<number>>();
+  for (const t of history.transactions) {
+    if (t.type !== 'waiver' || t.succeeded || t.adds.size !== 1) continue;
+    const [playerId] = [...t.adds.keys()];
+    const key = claimKey(t.season, t.week, playerId);
+    const rosters = losers.get(key) ?? new Set<number>();
+    for (const rosterId of t.rosterIds) rosters.add(rosterId);
+    losers.set(key, rosters);
+  }
+
+  const shares: { position: Position; share: number; rivals: number }[] = [];
   const seasons = new Set<string>();
 
   for (const t of history.transactions) {
@@ -178,7 +230,12 @@ export function modelBids(
     const position = history.positions.get(playerId);
     if (!position) continue;
 
-    shares.push({ position, share: t.bid / seasonBudget });
+    const winner = t.adds.get(playerId);
+    const rivals = [...(losers.get(claimKey(t.season, t.week, playerId)) ?? [])].filter(
+      (rosterId) => rosterId !== winner,
+    ).length;
+
+    shares.push({ position, share: t.bid / seasonBudget, rivals });
     seasons.add(t.season);
   }
 
@@ -197,10 +254,19 @@ export function modelBids(
     byPosition.set(position, { ...row, share: row.share / row.observations });
   }
 
+  const contest = empty.contest.map(() => ({ observations: 0, share: 0 })) as BidModel['contest'];
+  for (const { share, rivals } of shares) {
+    const row = contest[Math.min(rivals, 2)];
+    row.observations += 1;
+    row.share += share;
+  }
+  for (const row of contest) if (row.observations > 0) row.share /= row.observations;
+
   return {
     ...empty,
     leagueShare: shares.reduce((total, s) => total + s.share, 0) / shares.length,
     byPosition,
+    contest,
     observations: shares.length,
     seasons: [...seasons].sort().reverse(),
   };
@@ -237,6 +303,45 @@ export function priceFor(model: BidModel, position: Position): Learned<number> |
     value: share.value * model.budget,
     prior: share.prior * model.budget,
   };
+}
+
+/** What a claim has cost here at one level of competition, in today's dollars. */
+export interface ContestPrice {
+  /** 0, 1, or 2 standing for "two or more". */
+  rivals: 0 | 1 | 2;
+  dollars: number;
+  observations: number;
+}
+
+/**
+ * What claims have cost here with nobody, one rival, and two or more bidding.
+ *
+ * Each row is shrunk toward the league rate by the same `BID_PRIOR` as a
+ * position, and a row is left out until it has `BID_PRIOR` claims behind it —
+ * the point where its own record carries half the weight. Below that the row
+ * would mostly be the league average wearing a contested label, which is a
+ * spread the league never showed.
+ *
+ * Null unless the uncontested row and at least one contested row both clear
+ * that bar, since a spread with one end is not a spread.
+ */
+export function contestSpread(model: BidModel): ContestPrice[] | null {
+  if (!model.budget || model.observations === 0) return null;
+  const budget = model.budget;
+
+  const rows = model.contest.flatMap((row, rivals): ContestPrice[] => {
+    if (row.observations < BID_PRIOR) return [];
+    const share = learn(row.share, model.leagueShare, row.observations, BID_PRIOR).value;
+    return [
+      {
+        rivals: rivals as ContestPrice['rivals'],
+        dollars: Math.max(Math.round(share * budget), model.minBid ?? 0, 0),
+        observations: row.observations,
+      },
+    ];
+  });
+
+  return rows[0]?.rivals === 0 && rows.length > 1 ? rows : null;
 }
 
 /**
