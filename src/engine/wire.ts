@@ -4,6 +4,7 @@ import { slotEligibility, type LineupAssignment, type ValuedPlayer } from './ros
 import { CLEAR_MARGIN, relativeMargin } from './startSit';
 import { canPlayThisWeek } from './availability';
 import { onBye } from './byes';
+import { outscoreChance, WORTH_ACTING } from './projections';
 
 /**
  * Free agents who would improve the lineup you are about to field.
@@ -34,10 +35,15 @@ export interface WireUpgrade {
   slot: LineupSlot;
   /** Position in `startingSlots`, so a league's two FLEX slots stay distinct. */
   index: number;
-  /** The free agent to claim. Always one the market prices — see above. */
+  /**
+   * The free agent to claim. On a value plan always one the market prices —
+   * see above; on a projection plan anyone projected, priced or not.
+   */
   add: FreeAgent;
-  /** His win-now value, already league-adjusted. */
+  /** His win-now value, or his projected points on a projection plan. */
   addValue: number;
+  /** The chance he outscores `replaces` this week. Null on a value plan. */
+  chance: number | null;
   /** The man he would replace in that slot. */
   replaces: ValuedPlayer;
   /** Same measure the change rows use, against the same bar. */
@@ -73,6 +79,17 @@ export interface WireInput {
   byeTeams?: ReadonlySet<string> | null;
   /** Whose roster the claims land on, for who takes up a spot. */
   roster: WireRoster;
+  /**
+   * This week's projected points, when the plan ranked on them.
+   *
+   * Changes who is eligible as well as how they rank. Three quarters of the
+   * wire has no market price, and kickers and defences have none at all (#10),
+   * so on value they can never be offered; a projection is a real number for
+   * every one of them, and the rule against inventing a price no longer
+   * applies once nobody has to. Must be the same map the plan used, or the two
+   * sides of each comparison are in different units.
+   */
+  projected?: ReadonlyMap<string, number>;
   /**
    * Players the active roster holds: starters plus bench, `allSlots.length`.
    * Taxi and IR are separate allowances and are not counted against it.
@@ -130,14 +147,17 @@ export function wireUpgrades({
   byeTeams,
   roster,
   activeLimit,
+  projected,
 }: WireInput): WireUpgrade[] {
   if (!board) return [];
 
   const off = byeTeams ?? new Set<string>();
-  const available = board.priced.filter(
+  const worth = (fa: FreeAgent): number =>
+    projected ? (projected.get(fa.player.id) ?? 0) : (fa.value?.winNowValue ?? 0);
+  const available = (projected ? board.all : board.priced).filter(
     (fa) =>
-      fa.value !== null &&
-      fa.value.winNowValue > 0 &&
+      (projected || fa.value !== null) &&
+      worth(fa) > 0 &&
       canPlayThisWeek(fa.player) &&
       !onBye(fa.player.team, off),
   );
@@ -160,9 +180,11 @@ export function wireUpgrades({
 
     for (const fa of available) {
       if (!eligible.includes(fa.player.position)) continue;
-      const addValue = fa.value?.winNowValue ?? 0;
+      const addValue = worth(fa);
       const margin = relativeMargin(addValue, entry.winNowValue);
-      if (margin < CLEAR_MARGIN) continue;
+      const chance = projected ? outscoreChance(addValue - entry.winNowValue) : null;
+      // The same bar the plan holds a bench swap to, in the plan's own units.
+      if (chance !== null ? chance < WORTH_ACTING : margin < CLEAR_MARGIN) continue;
 
       candidates.push({
         slot,
@@ -171,6 +193,7 @@ export function wireUpgrades({
         addValue,
         replaces: entry,
         margin,
+        chance,
         drop: null,
         room: false,
         sort: addValue - entry.winNowValue,
@@ -226,6 +249,7 @@ export function wireUpgrades({
       addValue: candidate.addValue,
       replaces: candidate.replaces,
       margin: candidate.margin,
+      chance: candidate.chance,
       drop,
       room,
     });

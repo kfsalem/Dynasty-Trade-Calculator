@@ -216,9 +216,31 @@ export function claimableFreeAgents(
   league: Pick<League, 'season' | 'status'>,
   currentSeason: string,
 ): FreeAgent[] {
-  if (rookieDraftHeld(league, currentSeason)) return board.priced;
+  return lineupBoard(board, league, currentSeason).priced;
+}
+
+/**
+ * The board with the incoming rookie class taken off until it is drafted.
+ *
+ * The same rule as `claimableFreeAgents`, keeping the unpriced: the lineup
+ * panel's wire ranks on projections when it has them, and a projection is a
+ * real number for a player the market does not price. Without this the panel
+ * offered a league still in last season's offseason the first pick of the
+ * coming draft as a waiver claim (#149).
+ */
+export function lineupBoard(
+  board: FreeAgentBoard,
+  league: Pick<League, 'season' | 'status'>,
+  currentSeason: string,
+): FreeAgentBoard {
+  if (rookieDraftHeld(league, currentSeason)) return board;
   // `yearsExp` is nullish for a player the index has no record for; treating
   // the unknown as a veteran keeps him in the pool, which is the direction that
   // cannot silently delete a real alternative.
-  return board.priced.filter((entry) => (entry.player.yearsExp ?? 1) > 0);
+  const drafted = (entry: FreeAgent) => (entry.player.yearsExp ?? 1) > 0;
+  return {
+    priced: board.priced.filter(drafted),
+    unpriced: board.unpriced.filter(drafted),
+    all: board.all.filter(drafted),
+  };
 }

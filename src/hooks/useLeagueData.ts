@@ -9,8 +9,12 @@ import { isGameWeek, regularSeasonWeek } from '../engine/season';
 import {
   claimableFreeAgents,
   freeAgentBoard,
+  lineupBoard,
   type FreeAgentBoard,
 } from '../engine/freeAgents';
+import { projectedPoints } from '../engine/projections';
+import { evidenceThrough, weekEvidence } from '../engine/weekEvidence';
+import { slotEligibility } from '../engine/rosterValue';
 import { pricedPositions, valueLeague, type LeagueActivity } from '../engine/replacement';
 import { snapShares } from '../engine/snapShare';
 import { opportunities } from '../engine/opportunity';
@@ -325,6 +329,28 @@ export function useScoringStats() {
   });
 }
 
+/**
+ * This week's projected stat lines, for the lineup panel (#149).
+ *
+ * Half an hour of `staleTime`: projections move through the week as injury
+ * news lands, and a lineup set on Sunday morning should see Saturday's. Allowed
+ * to fail — the panel then ranks on value, as it did before, and says so.
+ */
+export function useProjections(
+  season: string | undefined,
+  week: number | null,
+  positions: readonly string[],
+) {
+  return useQuery({
+    queryKey: ['projections', season, week, positions.join(',')],
+    queryFn: () =>
+      sleeperProvider.loadProjections!(season as string, week as number, positions),
+    enabled: Boolean(season && week && positions.length > 0 && sleeperProvider.loadProjections),
+    staleTime: 30 * 60 * 1000,
+    retry: 1,
+  });
+}
+
 /** When each team is off, for the lineup panel. */
 export function useByeWeeks() {
   return useQuery({
@@ -343,6 +369,30 @@ export function useLeagueSummaries(leagueId: string | null) {
   const scheduleQuery = useSchedule(leagueId, settings?.playoffWeekStart);
   const snapsQuery = useSnapShares();
   const opportunityQuery = useOpportunity();
+
+  /*
+    Projections only for a week that is being played. Sleeper's week counter
+    runs through the preseason and the offseason too, and a projection for
+    "week 2" in August is for a game that does not exist.
+  */
+  const projectionWeek =
+    leagueQuery.data?.seasonPhase === 'regular' ? (leagueQuery.data.currentWeek ?? null) : null;
+  const startedPositions = useMemo(
+    () => [...new Set((settings?.startingSlots ?? []).flatMap(slotEligibility))].sort(),
+    [settings?.startingSlots],
+  );
+  const projectionsQuery = useProjections(
+    leagueQuery.data?.currentSeason,
+    projectionWeek,
+    startedPositions,
+  );
+  const projected = useMemo(
+    () =>
+      projectionsQuery.data && settings
+        ? projectedPoints(projectionsQuery.data, settings.scoring)
+        : undefined,
+    [projectionsQuery.data, settings],
+  );
   const scoringQuery = useScoringStats();
   const depthQuery = useDepthCharts();
   const byesQuery = useByeWeeks();
@@ -528,6 +578,37 @@ export function useLeagueSummaries(leagueId: string | null) {
     const bundle = leagueQuery.data;
     if (!bundle || !freeAgents) return undefined;
     return claimableFreeAgents(freeAgents, bundle.league, bundle.currentSeason);
+  }, [freeAgents, leagueQuery.data]);
+
+  /** What each player has done this season, shown beside the lineup's calls. */
+  const evidence = useMemo(() => {
+    const season = leagueQuery.data?.currentSeason;
+    if (!season || !settings) return undefined;
+    return weekEvidence({
+      season: Number(season),
+      snaps: snapsQuery.data,
+      usage: opportunityQuery.data,
+      scoring: scoringQuery.data,
+      rules: settings.scoring,
+    });
+  }, [leagueQuery.data, settings, snapsQuery.data, opportunityQuery.data, scoringQuery.data]);
+
+  /** How current that evidence is, so the panel can date it. */
+  const evidenceWeek = useMemo(() => {
+    const season = leagueQuery.data?.currentSeason;
+    if (!season) return null;
+    return evidenceThrough(Number(season), [
+      snapsQuery.data,
+      opportunityQuery.data,
+      scoringQuery.data,
+    ]);
+  }, [leagueQuery.data, snapsQuery.data, opportunityQuery.data, scoringQuery.data]);
+
+  /** The wire as the lineup panel may offer it: no undrafted rookie class. */
+  const wireBoard = useMemo(() => {
+    const bundle = leagueQuery.data;
+    if (!bundle || !freeAgents) return undefined;
+    return lineupBoard(freeAgents, bundle.league, bundle.currentSeason);
   }, [freeAgents, leagueQuery.data]);
 
   const summaries = useMemo<RosterSummary[]>(
@@ -759,6 +840,16 @@ export function useLeagueSummaries(leagueId: string | null) {
     roles,
     /** Teams off this week, so the lineup panel does not start a man on bye. */
     byeTeams,
+    /** This week's projected stat lines, raw, for the opponent on each row. */
+    projections: projectionsQuery.data,
+    /** …scored under this league's rules. Undefined outside a game week or on failure. */
+    projected,
+    /** The free-agent board as the lineup panel's wire may use it. */
+    wireBoard,
+    /** This season's snaps, targets and points per player, for the lineup's rows. */
+    evidence,
+    /** The last week that evidence covers, or null when there is none this season. */
+    evidenceWeek,
     /** What activity did to each value, so a moved number can explain itself. */
     adjustments: adjusted?.adjustments,
     /** Players whose role has outgrown their price, and the reverse. */

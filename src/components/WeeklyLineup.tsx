@@ -1,16 +1,35 @@
 import { useMemo, useState } from 'react';
-import type { LeagueSettings, Roster, SeasonPhase } from '../types';
+import type { LeagueSettings, Player, Roster, SeasonPhase } from '../types';
 import type { RosterSummary, ValuedPlayer } from '../engine/rosterValue';
-import { startSit, CLEAR_MARGIN, type LineupChange } from '../engine/startSit';
+import {
+  startSit,
+  CLEAR_MARGIN,
+  type LineupBasis,
+  type LineupChange,
+} from '../engine/startSit';
 import { wireUpgrades, type WireUpgrade } from '../engine/wire';
 import type { FreeAgentBoard } from '../engine/freeAgents';
 import { playingTime } from '../engine/freeAgents';
 import { isGameWeek } from '../engine/season';
 import { injuryNote } from '../engine/availability';
-import { formatInjury, formatSlot, formatValue, POSITION_STYLES } from '../lib/format';
+import {
+  formatInjury,
+  formatPoints,
+  formatSlot,
+  formatValue,
+  POSITION_STYLES,
+} from '../lib/format';
 import { PlayerAvatar } from './PlayerAvatar';
 import { PlayerName } from './PlayerName';
-import { changeAction, describeChange } from '../lib/lineupText';
+import {
+  changeAction,
+  describeChange,
+  evidenceLine,
+  outscoreSentence,
+} from '../lib/lineupText';
+import { WORTH_ACTING } from '../engine/projections';
+import type { WeekProjections } from '../platforms/types';
+import type { WeekEvidence } from '../engine/weekEvidence';
 import {
   adviseBid,
   budgetLeft,
@@ -47,7 +66,23 @@ interface Props {
    * already says what to do.
    */
   bids?: BidModel;
+  /**
+   * This week's projected points in the league's scoring (#149). When present
+   * the panel ranks on them; when absent — out of season, still loading, or
+   * failed — it ranks on win-now value and says which it did.
+   */
+  projected?: ReadonlyMap<string, number>;
+  /** This week's raw projections, for the opponent on each row. */
+  projections?: WeekProjections;
+  /** What each player has done this season, shown beside a call. */
+  evidence?: ReadonlyMap<string, WeekEvidence>;
+  /** The last week `evidence` covers, or null when it covers none of this season. */
+  evidenceWeek?: number | null;
 }
+
+/** A figure in the plan's own units: projected points, or win-now value. */
+const figure = (basis: LineupBasis, n: number): string =>
+  basis === 'projection' ? formatPoints(n) : formatValue(n);
 
 /**
  * The lineup panel: what you have set, against what you could field.
@@ -74,6 +109,10 @@ export function WeeklyLineup({
   board,
   activityCurrent = false,
   bids,
+  projected,
+  projections,
+  evidence,
+  evidenceWeek = null,
 }: Props) {
   const [showLineup, setShowLineup] = useState(false);
 
@@ -84,8 +123,9 @@ export function WeeklyLineup({
         startingSlots: settings.startingSlots,
         setLineup: roster.setLineup,
         byeTeams,
+        projected,
       }),
-    [summary.players, settings.startingSlots, roster.setLineup, byeTeams],
+    [summary.players, settings.startingSlots, roster.setLineup, byeTeams, projected],
   );
 
   const wire = useMemo(
@@ -97,9 +137,20 @@ export function WeeklyLineup({
         byeTeams,
         roster,
         activeLimit: settings.allSlots.length,
+        projected,
       }),
-    [plan.lineup, summary.players, board, byeTeams, roster, settings.allSlots.length],
+    [plan.lineup, summary.players, board, byeTeams, roster, settings.allSlots.length, projected],
   );
+
+  /** One line of facts behind a player's number, or null. */
+  const factsFor = (player: Player): string | null =>
+    plan.basis === 'projection'
+      ? evidenceLine(
+          projections?.get(player.id)?.opponent,
+          evidence?.get(player.id),
+          player.position,
+        )
+      : null;
 
   const gameWeek = isGameWeek(seasonPhase ?? 'unknown');
   /**
@@ -176,7 +227,10 @@ export function WeeklyLineup({
           /* Signed, not just green: colour alone never carries a direction here,
              and the plus is what makes this a delta rather than a total. */
           <p className="tabular text-lg font-bold text-positive">
-            +{formatValue(plan.gain)}
+            +{figure(plan.basis, plan.gain)}
+            {plan.basis === 'projection' && (
+              <span className="ml-1 text-sm font-semibold">pts</span>
+            )}
           </p>
         )}
       </div>
@@ -184,22 +238,46 @@ export function WeeklyLineup({
       <p className="mt-2 text-sm text-subtle">
         {plan.unset
           ? 'Nothing has been set on the platform to compare against, so this is a recommendation rather than a correction.'
-          : gameWeek
-            ? knowsByes
-              ? 'Ranked on win-now value — season-long, corrected for role, who can actually play, and who is on bye. Not a weekly projection: no matchups.'
-              : 'Ranked on win-now value — season-long, corrected for role and who can actually play. Not a weekly projection: no matchups, and bye weeks could not be loaded.'
-            : 'Ranked on win-now value. No game is next, so this is the lineup this roster can field rather than a call for Sunday.'}
+          : plan.basis === 'projection'
+            ? "Ranked on this week's projections, scored under your league's own rules, with who can actually play and who is on bye. Each call says how likely it is to come off."
+            : gameWeek
+              ? knowsByes
+                ? "Ranked on win-now value — season-long, corrected for role, who can actually play, and who is on bye. This week's projections could not be loaded, so there are no matchups in it."
+                : "Ranked on win-now value — season-long, corrected for role and who can actually play. This week's projections and bye weeks could not be loaded, so there are no matchups in it."
+              : 'Ranked on win-now value. No game is next, so this is the lineup this roster can field rather than a call for Sunday.'}
       </p>
 
       {changes > 0 && (
         <ul className="mt-4 space-y-3">
           {plan.decisive.map((change) => (
-            <ChangeRow key={`${change.slot}-${change.index}`} change={change} />
+            <ChangeRow
+              key={`${change.slot}-${change.index}`}
+              change={change}
+              basis={plan.basis}
+              facts={change.start ? factsFor(change.start.player) : null}
+            />
           ))}
         </ul>
       )}
 
-      {plan.marginal.length > 0 && <Marginal changes={plan.marginal} />}
+      {/*
+        Dated once, under the calls, rather than on every row: the grey lines
+        share one source and one refresh. Said louder when it has fallen more
+        than a week behind the game week, which only happens when a Tuesday
+        refresh fails — the case where stale numbers would otherwise pass for
+        this week's.
+      */}
+      {plan.basis === 'projection' && evidenceWeek !== null && (
+        <p className="mt-3 text-xs text-subtle">
+          {currentWeek !== null && evidenceWeek < currentWeek - 1
+            ? `Snaps, targets and points a game run only through week ${evidenceWeek}; the latest weekly refresh has not landed.`
+            : `Snaps, targets and points a game are through week ${evidenceWeek}.`}
+        </p>
+      )}
+
+      {plan.marginal.length > 0 && (
+        <Marginal changes={plan.marginal} basis={plan.basis} factsFor={factsFor} />
+      )}
 
       {wire.length > 0 && (
         <Wire
@@ -207,6 +285,8 @@ export function WeeklyLineup({
           activityCurrent={activityCurrent}
           bids={bids}
           roster={roster}
+          basis={plan.basis}
+          factsFor={factsFor}
         />
       )}
 
@@ -265,7 +345,7 @@ export function WeeklyLineup({
                         )}
                       </span>
                       <span className="tabular shrink-0 text-subtle">
-                        {formatValue(assignment.entry.winNowValue)}
+                        {figure(plan.basis, assignment.entry.winNowValue)}
                       </span>
                     </>
                   ) : (
@@ -295,7 +375,15 @@ export function WeeklyLineup({
  * want, and because silently discarding a difference the app can see would be a
  * worse habit than showing it quietly.
  */
-function Marginal({ changes }: { changes: LineupChange[] }) {
+function Marginal({
+  changes,
+  basis,
+  factsFor,
+}: {
+  changes: LineupChange[];
+  basis: LineupBasis;
+  factsFor: (player: Player) => string | null;
+}) {
   const count = changes.length;
   return (
     <details className="mt-4 border-t border-line pt-3">
@@ -303,12 +391,18 @@ function Marginal({ changes }: { changes: LineupChange[] }) {
         {count} {count === 1 ? 'swap' : 'swaps'} too close to call
       </summary>
       <p className="mt-2 text-xs text-muted">
-        Within {Math.round(CLEAR_MARGIN * 100)}% on win-now value. Worth knowing about,
-        not worth acting on.
+        {basis === 'projection'
+          ? `Less than a ${Math.round(WORTH_ACTING * 100)}% chance of coming off. Either choice is defensible — this is the part of the lineup where your own read of the week counts most.`
+          : `Within ${Math.round(CLEAR_MARGIN * 100)}% on win-now value. Worth knowing about, not worth acting on.`}
       </p>
       <ul className="mt-3 space-y-3">
         {changes.map((change) => (
-          <ChangeRow key={`${change.slot}-${change.index}`} change={change} />
+          <ChangeRow
+            key={`${change.slot}-${change.index}`}
+            change={change}
+            basis={basis}
+            facts={change.start ? factsFor(change.start.player) : null}
+          />
         ))}
       </ul>
     </details>
@@ -333,11 +427,15 @@ function Wire({
   activityCurrent,
   bids,
   roster,
+  basis,
+  factsFor,
 }: {
   upgrades: WireUpgrade[];
   activityCurrent: boolean;
   bids?: BidModel;
   roster: Roster;
+  basis: LineupBasis;
+  factsFor: (player: Player) => string | null;
 }) {
   const remaining = bids ? budgetLeft(bids, roster) : null;
   return (
@@ -346,8 +444,9 @@ function Wire({
         {upgrades.length === 1 ? 'A free agent beats' : 'Free agents beat'} your lineup
       </h4>
       <p className="mt-1 text-xs text-accent/90">
-        Unrostered, and priced against this league's replacement levels — so these
-        numbers mean the same thing as everyone else's.
+        {basis === 'projection'
+          ? "Unrostered, and projected under your league's scoring — the same numbers as your lineup."
+          : "Unrostered, and priced against this league's replacement levels — so these numbers mean the same thing as everyone else's."}
         {/*
           The budget is a fact about this manager and belongs once, at the top,
           rather than repeated on every row. `remaining` can exceed the league's
@@ -362,6 +461,7 @@ function Wire({
       <ul className="mt-3 space-y-3">
         {upgrades.map((upgrade) => {
           const time = playingTime(upgrade.add.snaps);
+          const facts = factsFor(upgrade.add.player);
           return (
             <li key={upgrade.add.player.id}>
               <div className="flex items-baseline gap-2">
@@ -374,18 +474,26 @@ function Wire({
                   <PlayerName player={upgrade.add.player} />
                 </span>
                 <span className="tabular shrink-0 text-sm font-semibold text-positive">
-                  +{formatValue(upgrade.addValue - upgrade.replaces.winNowValue)}
+                  +{figure(basis, upgrade.addValue - upgrade.replaces.winNowValue)}
                 </span>
               </div>
               <p className="mt-0.5 pl-14 text-xs text-muted">
-                Better than {upgrade.replaces.player.name} in this slot.
+                {upgrade.chance !== null
+                  ? outscoreSentence(
+                      upgrade.chance,
+                      upgrade.replaces.player.name,
+                      upgrade.addValue,
+                      upgrade.replaces.winNowValue,
+                    )
+                  : `Better than ${upgrade.replaces.player.name} in this slot.`}
                 {/*
                   Playing time is evidence, never part of the ranking — the two
                   are different currencies and #46 is explicit that they are
                   never mixed. Labelled by season, because out of season the only
-                  shares there are belong to last year.
+                  shares there are belong to last year. On a projection plan the
+                  evidence line below says it, with more.
                 */}
-                {time
+                {!facts && time
                   ? ` ${Math.round(time.share * 100)}% of snaps${
                       time.recent ? ' lately' : ''
                     }${activityCurrent ? '' : ' last season'}.`
@@ -396,6 +504,7 @@ function Wire({
                     ? ` Drop ${upgrade.drop.player.name} for him.`
                     : ' Nothing on your roster is obviously spare, so the claim costs you a choice.'}
               </p>
+              {facts && <p className="mt-0.5 pl-14 text-xs text-subtle">{facts}</p>}
               <BidLine upgrade={upgrade} bids={bids} roster={roster} />
             </li>
           );
@@ -492,7 +601,16 @@ function PositionChip({ entry }: { entry: ValuedPlayer }) {
  * else, so the sentence that explains the row gets its own line rather than
  * being cut to a word.
  */
-function ChangeRow({ change }: { change: LineupChange }) {
+function ChangeRow({
+  change,
+  basis,
+  facts,
+}: {
+  change: LineupChange;
+  basis: LineupBasis;
+  /** The evidence behind the man being started, when the plan has any. */
+  facts: string | null;
+}) {
   return (
     <li>
       <div className="flex items-baseline gap-2">
@@ -529,11 +647,12 @@ function ChangeRow({ change }: { change: LineupChange }) {
         */}
         {change.startIsNew && change.gain > 0 && (
           <span className="tabular shrink-0 text-sm font-semibold text-positive">
-            +{formatValue(change.gain)}
+            +{figure(basis, change.gain)}
           </span>
         )}
       </div>
       <p className="mt-0.5 pl-14 text-xs text-muted">{describeChange(change)}</p>
+      {facts && <p className="mt-0.5 pl-14 text-xs text-subtle">{facts}</p>}
     </li>
   );
 }

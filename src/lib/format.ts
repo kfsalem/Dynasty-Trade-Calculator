@@ -30,6 +30,19 @@ export const formatValue = (n: number): string => {
   return rounded.toLocaleString('en-US');
 };
 
+/**
+ * Projected fantasy points, to one decimal — the precision the platform
+ * projects to. Negative zero is folded away for the reason `formatValue` gives.
+ */
+export const formatPoints = (n: number): string => {
+  const fixed = n.toFixed(1);
+  return fixed === '-0.0' ? '0.0' : fixed;
+};
+
+/** A probability as a whole percentage, never 0% or 100% — nothing here is certain. */
+export const formatChance = (p: number): string =>
+  `${Math.min(99, Math.max(1, Math.round(p * 100)))}%`;
+
 export const formatAge = (age: number | null): string =>
   age === null ? '—' : `${age.toFixed(1)} yrs`;
 

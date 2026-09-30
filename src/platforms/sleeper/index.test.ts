@@ -26,6 +26,7 @@ const client = {
   getDrafts: vi.fn(),
   getState: vi.fn(),
   getTradedPicks: vi.fn(),
+  getProjections: vi.fn(),
   parseLeagueId: vi.fn(),
 };
 
@@ -263,5 +264,22 @@ describe('loadTransactions', () => {
     expect(history.transactions).toEqual([]);
     expect(history.seasons).toEqual([]);
     expect(history.truncated).toBe(false);
+  });
+});
+
+describe('loadProjections', () => {
+  it('keys each stat line by player, keeps the opponent, and drops zeros', async () => {
+    client.getProjections.mockResolvedValue([
+      { player_id: '4866', team: 'KC', opponent: 'LV', stats: { rec: 5.2, rec_td: 0, pts_ppr: 14 } },
+      { player_id: 'CLE', team: 'CLE', opponent: 'PIT', stats: { pts_allow_14_20: 0.4 } },
+      { player_id: '999', team: null, opponent: null, stats: {} },
+    ]);
+
+    const projections = await sleeperProvider.loadProjections!('2026', 4, ['WR', 'DEF']);
+
+    expect(client.getProjections).toHaveBeenCalledWith('2026', 4, ['WR', 'DEF']);
+    expect(projections.get('4866')).toEqual({ opponent: 'LV', stats: { rec: 5.2, pts_ppr: 14 } });
+    expect(projections.get('CLE')?.opponent).toBe('PIT');
+    expect(projections.get('999')).toEqual({ opponent: null, stats: {} });
   });
 });
