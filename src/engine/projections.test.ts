@@ -77,3 +77,21 @@ describe('outscoreChance', () => {
     expect(outscoreChance(2.7)).toBeGreaterThan(WORTH_ACTING);
   });
 });
+
+describe('outscoreChance by position (#152)', () => {
+  it('reads a defence gap far more confidently than a skill-position one', () => {
+    // Ravens 9.5 over Texans 6.5: about three in four for defences, measured.
+    expect(outscoreChance(3, 'DEF')).toBeGreaterThan(0.75);
+    expect(outscoreChance(3)).toBeLessThan(0.62);
+  });
+
+  it('reads a kicker gap as close to a coin flip, because it nearly is', () => {
+    expect(outscoreChance(1, 'K')).toBeLessThan(COIN_FLIP);
+    expect(outscoreChance(1, 'K')).toBeLessThan(outscoreChance(1));
+  });
+
+  it('uses the skill-position curve for anyone else, or when the position is unknown', () => {
+    expect(outscoreChance(2, 'WR')).toBe(outscoreChance(2));
+    expect(outscoreChance(2, undefined)).toBe(outscoreChance(2));
+  });
+});

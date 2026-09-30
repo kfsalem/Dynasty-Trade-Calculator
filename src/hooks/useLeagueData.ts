@@ -351,6 +351,24 @@ export function useProjections(
   });
 }
 
+/**
+ * NFL teams whose game this week has kicked off (#152).
+ *
+ * Refetched every five minutes while the panel is open, because this is the
+ * one input that changes during a Sunday: the early games lock at one and the
+ * late games at four, and a lineup read at 3:55 should know which is which.
+ */
+export function useStartedTeams(season: string | undefined, week: number | null) {
+  return useQuery({
+    queryKey: ['startedTeams', season, week],
+    queryFn: () => sleeperProvider.loadStartedTeams!(season as string, week as number),
+    enabled: Boolean(season && week && sleeperProvider.loadStartedTeams),
+    staleTime: 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+    retry: 1,
+  });
+}
+
 /** When each team is off, for the lineup panel. */
 export function useByeWeeks() {
   return useQuery({
@@ -386,6 +404,7 @@ export function useLeagueSummaries(leagueId: string | null) {
     projectionWeek,
     startedPositions,
   );
+  const startedQuery = useStartedTeams(leagueQuery.data?.currentSeason, projectionWeek);
   const projected = useMemo(
     () =>
       projectionsQuery.data && settings
@@ -846,6 +865,8 @@ export function useLeagueSummaries(leagueId: string | null) {
     projected,
     /** The free-agent board as the lineup panel's wire may use it. */
     wireBoard,
+    /** NFL teams whose game this week has kicked off. Undefined until known. */
+    lockedTeams: startedQuery.data,
     /** This season's snaps, targets and points per player, for the lineup's rows. */
     evidence,
     /** The last week that evidence covers, or null when there is none this season. */

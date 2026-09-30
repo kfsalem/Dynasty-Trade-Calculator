@@ -222,6 +222,7 @@ function App() {
     projections,
     evidence,
     evidenceWeek,
+    lockedTeams,
     claimable,
     activityCurrent,
     adjustments,
@@ -283,7 +284,10 @@ function App() {
   const bids = useBidModel(
     leagueId,
     league?.settings,
-    tab === 'analysis' && myRosterId !== null && runsFaab(league?.settings),
+    // The Free agents tab shows what a claim costs too (#152), and needs no
+    // claimed team to: the prices are the league's, only the budget is his.
+    ((tab === 'analysis' && myRosterId !== null) || tab === 'agents') &&
+      runsFaab(league?.settings),
   );
 
   useEffect(() => {
@@ -612,6 +616,7 @@ function App() {
                     projections={projections}
                     evidence={evidence}
                     evidenceWeek={evidenceWeek}
+                    lockedTeams={lockedTeams}
                     activityCurrent={activityCurrent}
                     bench={bench}
                     bids={bids}
@@ -676,6 +681,8 @@ function App() {
                     snapsMeta={snapsMeta}
                     activityCurrent={activityCurrent}
                     priced={priced}
+                    bids={bids}
+                    roster={league.rosters.find((r) => r.rosterId === myRosterId)}
                   />
                 ) : (
                   <EmptyState title="The wire is still loading">

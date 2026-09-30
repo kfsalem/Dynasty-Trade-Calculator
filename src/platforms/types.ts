@@ -463,6 +463,14 @@ export interface LeagueProvider {
     week: number,
     positions: readonly string[],
   ): Promise<WeekProjections>;
+  /**
+   * NFL teams whose game in `week` has kicked off, by the codes rosters use.
+   *
+   * The platform locks a player at his kickoff, so from Thursday night on part
+   * of a lineup can no longer change (#152). Optional and allowed to fail: the
+   * panel then assumes nothing has started, which is right until Thursday.
+   */
+  loadStartedTeams?(season: string, week: number): Promise<ReadonlySet<string>>;
 }
 
 /** One player's projection for one week, before any league's scoring is applied. */

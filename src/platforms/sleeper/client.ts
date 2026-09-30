@@ -11,6 +11,7 @@ import {
   sleeperDraftsSchema,
   sleeperStateSchema,
   sleeperProjectionsSchema,
+  sleeperScheduleSchema,
   sleeperAccountSchema,
   sleeperMatchupsSchema,
   sleeperTransactionsSchema,
@@ -25,6 +26,7 @@ import {
   type SleeperDraft,
   type SleeperState,
   type SleeperProjection,
+  type SleeperGame,
   type SleeperAccount,
 } from './schema';
 
@@ -146,6 +148,14 @@ export function getProjections(
   return fetchJson(
     `https://api.sleeper.app/projections/nfl/${season}/${week}?${query.toString()}`,
     sleeperProjectionsSchema,
+  );
+}
+
+/** Every regular-season NFL game in a season, with where each one stands. */
+export function getNflSchedule(season: string): Promise<SleeperGame[]> {
+  return fetchJson(
+    `https://api.sleeper.app/schedule/nfl/regular/${season}`,
+    sleeperScheduleSchema,
   );
 }
 

@@ -54,6 +54,7 @@ export type LineupSlot =
   | 'FLEX' // RB/WR/TE
   | 'SUPER_FLEX' // QB/RB/WR/TE
   | 'REC_FLEX' // WR/TE
+  | 'WRRB_FLEX' // RB/WR
   | 'IDP_FLEX'
   | 'BN'
   | 'IR'
@@ -64,6 +65,9 @@ export const FLEX_ELIGIBILITY: Record<string, Position[]> = {
   FLEX: ['RB', 'WR', 'TE'],
   SUPER_FLEX: ['QB', 'RB', 'WR', 'TE'],
   REC_FLEX: ['WR', 'TE'],
+  // Sleeper's running back and receiver flex. Absent until #152, so a league
+  // using it could never fill the slot and was told so every week.
+  WRRB_FLEX: ['RB', 'WR'],
 };
 
 /**

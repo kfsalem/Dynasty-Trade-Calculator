@@ -4,7 +4,10 @@ import userEvent from '@testing-library/user-event';
 import { FreeAgentBoard } from './FreeAgentBoard';
 import type { FreeAgent, FreeAgentBoard as Board } from '../engine/freeAgents';
 import { makePlayer, makeValue } from '../engine/testFixtures';
-import type { Position } from '../types';
+import type { Position, WaiverSettings } from '../types';
+import { modelBids } from '../engine/bids';
+import { makeHistory, makeRoster, makeSettings } from '../engine/testFixtures';
+import type { LeagueTransaction } from '../platforms/types';
 
 function agent(
   id: string,
@@ -114,5 +117,51 @@ describe('FreeAgentBoard', () => {
     view({ snapsMeta: { season: 2026, throughWeek: 3, chartSeason: 2026 } });
 
     expect(screen.queryByText(/not this season/)).not.toBeInTheDocument();
+  });
+});
+
+describe('FreeAgentBoard — what a claim costs (#152)', () => {
+  const FAAB: WaiverSettings = { type: 2, budget: 100, minBid: null };
+  const won = (i: number, bid: number): LeagueTransaction => ({
+    id: `w${i}`,
+    season: '2025',
+    week: 3,
+    type: 'waiver',
+    succeeded: true,
+    created: i,
+    rosterIds: [1],
+    adds: new Map([[`p${i}`, 1]]),
+    drops: new Map(),
+    picks: [],
+    budget: [],
+    bid,
+  });
+  const claims = [
+    ...Array.from({ length: 10 }, (_, i) => won(i, 20)),
+    ...Array.from({ length: 10 }, (_, i) => won(10 + i, 6)),
+  ];
+  const bids = modelBids(
+    makeHistory({
+      transactions: claims,
+      waivers: new Map([['2025', FAAB]]),
+      positions: new Map(claims.map((t, i) => [[...t.adds.keys()][0], i < 10 ? 'RB' : 'WR'] as const)),
+    }),
+    makeSettings(['QB', 'RB', 'WR'], { waivers: FAAB }),
+  );
+
+  it('prices a claim by position, for any player, before any row is read', () => {
+    view({ bids, roster: { ...makeRoster(1, []), faabUsed: 30 } });
+
+    expect(screen.getByText('What a claim costs here')).toBeInTheDocument();
+    // One price per position the league has actually bid on — RB and WR here,
+    // and nothing invented for the positions it never has.
+    expect(screen.getAllByText(/^\$\d+$/)).toHaveLength(2);
+    expect(screen.getByText(/You have \$70 of your \$100 budget left/)).toBeInTheDocument();
+    expect(screen.getByText(/From 20 winning bids since 2025/)).toBeInTheDocument();
+  });
+
+  it('shows no guide in a league with no bid model', () => {
+    view();
+    expect(screen.queryByText('What a claim costs here')).not.toBeInTheDocument();
   });
 });

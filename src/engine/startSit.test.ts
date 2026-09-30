@@ -639,3 +639,85 @@ describe('startSit on projections (#149)', () => {
     expect(plan.decisive.map((c) => c.start?.player.id)).toContain('k2');
   });
 });
+
+describe('startSit — what cannot change, and slots it must still fill (#152)', () => {
+  const entries = [
+    entry('qb1', 'QB', 900, undefined, 'KC'),
+    entry('rb1', 'RB', 800, undefined, 'PIT'),
+    entry('wr1', 'WR', 700, undefined, 'CLE'),
+    entry('wr2', 'WR', 600, undefined, 'BUF'),
+    entry('wr3', 'WR', 200, undefined, 'DET'),
+  ];
+  const set = ['qb1', 'rb1', 'wr1', 'wr2'];
+  const projected = new Map([
+    ['qb1', 20],
+    ['rb1', 15],
+    ['wr1', 9],
+    ['wr2', 12],
+    ['wr3', 14],
+  ]);
+
+  it('leaves a starter whose game has kicked off exactly where he is', () => {
+    // wr1 would be benched for wr3 — but Cleveland played Thursday.
+    const plan = startSit({
+      entries,
+      startingSlots: SLOTS,
+      setLineup: set,
+      projected,
+      locked: new Set(['CLE']),
+    });
+
+    expect(ids(plan)).toContain('wr1');
+    expect(plan.locked.map((e) => e.player.id)).toEqual(['wr1']);
+    expect(plan.changes.some((c) => c.sit?.player.id === 'wr1')).toBe(false);
+  });
+
+  it('never starts a bench player whose game has already kicked off', () => {
+    const plan = startSit({
+      entries,
+      startingSlots: SLOTS,
+      setLineup: set,
+      projected,
+      locked: new Set(['DET']),
+    });
+
+    expect(ids(plan)).not.toContain('wr3');
+    expect(plan.decisive).toEqual([]);
+  });
+
+  it('leaves an IDP slot alone rather than calling its player gone', () => {
+    // The linebacker is not in `entries`: IDP players are filtered at import.
+    const plan = startSit({
+      entries,
+      startingSlots: [...SLOTS, 'IDP_FLEX' as LineupSlot],
+      setLineup: [...set, 'lb1'],
+    });
+
+    expect(plan.unmodelledSlots).toBe(1);
+    expect(plan.changes).toEqual([]);
+  });
+
+  it('fills a running back and receiver flex', () => {
+    const plan = startSit({
+      entries,
+      startingSlots: ['QB', 'RB', 'WR', 'WRRB_FLEX'],
+      setLineup: ['qb1', 'rb1', 'wr1', null],
+    });
+
+    expect(plan.lineup[3].entry?.player.id).toBe('wr2');
+  });
+
+  it('judges a defence swap on the defence curve', () => {
+    const defs = [...entries, entry('d1', 'DEF', 0), entry('d2', 'DEF', 0)];
+    const plan = startSit({
+      entries: defs,
+      startingSlots: [...SLOTS, 'DEF'],
+      setLineup: [...set, 'd1'],
+      projected: new Map([...projected, ['wr3', 5], ['d1', 6.5], ['d2', 9.5]]),
+    });
+    const change = plan.decisive.find((c) => c.slot === 'DEF');
+
+    // Three points is 61% on the skill curve and about 77% for defences.
+    expect(change?.chance).toBeGreaterThan(0.75);
+  });
+});

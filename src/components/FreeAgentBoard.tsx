@@ -2,7 +2,10 @@ import { useMemo, useState } from 'react';
 import { PlayerName } from './PlayerName';
 import { PlayerAvatar } from './PlayerAvatar';
 import { POSITIONS } from '../types';
-import type { Position } from '../types';
+import type { Position, Roster } from '../types';
+import { budgetLeft, contestSpread, priceFor, type BidModel } from '../engine/bids';
+import { contestSentence } from '../lib/bidText';
+import { countPhrase } from '../lib/learnedText';
 import type { FreeAgent, FreeAgentBoard as Board } from '../engine/freeAgents';
 import type { PlayerRole } from '../engine/role';
 import { availability, injuryNote } from '../engine/availability';
@@ -21,6 +24,13 @@ interface Props {
   activityCurrent: boolean;
   /** Positions the value source prices at all. */
   priced?: Set<Position>;
+  /**
+   * What a claim costs in this league, from its own winning bids. Undefined in
+   * a league that does not run FAAB, and until the transaction walk lands.
+   */
+  bids?: BidModel;
+  /** The reader's own roster, for the budget he has left. */
+  roster?: Roster;
 }
 
 /**
@@ -50,6 +60,8 @@ export function FreeAgentBoard({
   snapsMeta,
   activityCurrent,
   priced,
+  bids,
+  roster,
 }: Props) {
   const [query, setQuery] = useState('');
   const [position, setPosition] = useState<Position | 'ALL'>('ALL');
@@ -83,6 +95,8 @@ export function FreeAgentBoard({
         an NFL team that nobody in this league rosters, priced against this league — so a
         free agent's number means the same thing as a rostered player's.
       </p>
+
+      {bids && <BidGuide bids={bids} roster={roster} />}
 
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <label htmlFor="fa-search" className="sr-only">
@@ -184,6 +198,74 @@ export function FreeAgentBoard({
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * What a claim costs in this league, by position (#152).
+ *
+ * Here rather than on each row because the price is a fact about the position
+ * and not the player: measured on both test leagues, a winning bid does not
+ * track how good the man is (see `engine/bids`), so a column would repeat the
+ * same figure down every running back. What moves it is how many managers
+ * want him, and nothing the app can see beforehand predicts that — so the
+ * guide gives the spread and leaves that read to the manager.
+ *
+ * Before this the only place a price appeared was a lineup-panel row, which
+ * exists only for a free agent who beats a starter *this week*. A claim made
+ * for the rest of the season — the backup to a star just lost for the year —
+ * had nowhere to look one up.
+ */
+function BidGuide({ bids, roster }: { bids: BidModel; roster?: Roster }) {
+  const rows = POSITIONS.flatMap((position) => {
+    const price = priceFor(bids, position);
+    const seen = bids.byPosition.get(position)?.observations ?? 0;
+    if (!price || seen === 0) return [];
+    return [{ position, dollars: Math.max(Math.round(price.value), bids.minBid ?? 0, 0), seen }];
+  });
+  if (rows.length === 0) return null;
+
+  const spread = contestSpread(bids);
+  const remaining = roster ? budgetLeft(bids, roster) : null;
+  const since = bids.seasons.at(-1);
+
+  return (
+    <section className="card mt-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-subtle">
+        What a claim costs here
+      </p>
+      <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+        {rows.map(({ position, dollars, seen }) => {
+          const style = POSITION_STYLES[position];
+          return (
+            <li
+              key={position}
+              className="flex items-center gap-2 text-sm"
+              title={`From ${countPhrase(seen, { one: 'winning bid', many: 'winning bids' })} at ${position}`}
+            >
+              <span
+                className={`inline-flex w-11 justify-center rounded px-1.5 py-0.5 text-xs font-semibold ${style.chip}`}
+              >
+                {style.label}
+              </span>
+              <span className="tabular font-semibold text-ink">${dollars}</span>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-3 text-xs text-muted">
+        {spread ? `${contestSentence(spread)} ` : ''}
+        What moves a price here is how many managers want the player, not how good he is, and
+        nothing visible beforehand says who else will bid — that read is yours.
+        {remaining !== null && bids.budget
+          ? ` You have $${remaining} of your $${bids.budget} budget left.`
+          : ''}
+      </p>
+      <p className="mt-1 text-xs text-subtle">
+        From {countPhrase(bids.observations, { one: 'winning bid', many: 'winning bids' })}
+        {since ? ` since ${since}` : ''}.
+      </p>
+    </section>
   );
 }
 

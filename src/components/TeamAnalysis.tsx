@@ -54,6 +54,8 @@ interface Props {
   evidence?: ReadonlyMap<string, WeekEvidence>;
   /** The last week that evidence covers. */
   evidenceWeek?: number | null;
+  /** NFL teams whose game this week has kicked off. */
+  lockedTeams?: ReadonlySet<string>;
   /** Whether the activity data describes the season being played. */
   activityCurrent: boolean;
   /**
@@ -174,6 +176,7 @@ export function TeamAnalysis({
   projections,
   evidence,
   evidenceWeek,
+  lockedTeams,
   activityCurrent,
   bench,
   bids,
@@ -378,6 +381,7 @@ export function TeamAnalysis({
           projections={projections}
           evidence={evidence}
           evidenceWeek={evidenceWeek}
+          lockedTeams={lockedTeams}
           activityCurrent={activityCurrent}
           bids={bids}
         />

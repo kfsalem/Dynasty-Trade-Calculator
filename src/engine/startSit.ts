@@ -1,4 +1,4 @@
-import type { InjuryStatus, LineupSlot } from '../types';
+import { POSITIONS, type InjuryStatus, type LineupSlot } from '../types';
 import {
   bestLineup,
   byRestrictiveness,
@@ -213,6 +213,10 @@ export interface StartSitPlan {
    * flag exists to prevent.
    */
   unset: boolean;
+  /** Starters whose game has kicked off, so they stay where they are. */
+  locked: ValuedPlayer[];
+  /** Starting slots this app does not model (IDP), left exactly as set. */
+  unmodelledSlots: number;
   /**
    * Recommended starters carrying a designation that could still flip before
    * kickoff — questionable, or a word this app does not recognise.
@@ -248,7 +252,37 @@ export interface StartSitInput {
    * or when they fail — the plan is then the value-ranked one, as before.
    */
   projected?: ReadonlyMap<string, number>;
+  /**
+   * Team codes whose game this week has kicked off (#152).
+   *
+   * Sleeper locks a player at his game's kickoff, so from Thursday night on
+   * some of the lineup can no longer change: a locked starter stays where he
+   * is, and a locked bench player cannot come in. Absent or null means nothing
+   * has started, which is the whole of Monday to Thursday.
+   */
+  locked?: ReadonlySet<string> | null;
 }
+
+/**
+ * Whether this app can fill a slot at all.
+ *
+ * IDP slots (DL, LB, DB, IDP_FLEX) are not modelled — defensive players are
+ * filtered out at import — so a slot like that is left exactly as the manager
+ * set it. Treating it as fillable told every IDP league, every week, that
+ * whoever was in the slot was "no longer on your roster" (#152).
+ */
+export const modelledSlot = (slot: LineupSlot): boolean =>
+  slotEligibility(slot).every((position) => POSITIONS.includes(position));
+
+/**
+ * The curve to judge a comparison between these players on: the kicker or
+ * defence one when every man involved plays that position, the skill-position
+ * one otherwise. See `OUTSCORE_SLOPE_BY_POSITION`.
+ */
+export const sharedPosition = (players: ValuedPlayer[]): string | undefined => {
+  const positions = new Set(players.map((entry) => entry.player.position));
+  return positions.size === 1 ? [...positions][0] : undefined;
+};
 
 /**
  * Rearrange an already-chosen lineup to agree with the manager's own wherever
@@ -337,6 +371,7 @@ export function startSit({
   setLineup,
   byeTeams,
   projected,
+  locked,
 }: StartSitInput): StartSitPlan {
   const basis: LineupBasis = projected ? 'projection' : 'value';
   /*
@@ -363,11 +398,40 @@ export function startSit({
   const playing = (entry: ValuedPlayer): boolean =>
     canPlayThisWeek(entry.player) && !onBye(entry.player.team, off);
 
-  const playable = entries.filter(playing);
-  const lineup = arrangeLike(
-    bestLineup(playable, startingSlots),
-    startingSlots,
-    setLineup,
+  const locks = locked ?? new Set<string>();
+  const isLocked = (entry: ValuedPlayer): boolean =>
+    Boolean(entry.player.team && locks.has(entry.player.team));
+
+  /*
+    Slots whose occupant cannot change this week: one holding a starter whose
+    game has kicked off, and one this app does not model. Both are kept exactly
+    as set, and the best lineup is chosen for the rest around them.
+  */
+  const pinned = new Map<number, ValuedPlayer | null>();
+  for (const [index, slot] of startingSlots.entries()) {
+    const id = setLineup[index];
+    const entry = id ? rostered.get(id) : undefined;
+    if (!modelledSlot(slot)) pinned.set(index, entry ?? null);
+    else if (entry && isLocked(entry)) pinned.set(index, entry);
+  }
+  const pinnedIds = new Set(
+    [...pinned.values()].filter((entry): entry is ValuedPlayer => entry !== null).map((e) => e.player.id),
+  );
+
+  const open = startingSlots.map((_, index) => index).filter((index) => !pinned.has(index));
+  const openSlots = open.map((index) => startingSlots[index]);
+  const playable = entries.filter(
+    (entry) => playing(entry) && !isLocked(entry) && !pinnedIds.has(entry.player.id),
+  );
+  const openLineup = arrangeLike(
+    bestLineup(playable, openSlots),
+    openSlots,
+    open.map((index) => setLineup[index] ?? null),
+  );
+  const lineup: LineupAssignment[] = startingSlots.map((slot, index) =>
+    pinned.has(index)
+      ? { slot, entry: pinned.get(index) ?? null }
+      : { slot, entry: openLineup[open.indexOf(index)]?.entry ?? null },
   );
 
   const recommendedIds = new Set(
@@ -402,6 +466,8 @@ export function startSit({
   const changes: LineupChange[] = [];
   if (!unset) {
     for (const [index, slot] of startingSlots.entries()) {
+      // Nothing to say about a slot that cannot change.
+      if (pinned.has(index)) continue;
       const setId = setLineup[index] ?? null;
       const start = lineup[index]?.entry ?? null;
       if (setId === (start?.player.id ?? null)) continue;
@@ -435,7 +501,7 @@ export function startSit({
         start && sit ? relativeMargin(start.winNowValue, sit.winNowValue) : 0;
       const chance =
         basis === 'projection' && start && sit
-          ? outscoreChance(start.winNowValue - sit.winNowValue)
+          ? outscoreChance(start.winNowValue - sit.winNowValue, sharedPosition([start, sit]))
           : null;
 
       changes.push({
@@ -461,11 +527,12 @@ export function startSit({
   linkChains(changes, playing, basis);
   changes.sort((a, b) => b.gain - a.gain || a.index - b.index);
 
+  // A questionable man whose game has started is no longer a thing to check.
   const watch = lineup
     .map((assignment) => assignment.entry)
     .filter(
       (entry): entry is ValuedPlayer =>
-        entry !== null && availability(entry.player) === 'week_to_week',
+        entry !== null && availability(entry.player) === 'week_to_week' && !isLocked(entry),
     );
 
   return {
@@ -479,6 +546,10 @@ export function startSit({
     recommendedValue,
     unset,
     watch,
+    locked: [...pinned.values()].filter(
+      (entry): entry is ValuedPlayer => entry !== null && isLocked(entry),
+    ),
+    unmodelledSlots: startingSlots.filter((slot) => !modelledSlot(slot)).length,
   };
 }
 
@@ -566,9 +637,13 @@ function linkChains(
       three-in-five chance are the same idea — worth acting on, not a coin flip
       — expressed in each basis's own units.
     */
+    const involved = rows.flatMap((change) => [
+      ...(change.startIsNew && change.start ? [change.start] : []),
+      ...(!change.sitStays && change.sit ? [change.sit] : []),
+    ]);
     const clears =
       basis === 'projection'
-        ? outscoreChance(joining - leaving) >= WORTH_ACTING
+        ? outscoreChance(joining - leaving, sharedPosition(involved)) >= WORTH_ACTING
         : relativeMargin(joining, leaving) >= CLEAR_MARGIN;
     const decisive = fact || (!inert && clears);
 

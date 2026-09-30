@@ -87,7 +87,7 @@ describe('wireUpgrades', () => {
 
     expect(upgrades).toHaveLength(1);
     expect(upgrades[0].add.player.id).toBe('fa_qb');
-    expect(upgrades[0].replaces.player.id).toBe('qb1');
+    expect(upgrades[0].replaces?.player.id).toBe('qb1');
     expect(upgrades[0].slot).toBe('QB');
   });
 
@@ -277,7 +277,7 @@ describe('wireUpgrades on projections (#149)', () => {
     });
 
     expect(upgrade.add.player.id).toBe('fa_wr');
-    expect(upgrade.replaces.player.id).toBe('wr2');
+    expect(upgrade.replaces?.player.id).toBe('wr2');
     expect(upgrade.chance).toBeGreaterThan(0.6);
   });
 
@@ -300,5 +300,80 @@ describe('wireUpgrades on projections (#149)', () => {
     });
 
     expect(upgrades).toEqual([]);
+  });
+});
+
+describe('wireUpgrades — empty slots and games under way (#152)', () => {
+  const defAgent = (id: string, team: string) => agent(id, 'DEF' as Position, null, { team });
+  const slots: LineupSlot[] = ['QB', 'RB', 'WR', 'FLEX', 'DEF'];
+  const entries = roster();
+  const projected = new Map([
+    ['qb1', 18],
+    ['rb1', 14],
+    ['wr1', 12],
+    ['wr2', 8],
+    ['rook', 2],
+    ['spare', 3],
+    ['bal', 9.5],
+    ['chi', 8.4],
+  ]);
+  const lineup = bestLineup(
+    entries.map((e) => ({ ...e, winNowValue: projected.get(e.player.id) ?? 0 })),
+    slots,
+  );
+  const wire = { priced: [], unpriced: [defAgent('bal', 'BAL'), defAgent('chi', 'CHI')], all: [defAgent('bal', 'BAL'), defAgent('chi', 'CHI')] };
+
+  it('fills a slot nobody on the roster can play, with the best one available', () => {
+    // No defence rostered: the slot is empty, and used to be skipped outright.
+    expect(lineup[4].entry).toBeNull();
+    const upgrades = wireUpgrades({
+      lineup,
+      entries,
+      board: wire,
+      projected,
+      roster: { playerIds: entries.map((e) => e.player.id), taxiIds: [], reserveIds: [] },
+      activeLimit: entries.length + 2,
+    });
+    const def = upgrades.find((u) => u.slot === 'DEF');
+
+    expect(def?.add.player.id).toBe('bal');
+    expect(def?.replaces).toBeNull();
+    expect(def?.room).toBe(true);
+  });
+
+  it('does not offer a free agent whose game has kicked off', () => {
+    const upgrades = wireUpgrades({
+      lineup,
+      entries,
+      board: wire,
+      projected,
+      locked: new Set(['BAL']),
+      roster: { playerIds: entries.map((e) => e.player.id), taxiIds: [], reserveIds: [] },
+      activeLimit: entries.length + 2,
+    });
+
+    expect(upgrades.find((u) => u.slot === 'DEF')?.add.player.id).toBe('chi');
+  });
+
+  it('does not try to replace a starter whose game has kicked off', () => {
+    const lineupWithDef = bestLineup(
+      [...entries, entry('hou', 'DEF', 0)].map((e) => ({
+        ...e,
+        player: e.player.id === 'hou' ? { ...e.player, team: 'HOU' } : e.player,
+        winNowValue: e.player.id === 'hou' ? 6.5 : (projected.get(e.player.id) ?? 0),
+      })),
+      slots,
+    );
+    const upgrades = wireUpgrades({
+      lineup: lineupWithDef,
+      entries,
+      board: wire,
+      projected,
+      locked: new Set(['HOU']),
+      roster: { playerIds: entries.map((e) => e.player.id), taxiIds: [], reserveIds: [] },
+      activeLimit: entries.length + 2,
+    });
+
+    expect(upgrades.some((u) => u.slot === 'DEF')).toBe(false);
   });
 });
