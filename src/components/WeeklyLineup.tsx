@@ -11,7 +11,13 @@ import { formatInjury, formatSlot, formatValue, POSITION_STYLES } from '../lib/f
 import { PlayerAvatar } from './PlayerAvatar';
 import { PlayerName } from './PlayerName';
 import { changeAction, describeChange } from '../lib/lineupText';
-import { adviseBid, budgetLeft, type BidModel } from '../engine/bids';
+import {
+  adviseBid,
+  budgetLeft,
+  contestSpread,
+  type BidModel,
+  type ContestPrice,
+} from '../engine/bids';
 import { evidenceNote } from '../lib/learnedText';
 
 interface Props {
@@ -423,6 +429,7 @@ function BidLine({
 
   const position = upgrade.add.player.position;
   const since = bids?.seasons.at(-1);
+  const spread = bids ? contestSpread(bids) : null;
 
   return (
     <p className="mt-0.5 pl-14 text-xs text-muted">
@@ -437,8 +444,29 @@ function BidLine({
         {advice.beyondBudget ? `, which is more than your $${advice.remaining}` : ''}.
       </span>{' '}
       {evidenceNote(advice.learned, { one: 'claim', many: 'claims' }, since)}
+      {spread && ` ${contestSentence(spread)}`}
     </p>
   );
+}
+
+const CONTEST_PHRASE: Record<ContestPrice['rivals'], string> = {
+  0: 'with nobody else bidding',
+  1: 'against one rival',
+  2: 'against two or more',
+};
+
+/**
+ * What competition has cost here, as a spread rather than a prediction.
+ *
+ * The app cannot tell whether a claim will be contested — nothing it can see
+ * beforehand predicts that (see `engine/bids`) — so it states the prices and
+ * leaves that judgement to the manager, who knows his league.
+ */
+function contestSentence(spread: ContestPrice[]): string {
+  const parts = spread.map((row) => `$${row.dollars} ${CONTEST_PHRASE[row.rivals]}`);
+  const list =
+    parts.length > 2 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts.join(' and ');
+  return `Across all positions, a claim here has gone for about ${list}.`;
 }
 
 function PositionChip({ entry }: { entry: ValuedPlayer }) {

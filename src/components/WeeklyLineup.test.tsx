@@ -400,6 +400,60 @@ describe('WeeklyLineup — what a claim costs', () => {
     expect(screen.getByText(/go for about \$40, which is more than your \$5/)).toBeInTheDocument();
   });
 
+  it('states what competition has cost, once the league has shown it', () => {
+    // Ten uncontested quarterbacks at $4, and eight that one rival also claimed
+    // and lost, won at $20.
+    const won = (i: number, bid: number): LeagueTransaction => ({
+      id: `w${i}`,
+      season: '2025',
+      week: 3,
+      type: 'waiver',
+      succeeded: true,
+      created: i,
+      rosterIds: [1],
+      adds: new Map([[`claimed${i}`, 1]]),
+      drops: new Map(),
+      picks: [],
+      budget: [],
+      bid,
+    });
+    const lost = (i: number): LeagueTransaction => ({
+      ...won(i, 10),
+      id: `l${i}`,
+      succeeded: false,
+      rosterIds: [2],
+      adds: new Map([[`claimed${i}`, 2]]),
+    });
+    const claims = [
+      ...Array.from({ length: 10 }, (_, i) => won(i, 4)),
+      ...Array.from({ length: 8 }, (_, i) => won(10 + i, 20)),
+      ...Array.from({ length: 8 }, (_, i) => lost(10 + i)),
+    ];
+    const bids = modelBids(
+      makeHistory({
+        transactions: claims,
+        waivers: new Map([['2025', FAAB]]),
+        positions: new Map(claims.map((t) => [[...t.adds.keys()][0], 'QB' as const])),
+      }),
+      makeSettings(['QB', 'RB', 'WR', 'FLEX'], { waivers: FAAB }),
+    );
+
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], { board: wire(freeAgent('purdy', 'QB', 2000)), bids });
+
+    expect(
+      screen.getByText(/a claim here has gone for about \$\d+ with nobody else bidding and \$\d+ against one rival\./),
+    ).toBeInTheDocument();
+  });
+
+  it('says nothing about competition the league has never shown', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], {
+      board: wire(freeAgent('purdy', 'QB', 2000)),
+      bids: paidForQbs(18),
+    });
+
+    expect(screen.queryByText(/nobody else bidding/)).not.toBeInTheDocument();
+  });
+
   it('says nothing about price in a league with no bid model', () => {
     panel(['qb1', 'rb1', 'wr1', 'wr2'], {
       board: wire(freeAgent('purdy', 'QB', 2000)),
