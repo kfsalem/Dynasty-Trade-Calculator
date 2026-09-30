@@ -30,13 +30,8 @@ import {
 import { WORTH_ACTING } from '../engine/projections';
 import type { WeekProjections } from '../platforms/types';
 import type { WeekEvidence } from '../engine/weekEvidence';
-import {
-  adviseBid,
-  budgetLeft,
-  contestSpread,
-  type BidModel,
-  type ContestPrice,
-} from '../engine/bids';
+import { adviseBid, budgetLeft, contestSpread, type BidModel } from '../engine/bids';
+import { contestSentence } from '../lib/bidText';
 import { evidenceNote } from '../lib/learnedText';
 
 interface Props {
@@ -78,6 +73,32 @@ interface Props {
   evidence?: ReadonlyMap<string, WeekEvidence>;
   /** The last week `evidence` covers, or null when it covers none of this season. */
   evidenceWeek?: number | null;
+  /** NFL teams whose game this week has kicked off; their players are locked. */
+  lockedTeams?: ReadonlySet<string>;
+}
+
+/**
+ * What the plan could not touch, in one sentence: starters whose game has
+ * kicked off, and slots this app does not model (#152). Said once rather than
+ * on each row, because the rows above are the ones that can still change.
+ */
+function lockAndScopeNote(locked: number, unmodelled: number): string {
+  const parts: string[] = [];
+  if (locked > 0) {
+    parts.push(
+      locked === 1
+        ? "One of your starters' games has already kicked off, so he is locked where he is and the calls above work around him."
+        : `${locked} of your starters' games have already kicked off, so they are locked where they are and the calls above work around them.`,
+    );
+  }
+  if (unmodelled > 0) {
+    parts.push(
+      unmodelled === 1
+        ? 'This league also starts a defensive player, which this app does not cover, so that slot is left as you set it.'
+        : `This league also starts ${unmodelled} defensive players, which this app does not cover, so those slots are left as you set them.`,
+    );
+  }
+  return parts.join(' ');
 }
 
 /** A figure in the plan's own units: projected points, or win-now value. */
@@ -113,6 +134,7 @@ export function WeeklyLineup({
   projections,
   evidence,
   evidenceWeek = null,
+  lockedTeams,
 }: Props) {
   const [showLineup, setShowLineup] = useState(false);
 
@@ -124,8 +146,9 @@ export function WeeklyLineup({
         setLineup: roster.setLineup,
         byeTeams,
         projected,
+        locked: lockedTeams,
       }),
-    [summary.players, settings.startingSlots, roster.setLineup, byeTeams, projected],
+    [summary.players, settings.startingSlots, roster.setLineup, byeTeams, projected, lockedTeams],
   );
 
   const wire = useMemo(
@@ -138,8 +161,18 @@ export function WeeklyLineup({
         roster,
         activeLimit: settings.allSlots.length,
         projected,
+        locked: lockedTeams,
       }),
-    [plan.lineup, summary.players, board, byeTeams, roster, settings.allSlots.length, projected],
+    [
+      plan.lineup,
+      summary.players,
+      board,
+      byeTeams,
+      roster,
+      settings.allSlots.length,
+      projected,
+      lockedTeams,
+    ],
   );
 
   /** One line of facts behind a player's number, or null. */
@@ -273,6 +306,10 @@ export function WeeklyLineup({
             ? `Snaps, targets and points a game run only through week ${evidenceWeek}; the latest weekly refresh has not landed.`
             : `Snaps, targets and points a game are through week ${evidenceWeek}.`}
         </p>
+      )}
+
+      {(plan.locked.length > 0 || plan.unmodelledSlots > 0) && (
+        <p className="mt-3 text-xs text-subtle">{lockAndScopeNote(plan.locked.length, plan.unmodelledSlots)}</p>
       )}
 
       {plan.marginal.length > 0 && (
@@ -474,18 +511,22 @@ function Wire({
                   <PlayerName player={upgrade.add.player} />
                 </span>
                 <span className="tabular shrink-0 text-sm font-semibold text-positive">
-                  +{figure(basis, upgrade.addValue - upgrade.replaces.winNowValue)}
+                  +{figure(basis, upgrade.addValue - (upgrade.replaces?.winNowValue ?? 0))}
                 </span>
               </div>
               <p className="mt-0.5 pl-14 text-xs text-muted">
-                {upgrade.chance !== null
-                  ? outscoreSentence(
-                      upgrade.chance,
-                      upgrade.replaces.player.name,
-                      upgrade.addValue,
-                      upgrade.replaces.winNowValue,
-                    )
-                  : `Better than ${upgrade.replaces.player.name} in this slot.`}
+                {!upgrade.replaces
+                  ? `Fills your empty ${formatSlot(upgrade.slot)} slot, which scores nothing as it stands${
+                      basis === 'projection' ? ` — ${formatPoints(upgrade.addValue)} projected` : ''
+                    }.`
+                  : upgrade.chance !== null
+                    ? outscoreSentence(
+                        upgrade.chance,
+                        upgrade.replaces.player.name,
+                        upgrade.addValue,
+                        upgrade.replaces.winNowValue,
+                      )
+                    : `Better than ${upgrade.replaces.player.name} in this slot.`}
                 {/*
                   Playing time is evidence, never part of the ranking — the two
                   are different currencies and #46 is explicit that they are
@@ -560,26 +601,6 @@ function BidLine({
       {spread && ` ${contestSentence(spread)}`}
     </p>
   );
-}
-
-const CONTEST_PHRASE: Record<ContestPrice['rivals'], string> = {
-  0: 'with nobody else bidding',
-  1: 'against one rival',
-  2: 'against two or more',
-};
-
-/**
- * What competition has cost here, as a spread rather than a prediction.
- *
- * The app cannot tell whether a claim will be contested — nothing it can see
- * beforehand predicts that (see `engine/bids`) — so it states the prices and
- * leaves that judgement to the manager, who knows his league.
- */
-function contestSentence(spread: ContestPrice[]): string {
-  const parts = spread.map((row) => `$${row.dollars} ${CONTEST_PHRASE[row.rivals]}`);
-  const list =
-    parts.length > 2 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts.join(' and ');
-  return `Across all positions, a claim here has gone for about ${list}.`;
 }
 
 function PositionChip({ entry }: { entry: ValuedPlayer }) {

@@ -89,12 +89,40 @@ export function projectedPoints(
 export const OUTSCORE_SLOPE = 0.156;
 
 /**
+ * Kickers and defences have their own slopes, and they point opposite ways.
+ *
+ * Measured on the same 2024–25 seasons as `OUTSCORE_SLOPE` (#152):
+ *
+ * ```
+ *          pairs    higher projection wins    slope
+ *   K      8,824    51%                       0.110
+ *   DEF   14,168    61%                       0.398
+ * ```
+ *
+ * A kicker projection barely beats a coin — 71% of kicker pairs sit within a
+ * point, and those split 50/50 — so kicker streaming earns a real edge only
+ * at the rare gap of two points or more. A defence projection is much sharper
+ * than its small numbers look: a one-to-two point gap wins 66% of the time.
+ * One curve for all three would undersell every defence stream and oversell
+ * every kicker one.
+ */
+export const OUTSCORE_SLOPE_BY_POSITION: Readonly<Partial<Record<string, number>>> = {
+  K: 0.11,
+  DEF: 0.398,
+};
+
+/** The slope that applies to players at `position`, or the skill-position one. */
+export const slopeFor = (position?: string): number =>
+  (position && OUTSCORE_SLOPE_BY_POSITION[position]) || OUTSCORE_SLOPE;
+
+/**
  * The chance a player projected `gap` points ahead actually outscores the other.
  *
- * Symmetric: a negative gap gives one minus the positive answer.
+ * `position` picks the curve — see `OUTSCORE_SLOPE_BY_POSITION`. Symmetric: a
+ * negative gap gives one minus the positive answer.
  */
-export function outscoreChance(gap: number): number {
-  return 1 / (1 + Math.exp(-OUTSCORE_SLOPE * gap));
+export function outscoreChance(gap: number, position?: string): number {
+  return 1 / (1 + Math.exp(-slopeFor(position) * gap));
 }
 
 /**

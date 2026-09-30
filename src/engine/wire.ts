@@ -42,10 +42,16 @@ export interface WireUpgrade {
   add: FreeAgent;
   /** His win-now value, or his projected points on a projection plan. */
   addValue: number;
-  /** The chance he outscores `replaces` this week. Null on a value plan. */
+  /**
+   * The chance he outscores `replaces` this week. Null on a value plan, and for
+   * an empty slot, where anyone who plays beats the nothing it would score.
+   */
   chance: number | null;
-  /** The man he would replace in that slot. */
-  replaces: ValuedPlayer;
+  /**
+   * The man he would replace in that slot, or null when the slot is empty —
+   * nobody on the roster can fill it this week (#152).
+   */
+  replaces: ValuedPlayer | null;
   /** Same measure the change rows use, against the same bar. */
   margin: number;
   /**
@@ -90,6 +96,11 @@ export interface WireInput {
    * sides of each comparison are in different units.
    */
   projected?: ReadonlyMap<string, number>;
+  /**
+   * Team codes whose game has kicked off. A free agent on one of them cannot
+   * play for you this week, and a slot whose starter is on one cannot change.
+   */
+  locked?: ReadonlySet<string> | null;
   /**
    * Players the active roster holds: starters plus bench, `allSlots.length`.
    * Taxi and IR are separate allowances and are not counted against it.
@@ -148,10 +159,13 @@ export function wireUpgrades({
   roster,
   activeLimit,
   projected,
+  locked,
 }: WireInput): WireUpgrade[] {
   if (!board) return [];
 
   const off = byeTeams ?? new Set<string>();
+  const locks = locked ?? new Set<string>();
+  const started = (team: string | null): boolean => Boolean(team && locks.has(team));
   const worth = (fa: FreeAgent): number =>
     projected ? (projected.get(fa.player.id) ?? 0) : (fa.value?.winNowValue ?? 0);
   const available = (projected ? board.all : board.priced).filter(
@@ -159,7 +173,8 @@ export function wireUpgrades({
       (projected || fa.value !== null) &&
       worth(fa) > 0 &&
       canPlayThisWeek(fa.player) &&
-      !onBye(fa.player.team, off),
+      !onBye(fa.player.team, off) &&
+      !started(fa.player.team),
   );
   if (available.length === 0) return [];
 
@@ -175,16 +190,31 @@ export function wireUpgrades({
   const candidates: (WireUpgrade & { sort: number })[] = [];
 
   for (const [index, { slot, entry }] of lineup.entries()) {
-    if (!entry) continue;
+    // A starter whose game has kicked off cannot be taken out of the slot.
+    if (entry && started(entry.player.team)) continue;
     const eligible = slotEligibility(slot);
+    /*
+      An empty slot is compared against nothing, because nothing is what it
+      scores. It used to be skipped outright — the one slot where any free
+      agent who plays is an upgrade was the one never offered one, which is how
+      a roster with no defence was told nothing while three others were offered
+      the Ravens (#152).
+    */
+    const base = entry?.winNowValue ?? 0;
 
     for (const fa of available) {
       if (!eligible.includes(fa.player.position)) continue;
       const addValue = worth(fa);
-      const margin = relativeMargin(addValue, entry.winNowValue);
-      const chance = projected ? outscoreChance(addValue - entry.winNowValue) : null;
+      const margin = relativeMargin(addValue, base);
+      const chance =
+        projected && entry
+          ? outscoreChance(
+              addValue - base,
+              fa.player.position === entry.player.position ? fa.player.position : undefined,
+            )
+          : null;
       // The same bar the plan holds a bench swap to, in the plan's own units.
-      if (chance !== null ? chance < WORTH_ACTING : margin < CLEAR_MARGIN) continue;
+      if (entry && (chance !== null ? chance < WORTH_ACTING : margin < CLEAR_MARGIN)) continue;
 
       candidates.push({
         slot,
@@ -196,7 +226,7 @@ export function wireUpgrades({
         chance,
         drop: null,
         room: false,
-        sort: addValue - entry.winNowValue,
+        sort: addValue - base,
       });
     }
   }
@@ -225,7 +255,7 @@ export function wireUpgrades({
     if (taken.has(candidate.add.player.id) || filled.has(candidate.index)) continue;
     taken.add(candidate.add.player.id);
     filled.add(candidate.index);
-    displaced.add(candidate.replaces.player.id);
+    if (candidate.replaces) displaced.add(candidate.replaces.player.id);
 
     const room = open > 0;
     let drop: ValuedPlayer | null = null;

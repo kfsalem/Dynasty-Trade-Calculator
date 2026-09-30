@@ -19,6 +19,7 @@ import {
   getLeague,
   getMatchups,
   getBracket,
+  getNflSchedule,
   getPlayers,
   getProjections,
   getRosters,
@@ -197,6 +198,17 @@ export const sleeperProvider: LeagueProvider = {
       out.set(row.player_id, { opponent: row.opponent ?? null, stats });
     }
     return out;
+  },
+
+  async loadStartedTeams(season, week) {
+    const games = await getNflSchedule(season);
+    const started = new Set<string>();
+    for (const game of games) {
+      if (game.week !== week || game.status === 'pre_game') continue;
+      started.add(game.home);
+      started.add(game.away);
+    }
+    return started;
   },
 
   async loadHistory(leagueId: string): Promise<LeagueHistory> {

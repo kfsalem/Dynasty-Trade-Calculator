@@ -362,6 +362,23 @@ export const sleeperProjectionSchema = z.object({
 });
 export const sleeperProjectionsSchema = z.array(sleeperProjectionSchema);
 
+/**
+ * One NFL game in a season's schedule (#152).
+ *
+ * From `api.sleeper.app/schedule/nfl/regular/{season}` — undocumented, like the
+ * projections beside it, and checked live on 2026-09-30: CORS `*`, and a
+ * `status` per game. Seen so far: `pre_game` and `complete`. Whatever Sleeper
+ * calls a game in progress, it is not `pre_game`, and that is the only test
+ * the lineup relies on — so a spelling nobody has observed yet cannot break it.
+ */
+export const sleeperGameSchema = z.object({
+  week: z.number(),
+  home: z.string(),
+  away: z.string(),
+  status: z.string(),
+});
+export const sleeperScheduleSchema = z.array(sleeperGameSchema);
+
 export const sleeperStateSchema = z.object({
   season: z.string(),
   season_type: z.string(),
@@ -394,6 +411,7 @@ export type SleeperPlayer = z.infer<typeof sleeperPlayerSchema>;
 export type SleeperTradedPick = z.infer<typeof sleeperTradedPickSchema>;
 export type SleeperState = z.infer<typeof sleeperStateSchema>;
 export type SleeperProjection = z.infer<typeof sleeperProjectionSchema>;
+export type SleeperGame = z.infer<typeof sleeperGameSchema>;
 export type SleeperMatchup = z.infer<typeof sleeperMatchupSchema>;
 export type SleeperBracketMatch = z.infer<typeof sleeperBracketMatchSchema>;
 export type SleeperTransaction = z.infer<typeof sleeperTransactionSchema>;

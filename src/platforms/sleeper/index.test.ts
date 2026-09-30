@@ -27,6 +27,7 @@ const client = {
   getState: vi.fn(),
   getTradedPicks: vi.fn(),
   getProjections: vi.fn(),
+  getNflSchedule: vi.fn(),
   parseLeagueId: vi.fn(),
 };
 
@@ -281,5 +282,20 @@ describe('loadProjections', () => {
     expect(projections.get('4866')).toEqual({ opponent: 'LV', stats: { rec: 5.2, pts_ppr: 14 } });
     expect(projections.get('CLE')?.opponent).toBe('PIT');
     expect(projections.get('999')).toEqual({ opponent: null, stats: {} });
+  });
+});
+
+describe('loadStartedTeams', () => {
+  it('names both teams of every game this week that is no longer pre_game', async () => {
+    client.getNflSchedule.mockResolvedValue([
+      { week: 4, home: 'CLE', away: 'PIT', status: 'complete' },
+      { week: 4, home: 'BAL', away: 'TEN', status: 'in_game' },
+      { week: 4, home: 'BUF', away: 'NE', status: 'pre_game' },
+      { week: 3, home: 'KC', away: 'LV', status: 'complete' },
+    ]);
+
+    const started = await sleeperProvider.loadStartedTeams!('2026', 4);
+
+    expect([...started].sort()).toEqual(['BAL', 'CLE', 'PIT', 'TEN']);
   });
 });

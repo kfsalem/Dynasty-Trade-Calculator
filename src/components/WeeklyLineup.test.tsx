@@ -82,6 +82,7 @@ function panel(
     projections = undefined as WeekProjections | undefined,
     evidence = undefined as ReadonlyMap<string, WeekEvidence> | undefined,
     evidenceWeek = null as number | null,
+    lockedTeams = undefined as ReadonlySet<string> | undefined,
   } = {},
 ) {
   const withInjuries = new Map(players);
@@ -109,6 +110,7 @@ function panel(
       projections={projections}
       evidence={evidence}
       evidenceWeek={evidenceWeek}
+      lockedTeams={lockedTeams}
     />,
   );
 }
@@ -554,5 +556,42 @@ describe("WeeklyLineup — on this week's projections (#149)", () => {
     panel(['qb1', 'rb1', 'wr1', 'wr2'], { projected: week(14), week: 7, evidenceWeek: 4 });
 
     expect(screen.getByText(/run only through week 4; the latest weekly refresh has not landed/)).toBeInTheDocument();
+  });
+
+  it('says which starters are locked, and leaves them be', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2'], {
+      projected: week(14),
+      teams: { wr1: 'CLE' },
+      lockedTeams: new Set(['CLE']),
+    });
+
+    expect(screen.getByText(/One of your starters' games has already kicked off/)).toBeInTheDocument();
+    expect(screen.queryByText(/Start Player wr3/)).not.toBeInTheDocument();
+  });
+});
+
+describe('WeeklyLineup — a slot nobody on the roster can fill (#152)', () => {
+  const withDef = makeSettings(['QB', 'RB', 'WR', 'FLEX', 'DEF']);
+
+  it('offers the best defence on the wire for an empty DEF slot', () => {
+    panel(['qb1', 'rb1', 'wr1', 'wr2', null], {
+      leagueSettings: withDef,
+      projected: new Map([
+        ['qb1', 20],
+        ['rb1', 15],
+        ['wr1', 12],
+        ['wr2', 11],
+        ['bal', 9.5],
+      ]),
+      board: {
+        priced: [],
+        unpriced: [{ player: { ...makePlayer('bal', 'DEF'), name: 'Baltimore Ravens', team: 'BAL' }, value: null, snaps: undefined, usage: undefined, adjustment: undefined }],
+        all: [{ player: { ...makePlayer('bal', 'DEF'), name: 'Baltimore Ravens', team: 'BAL' }, value: null, snaps: undefined, usage: undefined, adjustment: undefined }],
+      },
+    });
+
+    expect(screen.getByText('Baltimore Ravens')).toBeInTheDocument();
+    expect(screen.getByText(/Fills your empty DEF slot, which scores nothing as it stands — 9.5 projected/)).toBeInTheDocument();
+    expect(screen.getByText(/You have an open roster spot/)).toBeInTheDocument();
   });
 });
