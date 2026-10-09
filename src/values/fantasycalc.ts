@@ -1,40 +1,14 @@
-import { z } from 'zod';
 import { fetchJson } from '../lib/http';
 import { cached, TTL } from '../lib/cache';
-import { isPosition } from '../types';
 import type { LeagueSettings, PlayerValue } from '../types';
-
-const BASE = 'https://api.fantasycalc.com/values/current';
-
-const entrySchema = z.object({
-  player: z.object({
-    id: z.number(),
-    name: z.string(),
-    position: z.string().nullish(),
-    sleeperId: z.string().nullish(),
-    mflId: z.string().nullish(),
-    espnId: z.string().nullish(),
-    fleaflickerId: z.string().nullish(),
-    ffpcId: z.string().nullish(),
-    maybeAge: z.number().nullish(),
-  }),
-  value: z.number(),
-  redraftValue: z.number().nullish(),
-  overallRank: z.number(),
-  positionRank: z.number().nullish(),
-  trend30Day: z.number().nullish(),
-  maybeTier: z.number().nullish(),
-});
-
-const responseSchema = z.array(entrySchema);
-
-/** FantasyCalc only publishes values for these league sizes. */
-const SUPPORTED_TEAM_COUNTS = [8, 10, 12, 14, 16];
-/** …and these reception-point settings. */
-const SUPPORTED_PPR = [0, 0.5, 1];
-
-const nearest = (target: number, options: number[]): number =>
-  options.reduce((best, o) => (Math.abs(o - target) < Math.abs(best - target) ? o : best));
+import {
+  FANTASYCALC_URL,
+  responseSchema,
+  toRows,
+  valuesFromRows,
+  variantFor,
+  variantQuery,
+} from './fantasycalcRows';
 
 /**
  * Cross-platform id map, harvested from the same payload as the values.
@@ -54,61 +28,18 @@ export interface ValueBundle {
 export async function fetchFantasyCalcValues(
   settings: LeagueSettings,
 ): Promise<ValueBundle> {
-  const numTeams = nearest(settings.teamCount, SUPPORTED_TEAM_COUNTS);
-  const ppr = nearest(settings.ppr, SUPPORTED_PPR);
-  const params = new URLSearchParams({
-    isDynasty: String(settings.isDynasty),
-    numQbs: String(settings.numQbs),
-    numTeams: String(numTeams),
-    ppr: String(ppr),
-  });
-
-  const url = `${BASE}?${params.toString()}`;
+  const query = variantQuery(variantFor(settings));
+  const url = `${FANTASYCALC_URL}?${query}`;
   // Bump the version whenever the cached *shape* changes. The cache stores the
   // transformed bundle, so a returning user with a warm entry would otherwise
   // deserialize objects missing fields the current code requires.
   // v2: added `position` and `marketValue`.
   // v3: added `winNowValue`.
-  const key = `fantasycalc:${params.toString()}:v3`;
+  const key = `fantasycalc:${query}:v3`;
 
   return cached(key, TTL.VALUES, async () => {
-    const rows = await fetchJson(url, responseSchema);
-
-    const rawMax = rows.reduce((max, r) => Math.max(max, r.value), 0) || 1;
-    const bySleeperId = new Map<string, PlayerValue>();
-
-    for (const row of rows) {
-      const sleeperId = row.player.sleeperId;
-      if (!sleeperId) continue;
-
-      // Normalized to a source-independent 0-10000 scale so a second value
-      // source can be blended in later without mixing incompatible units.
-      const normalized = Math.round((row.value / rawMax) * 10000);
-      // Divided by the *dynasty* maximum on purpose, not by a redraft one of
-      // its own. FantasyCalc quotes both columns in the same raw units, and a
-      // second divisor would throw that away — the two would each run 0-10000
-      // and a player's dynasty and redraft figures would no longer be
-      // comparable, which is the one property R8 needs from them.
-      const redraft = Math.round(((row.redraftValue ?? 0) / rawMax) * 10000);
-      const position = row.player.position?.toUpperCase();
-
-      bySleeperId.set(sleeperId, {
-        playerId: sleeperId,
-        position: isPosition(position) ? position : null,
-        value: normalized,
-        marketValue: normalized,
-        redraftValue: redraft,
-        // A market map holds the raw figure on both scales; `applyReplacement`
-        // is what turns each into its league-adjusted counterpart.
-        winNowValue: redraft,
-        overallRank: row.overallRank,
-        positionRank: row.positionRank ?? 0,
-        trend30Day: row.trend30Day ?? 0,
-        tier: row.maybeTier ?? null,
-        source: 'fantasycalc',
-      });
-    }
-
-    return { bySleeperId, rawMax, fetchedAt: Date.now() };
+    // The mapping lives in `fantasycalcRows`, shared with the snapshot (#43).
+    const rows = toRows(await fetchJson(url, responseSchema));
+    return { bySleeperId: valuesFromRows(rows), rawMax: rows.rawMax, fetchedAt: Date.now() };
   });
 }

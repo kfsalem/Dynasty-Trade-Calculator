@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { sleeperProvider } from '../platforms/sleeper';
-import { fetchFantasyCalcValues } from '../values/fantasycalc';
+import { loadPlayerValues } from '../values/source';
 import { fetchPickValues } from '../values/dynastyprocess';
 import type { RosterSummary } from '../engine/rosterValue';
 import { buildDraftPicks, tradeableSeasons } from '../engine/picks';
@@ -67,7 +67,8 @@ export function useValues(settings: LeagueSettings | undefined) {
       settings?.teamCount,
       settings?.ppr,
     ],
-    queryFn: () => fetchFantasyCalcValues(settings as LeagueSettings),
+    // Live FantasyCalc, or the newest saved copy when it does not answer (#43).
+    queryFn: () => loadPlayerValues(settings as LeagueSettings),
     enabled: Boolean(settings),
     staleTime: 60 * 60 * 1000,
     retry: 1,
@@ -786,7 +787,7 @@ export function useLeagueSummaries(leagueId: string | null) {
    *
    * Deliberately not a blanket "refetch everything". `refetch` in react-query
    * v5 ignores `enabled`, so calling it on the values query while the league is
-   * the thing that broke would run `fetchFantasyCalcValues` with undefined
+   * the thing that broke would run `loadPlayerValues` with undefined
    * settings, turning a retryable network error into a thrown one. Retrying the
    * league is enough on its own: the values query is keyed on settings that
    * arrive with it, so it starts by itself the moment the league lands.
@@ -812,6 +813,8 @@ export function useLeagueSummaries(leagueId: string | null) {
     scarcity: adjusted?.scarcity,
     /** Positions with a published market, for telling "~0" from "no market". */
     priced,
+    /** Which copy of the market the values are, and from when (#43). */
+    valuesOrigin: valuesQuery.data?.origin,
     /** Every player nobody rosters, priced where anyone prices him. */
     freeAgents,
     /** …narrowed to the ones a manager could claim instead of trading. */

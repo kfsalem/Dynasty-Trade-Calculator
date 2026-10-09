@@ -168,6 +168,17 @@ failure with no exception to catch.
 
 All three are covered in `scripts/ingest/*.test.ts`.
 
+**The value snapshot is the exception, on purpose.** The same run saves
+FantasyCalc's values for every league format under `public/data/values/`, sixty
+files of 7-16 KB, for the app to fall back to when FantasyCalc does not answer
+(#43). Nothing about it fails a build, schema drift included: the file being
+written *is* the fallback, and the day FantasyCalc changes shape is the day the
+last good copy is worth most. A format that cannot be refreshed, or that comes
+back too thin to be the market, keeps its committed file and says so in the log.
+The snapshots sit outside `index.json` and outside the 1 MB budget, because no
+visitor downloads one unless the live source has failed, and then only the one
+for their league's format.
+
 ## The match gate
 
 If an id format changes upstream, nothing throws. Every file arrives, every
@@ -272,7 +283,8 @@ carries 150 of them and printing all of them buries the eight that matter.
 ## Refresh
 
 `.github/workflows/refresh-data.yml` runs the ingest weekly on Tuesdays from
-September through February, and commits the result. Tuesday because nflverse
+September through February, and monthly from March through August for the value
+snapshot alone, and commits the result. Tuesday because nflverse
 finishes reprocessing Monday night's game some time Tuesday morning, which is
 the first moment the previous week is complete.
 

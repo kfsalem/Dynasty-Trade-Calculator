@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { LeagueImport } from './components/LeagueImport';
 import { LeagueHeader } from './components/LeagueHeader';
 import { ScoringBadge } from './components/ScoringBadge';
+import { ValuesBadge } from './components/ValuesBadge';
 import { PlayerDetail } from './components/PlayerDetail';
 import { LeagueHistory } from './components/LeagueHistory';
 import { useStandingsMode } from './hooks/useStandingsMode';
@@ -227,6 +228,7 @@ function App() {
     activityCurrent,
     adjustments,
     priced,
+    valuesOrigin,
     trends,
     isLoading,
     error,
@@ -456,7 +458,12 @@ function App() {
           <div className="ml-auto flex min-w-0 items-center gap-2">
             {ready && (
               <>
-                <LeagueHeader league={league} onReset={() => changeLeague(null)} />
+                <LeagueHeader
+                  league={league}
+                  valuesOrigin={valuesOrigin}
+                  onReset={() => changeLeague(null)}
+                />
+                <ValuesBadge origin={valuesOrigin} />
                 <ScoringBadge fidelity={scoringFidelity} premium={premium} />
               </>
             )}
