@@ -19,10 +19,17 @@ why the work was ordered this way, not as a queue.
 Research date: 2026-07-29. Data constraints in R1 were verified against live
 endpoints that day and should be re-checked if they look wrong.
 
-**As of 2026-08-19: R1–R10 and R12–R18 have shipped**, along
-with #53's design brief. Milestones 1–3 and 5 are complete. What remains is R11
-— **blocked**, see the CORS table under it — and the post-roadmap items at the
-end.
+**As of 2026-10-09: R1–R10 and R12–R18 have shipped**, along
+with #53's design brief, and R11 was closed as won't-do on 2026-09-26 — see the
+CORS table under it. Every milestone is closed out. Two issues are open, both
+post-roadmap: [#43](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/43) and [#48](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/48).
+
+**What this document does not cover.** The depth pass (#64–#69), the review of
+2026-09-12 (#97–#114) and the redesign (#120) were specified, measured and
+closed out in their issues and in [#19](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/19), and were never written up here.
+That is the rule above working, not a gap to fill: read them there. The
+league-native pass and the lineup pass are here because their measurements do
+not fit in an issue body.
 
 ---
 
@@ -494,15 +501,16 @@ nominal flat value. Either is defensible; the current silent zero is not.
 
 ---
 
-# Milestone 4 — Reach and retention ◐ R12, R13 and R14 shipped
+# Milestone 4 — Reach and retention ✅ Closed out
 
 Only worth doing once the valuation is something to be proud of — which, after
-Milestones 2 and 3, it is. R11 remains, and is blocked on something no adapter
-code can move — see below.
+Milestones 2 and 3, it is. R12, R13 and R14 shipped. R11 was closed as won't-do
+on 2026-09-26, blocked on something no adapter code can move — see below.
 
 ## R11 — Multi-platform: MFL, Fleaflicker, ESPN
 
-**Status:** Blocked — [#11](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/11).
+**Status:** Closed as won't-do, 2026-09-26 — [#11](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/11).
+What follows is the record of why.
 
 Note that the `LeagueBundle` contract this depends on is being widened by
 [#46](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/46), which adds a
@@ -545,6 +553,10 @@ trading future draft picks at all, which is half of what this app values.
 API shapes, or put a proxy in front of MFL and Fleaflicker and give up the
 no-backend property in §3.1. Until one of those is chosen this is blocked on a
 constraint no amount of adapter code moves.
+
+**The decision, 2026-09-26: neither.** The app stays Sleeper-only and keeps the
+no-backend property. The acceptance list below is left as written and will not
+be met.
 
 ### Acceptance
 
@@ -628,6 +640,10 @@ is legal (`arrangeLike`). Rows that remain are rows that matter.
 corrected for role and availability — not weekly projections. There are no
 matchups, and no feed this app reads publishes bye weeks, so a confident-looking
 list would be over-claiming. The panel says so in its own subtitle.
+
+**Both halves of that have since changed.** Bye weeks arrived with
+[#67](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/67), and the ranking moved from win-now value to Sleeper's weekly
+projection in [#149](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/149) — see *The lineup pass* at the end.
 
 ### A live bug this found
 
@@ -892,7 +908,9 @@ that scale holding.
 **Status:** [#46](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/46)
 (free-agent board) **shipped**; then
 [#47](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/47) (pickup
-recommendations with FAAB bids), still open.
+recommendations with FAAB bids), **shipped** too — the recommendations in #69,
+the bid model in #90 and the competition spread in #146. See *What a league
+pays, and what it does not* below.
 
 The app used to discard every unrostered player at import — 893 of them on the
 test league. #46 widened the provider seam to keep them and prices what can be
@@ -933,20 +951,24 @@ current is misled by the ranking itself rather than by a column he could check.
 
 - [#48](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/48) — real trade
   market data for calibration. The third competitive gap above, and the one whose
-  feasibility is unproven.
+  feasibility is unproven. **Open**, and since #76 closed it is the only route
+  left to a local price.
 - [#49](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/49) — say the
-  pick-valuation edge out loud in the UI.
+  pick-valuation edge out loud in the UI. **Shipped** in #136, rescoped: the
+  realism curve it asked to explain had been removed, so the pick panel explains
+  slot and pricing instead.
 - [#50](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/50) — mine Sleeper
   transaction history. Closes out `DESIGN.md` §7 open question 4, and unblocks the
-  bid model in #47.
+  bid model in #47. **Shipped** — see *The transaction feed, verified* below.
 
 ## League history
 
-**Status:** Open — [#52](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/52).
+**Status:** Shipped — [#52](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/52),
+across #142 (the data), #143 (the engine) and #144 (the League tab).
 
 A dashboard of records, all-time tables and the fun statistics, built on the
 seasons Sleeper already chains to the current league via `previous_league_id` —
-a field the schema does not yet parse. The test league walks back four seasons to
+the walk #74 built. The test league walks back four seasons to
 2023 (renamed from Westeros along the way), giving 510 scored team-weeks.
 
 The trap worth knowing before starting: `roster_id` is not stable across seasons
@@ -973,7 +995,8 @@ on real arithmetic, and it should not pretend to predict anything.
 ## Frontend design direction
 
 **Status:** Shipped — [#53](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/53).
-Sequenced before R15 — see Milestone 5 above.
+Sequenced before R15 — see Milestone 5 above. Superseded as the direction by
+the redesign, [#120](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/120), shipped 2026-09-26.
 
 The design brief Milestone 5 lacked: register, density, typography, a semantic
 color layer, light and dark, and the accessibility bar. Delivered as
@@ -1913,12 +1936,25 @@ roster, and the positional need `analysis` already computes — and neither has
 been measured against anything. It is the strongest remaining idea in the issue
 and it is not in this branch.
 
+*Measured 2026-09-29, and shipped as a spread rather than a factor (#146).*
+Rivals move the winning bid more than anything else: 4.0% of budget uncontested
+against 17.7% with two or more, ρ 0.48 / 0.28. But nothing visible before a
+claim predicts them — rivals' holes, budget, depth and the player's last week
+all sit within ±0.11. So the bid line states what uncontested and contested
+claims have cost here, and does not pretend to know which this one will be.
+
 **Anything about the player.** Not an omission but the finding itself: a bid
 does not track a player's value, so a model that scaled its answer by his price
 would be inventing the one relationship the data says is absent. The panel says
 what the position costs; the row above it already says why this man is worth it.
 
 ### Where #76 stands
+
+*Closed as not planned, 2026-09-29.* The draft source named below was checked
+against the live endpoint that day: the one draft recent enough to price holds
+30 picks with one quarterback and three tight ends, nothing reaches significance
+in either league (lowest p 0.06 of eight tests), and the two leagues disagree in
+direction. The paragraph that follows is the position before that measurement.
 
 Rescoped rather than closed. What it cannot have is the positional multiplier
 and anything built on it — `balancePackage` still balances on market value,
@@ -1928,3 +1964,101 @@ position against market rank — which is **unverified**: `/draft/{id}/picks` is
 not implemented, and the contemporaneous ranking a draft would have to be scored
 against has the same hard limit that sank the trade index. #48 is the issue for
 a cross-league source, and one league is far too thin for it.
+
+---
+
+## The lineup pass
+
+**Status:** Shipped 2026-09-30 — [#147](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/147), [#149](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/149) and
+[#152](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/152). One measurement is still open, at the end of this section.
+
+Three issues on the lineup panel at the top of **My team** and the wire rows
+under it. They are here because the measurements behind them are the reason the
+panel reads the way it does.
+
+### The ranking changed from a price to a projection
+
+Until #149 the panel ranked on win-now value: a rest-of-season price, the same
+every week, with no opponent in it. Replayed over 2024–25 in both test leagues:
+
+- **Projections beat managers.** Lineups picked on Sleeper's weekly projection
+  beat the managers' own by 1.6 points a week (±0.9) over 520 team-weeks.
+  Points-per-game lineups *lost* by 2.5.
+- **Nothing public improves on the projection.** Fitted on 2024 and tested on
+  2025, expected points, usage trend, Vegas totals and spread, a second source
+  (ESPN) and a win-probability optimizer each left pair accuracy at or below
+  the projection alone.
+- **What the data does support is saying how sure a call is.** A one-point
+  projection gap goes the other way almost half the time.
+
+So every call carries its odds. `outscoreChance(gap)` is
+1 / (1 + e^(−0.156 × gap)), fitted on 60,000 same-position pairs and within a
+point of every observed bin up to a 12-point gap. A change needs 60%, about 2.6
+points; under 55%, about 1.3 points, the panel calls it a coin flip.
+
+`api.sleeper.app/projections` is undocumented, sends
+`access-control-allow-origin: *`, and was checked live. Its stat keys are
+Sleeper's own scoring keys, so scoring a projection under a league's rules is a
+dot product. Without projections — offseason, loading, a failed fetch — the
+panel ranks on value as before and says so.
+
+### Kickers and defences are not skill players
+
+Measured for #152 over the same two seasons:
+
+| | pairs | higher projection wins | fitted slope |
+|---|---|---|---|
+| K | 8,824 | 51% | 0.110 |
+| DEF | 14,168 | 61% | 0.398 |
+| skill (#149) | 60,000 | 62% | 0.156 |
+
+Kicker projections are nearly a coin flip, and the panel will almost always say
+so. Defence projections are sharp: a gap that read 61% on the skill curve is
+about 77% on its own.
+
+### The gaps #152 closed
+
+Found by checking every lineup scenario against the code, after one team with no
+defence rostered got no suggestion for the one slot where any free agent was an
+upgrade.
+
+- **A slot nobody on the roster can fill** is offered the best eligible free
+  agent. It used to be skipped.
+- **A game that has kicked off locks its players.** They stay put, and free
+  agents who have started are not offered. `api.sleeper.app/schedule` is
+  undocumented and has a `status` per game; the rule is "not `pre_game`", so an
+  in-progress spelling nobody has seen cannot break it.
+- **`WRRB_FLEX`** is fillable by a running back or a receiver.
+- **IDP slots** are left as set, with one note, where they used to be reported
+  as "no longer on your roster" every week.
+- **A bid for a player the manager picks himself** is on the Free agents tab,
+  where it used to exist only on this week's wire rows.
+
+### A drop is named only when it makes room
+
+#147: the waiver advice named a player to drop on every claim, and 8 of 16 on
+the test league were on IR or the taxi squad — releasing one frees a spot a
+claimed player cannot use. Open roster spots now absorb claims first, and only
+an active-roster player is ever named, which is the rule `suggest.chooseDrops`
+already applied to trades.
+
+### Still open: does the projection beat the value it replaced?
+
+The replay proved projections beat *managers*. It could not compare projections
+with *value*, because FantasyCalc publishes only today's values: on 2026 weeks
+1–3 value won 70% of pairs against 64%, with values that had already seen those
+games. So both were frozen on 2026-09-29, before week 4, and scored afterwards
+on same-position pairs among startable players.
+
+| | pairs | projection | `redraftValue` | dynasty value |
+|---|---|---|---|---|
+| week 4 | 2,178 | 58.9% | 59.5% | 60.6% |
+
+Inconclusive. Projection minus `redraftValue` is −0.6 points with a 95% interval
+of −3.9 to +2.9, resampling players rather than pairs because pairs share
+players. The six-point lead value had on games it had seen is under one point on
+a game it had not, which is the only thing week 4 settles.
+
+One week cannot separate them; it needs several pooled, each with its own
+pre-game snapshot. Week 5 was snapshotted on 2026-10-09. The frozen inputs are
+kept outside the repo, since they are megabytes of research JSON.
