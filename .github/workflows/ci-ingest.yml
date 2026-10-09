@@ -37,6 +37,14 @@ jobs:
           cache: npm
       - run: npm ci
 
+      # TEMPORARY probe for #43: can a GitHub runner reach FantasyCalc at all?
+      # Removed before this pull request is ready.
+      - run: |
+          curl -sS -o fc.json -w 'status %{http_code}, %{size_download} bytes\n' \
+            'https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=1&numTeams=10&ppr=1'
+          head -c 300 fc.json; echo
+          rm -f fc.json
+
       # Safe to run on a pull request despite the network dependency: a fetch
       # failure falls back to the committed copy and exits 0 by design, so an
       # nflverse outage cannot block a merge. Only schema drift or a collapse
