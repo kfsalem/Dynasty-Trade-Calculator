@@ -65,7 +65,9 @@ const valueBundle: ValueBundle = {
     ['p4', makeValue('p4', 400, 'RB')],
   ]),
   rawMax: 1000,
-  fetchedAt: 0,
+  // Fresh, so `loadPlayerValues` reads it as live and never goes looking for
+  // the snapshot (#43).
+  fetchedAt: Date.now(),
 };
 
 const pickTable: PickValueTable = {

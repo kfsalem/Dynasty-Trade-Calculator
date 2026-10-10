@@ -7,9 +7,15 @@ name: Refresh nflverse data
 # week is complete. Restricted to September through February because outside
 # the season there is no new week to pick up — run it by hand if a depth chart
 # matters in the offseason.
+#
+# The same run saves the FantasyCalc snapshot the app falls back to (#43), and
+# dynasty values do not stop moving in March: the draft is in April. So there is
+# a second, monthly run from March through August. It finds no new nflverse week
+# and refreshes only the values.
 on:
   schedule:
     - cron: '0 11 * 9,10,11,12,1,2 2'
+    - cron: '0 11 1 3-8 *'
   workflow_dispatch:
 
 permissions:
@@ -38,7 +44,7 @@ jobs:
         run: |
           if git diff --quiet -- public/data; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "nflverse data is unchanged; nothing to deploy."
+            echo "The data is unchanged; nothing to deploy."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             git diff --stat -- public/data
@@ -52,7 +58,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add public/data
-          git commit -m 'chore: refresh nflverse data'
+          git commit -m 'chore: refresh nflverse data and the value snapshot'
           git push
 
       - if: steps.diff.outputs.changed == 'true'

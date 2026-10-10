@@ -40,6 +40,7 @@ import { reduceDepthCharts } from './ingest/depthCharts';
 import { reduceSnapCounts } from './ingest/snapCounts';
 import { reduceWeeklyStats } from './ingest/weeklyStats';
 import { reduceScoring } from './ingest/scoring';
+import { ingestValueSnapshots } from './ingest/valueSnapshot';
 
 const OUT_DIR = fileURLToPath(new URL('../public/data/', import.meta.url));
 
@@ -393,6 +394,11 @@ async function main(): Promise<void> {
   const byes = await ingestByes(generatedAt);
   datasets.byes = byes;
   if (!byes.fresh) stale++;
+
+  // Beside the datasets rather than among them: the snapshots are not nflverse
+  // data, are never downloaded unless FantasyCalc fails, and so sit outside
+  // both the index and the budget below. See `ingest/valueSnapshot`.
+  await ingestValueSnapshots(OUT_DIR, generatedAt);
 
   const index: DataIndex = { generatedAt, datasets };
   await writeFile(`${OUT_DIR}${DATA_FILES.index}`, `${JSON.stringify(index, null, 2)}\n`);

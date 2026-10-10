@@ -232,7 +232,7 @@ interface LeagueProvider {
 | Data | TTL | Store |
 |---|---|---|
 | Sleeper `/players/nfl` (5 MB) | 24h | IndexedDB |
-| FantasyCalc values | 12h | IndexedDB |
+| FantasyCalc values | 12h | IndexedDB; past that, the newest of the expired copy and the build-time snapshot (#43) |
 | DynastyProcess CSV | 24h | IndexedDB |
 | League/rosters | 5 min | TanStack Query memory |
 
@@ -1776,7 +1776,7 @@ Nothing carried from the original list. New questions are raised as issues.
 | Risk | Severity | Mitigation |
 |---|---|---|
 | **Abandoned again** | **Highest** | Tiny phases, each ending in something shippable. |
-| FantasyCalc is unofficial and could change or close | Medium | Zod fails loudly at the boundary; `cached()` serves the last good copy when a refresh fails, so an outage costs freshness rather than the app. **No second source for player values** — see below |
+| FantasyCalc is unofficial and could change or close | Medium | Zod fails loudly at the boundary. A source that fails hands over to the newest saved copy: the browser's own, or the snapshot the ingest keeps under `public/data/values/`. The header says which, with its date. **Still one market** — see below |
 | Sleeper rate limits / 5 MB blob | Low | 24h IndexedDB cache, well under 1000/min |
 | Value-scale mismatch between sources | Medium | Normalize to a common basis before any comparison — never mix raw numbers |
 | Trade suggestions nobody accepts | Medium | Require *both* sides to gain; always show "why they say yes" |
@@ -1800,6 +1800,25 @@ still the right answer and is tracked as
 [#43](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/43), where the
 hard part is named: two markets have to land on one scale before either can be
 compared, and the win-now split depends on that scale holding.
+
+**What #43 has built so far (2026-10-09).** The `ValueSource` interface now
+exists, in `src/values/source.ts`, and the first fallback behind it is not a
+second market but a saved copy of the first. The ingest fetches FantasyCalc for
+all sixty league formats and writes the rows to `public/data/values/`;
+`loadPlayerValues` reads the matching file when the live source throws, for any
+reason, and the header carries a caution badge with the date. That closes the
+first-visit outage completely, on the exact scale, with win-now intact.
+
+It does not close the permanent case. A snapshot of a market that has gone away
+is correct on the day it stops and wrong a little more each week after. The
+second market is still DynastyProcess, and it was measured that day against
+FantasyCalc rather than assumed: the ranks agree (Spearman 0.92) and the scales
+do not. Each divided by its own top player, the 150th player is 1,187 on
+FantasyCalc and 307 on DynastyProcess, running backs sit at 0.42 of their
+FantasyCalc price, and the file has no redraft column at all. So "divide by each
+source's own max" in §2.4 is not enough to put them on one basis. The remaining
+work on #43 is mapping DynastyProcess's ranks onto the snapshot's curves, at
+build time, which is the other thing the snapshot is for.
 
 ## 9. Where the product stands
 

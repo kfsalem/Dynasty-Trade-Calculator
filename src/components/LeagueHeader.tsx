@@ -1,10 +1,14 @@
 import type { ReactNode } from 'react';
 import type { League } from '../types';
 import { pprLabel, scoringBadges } from '../lib/scoringText';
+import { valuesLine } from '../lib/valuesText';
+import type { ValueOrigin } from '../values/source';
 import { HeaderPopover } from './HeaderPopover';
 
 interface Props {
   league: League;
+  /** Which copy of the market the values are (#43). */
+  valuesOrigin?: ValueOrigin;
   onReset: () => void;
 }
 
@@ -25,8 +29,9 @@ function Badge({ children }: { children: ReactNode }) {
  * scoring. The name is also the page's `h1`, visually hidden, so the document
  * outline still starts with the league.
  */
-export function LeagueHeader({ league, onReset }: Props) {
+export function LeagueHeader({ league, valuesOrigin, onReset }: Props) {
   const { settings } = league;
+  const values = valuesLine(valuesOrigin);
   const format = `${settings.teamCount}-team · ${settings.numQbs === 2 ? 'Superflex' : '1QB'} · ${pprLabel(settings.ppr)}`;
 
   return (
@@ -59,6 +64,7 @@ export function LeagueHeader({ league, onReset }: Props) {
           <Badge>{league.season}</Badge>
           {settings.taxiSlots > 0 && <Badge>{settings.taxiSlots} taxi</Badge>}
         </div>
+        {values && <p className="mt-3 text-xs text-subtle">{values}</p>}
         <button type="button" onClick={onReset} className="btn-secondary mt-4 w-full text-sm">
           Change league
         </button>
