@@ -169,8 +169,9 @@ failure with no exception to catch.
 All three are covered in `scripts/ingest/*.test.ts`.
 
 **The value snapshot is the exception, on purpose.** The same run saves
-FantasyCalc's values for every league format under `public/data/values/`, sixty
-files of 7-16 KB, for the app to fall back to when FantasyCalc does not answer
+FantasyCalc's values for every league format under `public/data/values/`, 48
+files of 7-16 KB (8, 10, 12 and 14 teams; larger sizes come back as the 12-team
+PPR table, #156), for the app to fall back to when FantasyCalc does not answer
 (#43). Nothing about it fails a build, schema drift included: the file being
 written *is* the fallback, and the day FantasyCalc changes shape is the day the
 last good copy is worth most. A format that cannot be refreshed, or that comes

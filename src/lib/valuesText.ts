@@ -1,3 +1,4 @@
+import { pricedTeamCount } from '../values/fantasycalcRows';
 import type { ValueOrigin } from '../values/source';
 
 /**
@@ -29,6 +30,20 @@ export function valuesLine(origin: ValueOrigin | undefined): string | null {
   return origin.kind === 'live'
     ? `Player values: ${origin.label}, live.`
     : `Player values: ${origin.label}, as of ${longDate(origin.asOf)}.`;
+}
+
+/**
+ * Says when the values are priced for a different league size (#156). Null
+ * when the size is one FantasyCalc publishes.
+ *
+ * FantasyCalc prices 8, 10, 12 and 14 teams only, so an 11-team league is
+ * priced as 10 and an 18-team one as 14. That moves every player's value,
+ * since the bar for "startable" depends on how many teams draw from the pool.
+ */
+export function valuesSizeLine(teamCount: number): string | null {
+  const priced = pricedTeamCount(teamCount);
+  if (priced === teamCount) return null;
+  return `FantasyCalc publishes no ${teamCount}-team values, so players are priced as in a ${priced}-team league.`;
 }
 
 /**
