@@ -20,6 +20,31 @@ function Block({ className }: { className: string }) {
   return <div className={`skeleton ${className}`} aria-hidden="true" />;
 }
 
+/**
+ * One tab's panel while its code downloads (#170).
+ *
+ * The tabs other than My team load on demand, and usually before anyone clicks
+ * them — see `prefetchTabs` in `App`. This is what a click that beats the
+ * prefetch sees: two cards' worth of shape, with no claim about what is in them.
+ */
+export function TabSkeleton() {
+  return (
+    <div role="status" aria-label="Loading this tab" className="rise-in space-y-4">
+      {[0, 1].map((i) => (
+        <div key={i} className="card">
+          <Block className="h-5 w-40" />
+          <Block className="mt-3 h-3 w-full max-w-md" />
+          <div className="mt-4 space-y-2">
+            <Block className="h-4 w-full" />
+            <Block className="h-4 w-11/12" />
+            <Block className="h-4 w-4/5" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function LeagueSkeleton() {
   return (
     /*
