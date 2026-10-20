@@ -39,8 +39,15 @@ const entrySchema = z.object({
 export const responseSchema = z.array(entrySchema);
 export type FantasyCalcResponse = z.infer<typeof responseSchema>;
 
-/** FantasyCalc only publishes values for these league sizes. */
-export const SUPPORTED_TEAM_COUNTS = [8, 10, 12, 14, 16];
+/**
+ * FantasyCalc only publishes values for these league sizes.
+ *
+ * 14 is the ceiling (#156). Asked for 15, 16, 18 or 20 teams, it answers with
+ * its 12-team full-PPR table and ignores the PPR setting — checked across all
+ * formats on 2026-10-09 and again on 2026-10-19. A large league is closer to
+ * the truth priced as 14 teams with its own scoring than as 12-team PPR.
+ */
+export const SUPPORTED_TEAM_COUNTS = [8, 10, 12, 14];
 /** …and these reception-point settings. */
 export const SUPPORTED_PPR = [0, 0.5, 1];
 /** One quarterback or two. Sleeper's mapper only ever produces these. */
@@ -57,11 +64,15 @@ export interface ValueVariant {
   ppr: number;
 }
 
+/** The league size FantasyCalc is asked to price a league of this size as. */
+export const pricedTeamCount = (teamCount: number): number =>
+  nearest(teamCount, SUPPORTED_TEAM_COUNTS);
+
 export function variantFor(settings: LeagueSettings): ValueVariant {
   return {
     isDynasty: settings.isDynasty,
     numQbs: settings.numQbs,
-    numTeams: nearest(settings.teamCount, SUPPORTED_TEAM_COUNTS),
+    numTeams: pricedTeamCount(settings.teamCount),
     ppr: nearest(settings.ppr, SUPPORTED_PPR),
   };
 }
@@ -75,7 +86,7 @@ export function variantQuery(variant: ValueVariant): string {
   }).toString();
 }
 
-/** Every format a snapshot is kept for: 2 × 2 × 5 × 3 = 60. */
+/** Every format a snapshot is kept for: 2 × 2 × 4 × 3 = 48. */
 export function allVariants(): ValueVariant[] {
   const variants: ValueVariant[] = [];
   for (const isDynasty of [true, false]) {

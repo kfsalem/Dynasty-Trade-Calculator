@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ValuesBadge } from './ValuesBadge';
-import { valuesBadge, valuesLine } from '../lib/valuesText';
+import { valuesBadge, valuesLine, valuesSizeLine } from '../lib/valuesText';
 import type { ValueOrigin } from '../values/source';
 
 // Midday UTC, so the calendar date is the same in every timezone a test runs in.
@@ -43,6 +43,20 @@ describe('valuesBadge', () => {
     expect(valuesBadge(origin({ asOf: NOW - 60 * 60 * 1000 }), NOW)!.detail).toMatch(
       /earlier today/,
     );
+  });
+});
+
+describe('valuesSizeLine', () => {
+  it('says nothing for a size FantasyCalc publishes', () => {
+    expect(valuesSizeLine(12)).toBeNull();
+    expect(valuesSizeLine(14)).toBeNull();
+  });
+
+  it('names the size a league is priced as when it differs (#156)', () => {
+    expect(valuesSizeLine(16)).toBe(
+      'FantasyCalc publishes no 16-team values, so players are priced as in a 14-team league.',
+    );
+    expect(valuesSizeLine(11)).toMatch(/as in a 10-team league/);
   });
 });
 

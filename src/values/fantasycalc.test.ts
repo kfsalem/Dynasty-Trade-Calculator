@@ -64,13 +64,22 @@ describe('fetchFantasyCalcValues — the request', () => {
   });
 
   it('snaps an unsupported league size to the nearest one published', async () => {
-    // FantasyCalc publishes 8/10/12/14/16. An 11-team league is real and has to
+    // FantasyCalc publishes 8/10/12/14. An 11-team league is real and has to
     // be priced as something.
     vi.mocked(fetchJson).mockResolvedValue([row()]);
     await fetchFantasyCalcValues(settings({ teamCount: 11, ppr: 0.75 }));
 
     expect(urlOf()).toContain('numTeams=10');
     expect(urlOf()).toContain('ppr=0.5');
+  });
+
+  it('never asks for more than 14 teams, which FantasyCalc answers as 12-team PPR', async () => {
+    // #156: numTeams=16 comes back as the 12-team full-PPR table, PPR ignored.
+    vi.mocked(fetchJson).mockResolvedValue([row()]);
+    await fetchFantasyCalcValues(settings({ teamCount: 16, ppr: 0 }));
+
+    expect(urlOf()).toContain('numTeams=14');
+    expect(urlOf()).toContain('ppr=0');
   });
 
   it('keys the cache on the format, so two leagues do not share a table', async () => {

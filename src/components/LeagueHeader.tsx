@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { League } from '../types';
 import { pprLabel, scoringBadges } from '../lib/scoringText';
-import { valuesLine } from '../lib/valuesText';
+import { valuesLine, valuesSizeLine } from '../lib/valuesText';
 import type { ValueOrigin } from '../values/source';
 import { HeaderPopover } from './HeaderPopover';
 
@@ -32,6 +32,8 @@ function Badge({ children }: { children: ReactNode }) {
 export function LeagueHeader({ league, valuesOrigin, onReset }: Props) {
   const { settings } = league;
   const values = valuesLine(valuesOrigin);
+  // Only alongside a values line: before values load there is no price to qualify.
+  const size = values ? valuesSizeLine(settings.teamCount) : null;
   const format = `${settings.teamCount}-team · ${settings.numQbs === 2 ? 'Superflex' : '1QB'} · ${pprLabel(settings.ppr)}`;
 
   return (
@@ -65,6 +67,7 @@ export function LeagueHeader({ league, valuesOrigin, onReset }: Props) {
           {settings.taxiSlots > 0 && <Badge>{settings.taxiSlots} taxi</Badge>}
         </div>
         {values && <p className="mt-3 text-xs text-subtle">{values}</p>}
+        {size && <p className="mt-1 text-xs text-subtle">{size}</p>}
         <button type="button" onClick={onReset} className="btn-secondary mt-4 w-full text-sm">
           Change league
         </button>
