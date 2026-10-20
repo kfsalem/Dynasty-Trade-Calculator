@@ -230,6 +230,23 @@ function App() {
     setLinkHandled(true);
   }, []);
   const { myRosterId, setMyRoster } = useMyRoster(leagueId);
+
+  /**
+   * A league picked from a username's list (#160) says whose it is, so the
+   * team can be claimed without asking. Held until that league has loaded, then
+   * applied once and dropped: "Change team" must not be undone by it, and a
+   * league loaded by id afterwards must not inherit it.
+   */
+  const [pendingClaim, setPendingClaim] = useState<{ leagueId: string; userId: string } | null>(
+    null,
+  );
+  const importLeague = useCallback(
+    (next: string, claimUserId?: string) => {
+      changeLeague(next);
+      setPendingClaim(claimUserId ? { leagueId: next, userId: claimUserId } : null);
+    },
+    [changeLeague],
+  );
   const {
     league,
     players,
@@ -273,6 +290,14 @@ function App() {
 
   // Once there is a league to show, and not before: the import screen never
   // needs a tab, and a visitor who leaves from it should not pay for five.
+  useEffect(() => {
+    if (!pendingClaim || !league || league.id !== pendingClaim.leagueId) return;
+    const mine = league.rosters.find((r) => r.ownerId === pendingClaim.userId);
+    // Co-owners and orphan teams cannot be matched; ClaimTeam asks as before.
+    if (mine) setMyRoster(mine.rosterId);
+    setPendingClaim(null);
+  }, [pendingClaim, league, setMyRoster]);
+
   const hasLeague = league !== undefined;
   useEffect(() => {
     if (hasLeague) prefetchTabs();
@@ -526,7 +551,7 @@ function App() {
             </p>
 
             <div className="card mt-8">
-              <LeagueImport onSubmit={changeLeague} busy={isLoading} />
+              <LeagueImport onSubmit={importLeague} busy={isLoading} />
             </div>
 
             {error && (

@@ -25,6 +25,8 @@ const client = {
   getDraft: vi.fn(),
   getDrafts: vi.fn(),
   getState: vi.fn(),
+  getAccountByUsername: vi.fn(),
+  getUserLeagues: vi.fn(),
   getTradedPicks: vi.fn(),
   getProjections: vi.fn(),
   getNflSchedule: vi.fn(),
@@ -282,6 +284,59 @@ describe('loadProjections', () => {
     expect(projections.get('4866')).toEqual({ opponent: 'LV', stats: { rec: 5.2, pts_ppr: 14 } });
     expect(projections.get('CLE')?.opponent).toBe('PIT');
     expect(projections.get('999')).toEqual({ opponent: null, stats: {} });
+  });
+});
+
+describe('findLeagues', () => {
+  const league = (id: string, type: number) => ({
+    league_id: id,
+    name: `League ${id}`,
+    season: '2026',
+    total_rosters: 12,
+    settings: { type },
+  });
+
+  beforeEach(() => {
+    client.getAccountByUsername.mockResolvedValue({ user_id: 'u9', username: 'kj', display_name: 'KJ' });
+    client.getState.mockResolvedValue({
+      season: '2026',
+      season_type: 'regular',
+      league_season: '2026',
+      previous_season: '2025',
+    });
+  });
+
+  it('lists this season’s leagues, with their size and format', async () => {
+    client.getUserLeagues.mockResolvedValue([league('1', 2), league('2', 0)]);
+
+    const found = await sleeperProvider.findLeagues!('KJ');
+
+    expect(client.getUserLeagues).toHaveBeenCalledWith('u9', '2026');
+    expect(found).toEqual({
+      userId: 'u9',
+      displayName: 'KJ',
+      season: '2026',
+      leagues: [
+        { leagueId: '1', name: 'League 1', teams: 12, format: 'dynasty' },
+        { leagueId: '2', name: 'League 2', teams: 12, format: 'redraft' },
+      ],
+    });
+  });
+
+  it('falls back to last season when no league has renewed yet', async () => {
+    client.getUserLeagues.mockImplementation((_id: string, season: string) =>
+      Promise.resolve(season === '2025' ? [league('7', 1)] : []),
+    );
+
+    const found = await sleeperProvider.findLeagues!('kj');
+
+    expect(found.season).toBe('2025');
+    expect(found.leagues.map((l) => [l.leagueId, l.format])).toEqual([['7', 'keeper']]);
+  });
+
+  it('passes on the lookup’s own error for a username that does not exist', async () => {
+    client.getAccountByUsername.mockRejectedValue(new Error('No Sleeper user named "nobody".'));
+    await expect(sleeperProvider.findLeagues!('nobody')).rejects.toThrow('No Sleeper user named');
   });
 });
 

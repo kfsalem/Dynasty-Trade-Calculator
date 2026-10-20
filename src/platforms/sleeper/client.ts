@@ -13,6 +13,7 @@ import {
   sleeperProjectionsSchema,
   sleeperScheduleSchema,
   sleeperAccountSchema,
+  sleeperUserLeaguesSchema,
   sleeperMatchupsSchema,
   sleeperTransactionsSchema,
   sleeperBracketSchema,
@@ -28,6 +29,7 @@ import {
   type SleeperProjection,
   type SleeperGame,
   type SleeperAccount,
+  type SleeperUserLeague,
 } from './schema';
 
 const BASE = 'https://api.sleeper.app/v1';
@@ -180,6 +182,14 @@ export async function getAccountByUsername(username: string): Promise<SleeperAcc
     throw new ApiError(`No Sleeper user named "${username.trim()}".`);
   }
   return account;
+}
+
+/** One user's NFL leagues for one season (#160). */
+export function getUserLeagues(userId: string, season: string): Promise<SleeperUserLeague[]> {
+  return fetchJson(
+    `${BASE}/user/${encodeURIComponent(userId)}/leagues/nfl/${encodeURIComponent(season)}`,
+    sleeperUserLeaguesSchema,
+  );
 }
 
 /**

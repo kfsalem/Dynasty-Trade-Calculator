@@ -383,6 +383,13 @@ export const sleeperStateSchema = z.object({
   season: z.string(),
   season_type: z.string(),
   week: z.number().nullish(),
+  /**
+   * The season leagues are filed under, and the one before it (#160). Checked
+   * live 2026-10-19: `"2026"` and `"2025"`. Can run ahead of `season` in the
+   * offseason, when leagues renew before the NFL year turns over.
+   */
+  league_season: z.string().nullish(),
+  previous_season: z.string().nullish(),
 });
 
 /**
@@ -398,6 +405,23 @@ export const sleeperAccountSchema = z
     avatar: z.string().nullish(),
   })
   .nullable();
+
+/**
+ * One entry of `/user/<user_id>/leagues/nfl/<season>` (#160): one season of
+ * one sport, so a league that has not renewed yet is absent from the new
+ * season's list. An unknown user id answers `[]`, not an error.
+ */
+export const sleeperUserLeagueSchema = z.object({
+  league_id: z.string(),
+  name: z.string(),
+  season: z.string(),
+  total_rosters: z.number().nullish(),
+  status: z.string().nullish(),
+  avatar: z.string().nullish(),
+  /** `type`: 0 redraft, 1 keeper, 2 dynasty. */
+  settings: z.object({ type: z.number().nullish() }).nullish(),
+});
+export const sleeperUserLeaguesSchema = z.array(sleeperUserLeagueSchema);
 
 export const sleeperRostersSchema = z.array(sleeperRosterSchema);
 export const sleeperUsersSchema = z.array(sleeperUserSchema);
@@ -417,3 +441,4 @@ export type SleeperBracketMatch = z.infer<typeof sleeperBracketMatchSchema>;
 export type SleeperTransaction = z.infer<typeof sleeperTransactionSchema>;
 export type SleeperDraft = z.infer<typeof sleeperDraftSchema>;
 export type SleeperAccount = NonNullable<z.infer<typeof sleeperAccountSchema>>;
+export type SleeperUserLeague = z.infer<typeof sleeperUserLeagueSchema>;
