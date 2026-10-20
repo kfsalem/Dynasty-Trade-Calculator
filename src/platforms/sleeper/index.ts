@@ -200,15 +200,27 @@ export const sleeperProvider: LeagueProvider = {
     return out;
   },
 
-  async loadStartedTeams(season, week) {
+  async loadWeekGames(season, week) {
     const games = await getNflSchedule(season);
     const started = new Set<string>();
+    const finished = new Set<string>();
     for (const game of games) {
       if (game.week !== week || game.status === 'pre_game') continue;
       started.add(game.home);
       started.add(game.away);
+      // `complete` only: a game in progress (`in_game`, seen live 2026-10-19)
+      // still has points to come, and anything unrecognised is safer read so.
+      if (game.status === 'complete') {
+        finished.add(game.home);
+        finished.add(game.away);
+      }
     }
-    return started;
+    return { started, finished };
+  },
+
+  async loadWeekMatchups(leagueId, week) {
+    const rows = await getMatchups(leagueId, week);
+    return { fixtures: mapMatchups(week, rows), points: mapAwardedPoints(rows) };
   },
 
   async loadHistory(leagueId: string): Promise<LeagueHistory> {

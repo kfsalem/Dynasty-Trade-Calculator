@@ -353,17 +353,33 @@ export function useProjections(
 }
 
 /**
- * NFL teams whose game this week has kicked off (#152).
+ * Which NFL games this week have kicked off, and which are over (#152, #162).
  *
  * Refetched every five minutes while the panel is open, because this is the
  * one input that changes during a Sunday: the early games lock at one and the
  * late games at four, and a lineup read at 3:55 should know which is which.
  */
-export function useStartedTeams(season: string | undefined, week: number | null) {
+export function useWeekGames(season: string | undefined, week: number | null) {
   return useQuery({
-    queryKey: ['startedTeams', season, week],
-    queryFn: () => sleeperProvider.loadStartedTeams!(season as string, week as number),
-    enabled: Boolean(season && week && sleeperProvider.loadStartedTeams),
+    queryKey: ['weekGames', season, week],
+    queryFn: () => sleeperProvider.loadWeekGames!(season as string, week as number),
+    enabled: Boolean(season && week && sleeperProvider.loadWeekGames),
+    staleTime: 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+    retry: 1,
+  });
+}
+
+/**
+ * This week's fixtures and every player's points so far, for the matchup line
+ * (#162). On the same five-minute clock as the games, since that is how often
+ * the score it carries can move.
+ */
+export function useWeekMatchups(leagueId: string | null, week: number | null) {
+  return useQuery({
+    queryKey: ['weekMatchups', leagueId, week],
+    queryFn: () => sleeperProvider.loadWeekMatchups!(leagueId as string, week as number),
+    enabled: Boolean(leagueId && week && sleeperProvider.loadWeekMatchups),
     staleTime: 60 * 1000,
     refetchInterval: 5 * 60 * 1000,
     retry: 1,
@@ -405,7 +421,8 @@ export function useLeagueSummaries(leagueId: string | null) {
     projectionWeek,
     startedPositions,
   );
-  const startedQuery = useStartedTeams(leagueQuery.data?.currentSeason, projectionWeek);
+  const gamesQuery = useWeekGames(leagueQuery.data?.currentSeason, projectionWeek);
+  const weekMatchupsQuery = useWeekMatchups(leagueId, projectionWeek);
   const projected = useMemo(
     () =>
       projectionsQuery.data && settings
@@ -869,7 +886,11 @@ export function useLeagueSummaries(leagueId: string | null) {
     /** The free-agent board as the lineup panel's wire may use it. */
     wireBoard,
     /** NFL teams whose game this week has kicked off. Undefined until known. */
-    lockedTeams: startedQuery.data,
+    lockedTeams: gamesQuery.data?.started,
+    /** …and those whose game is over, so their points are final. */
+    finishedTeams: gamesQuery.data?.finished,
+    /** This week's fixtures and points so far. Undefined outside a game week or on failure. */
+    weekMatchups: weekMatchupsQuery.data,
     /** This season's snaps, targets and points per player, for the lineup's rows. */
     evidence,
     /** The last week that evidence covers, or null when there is none this season. */

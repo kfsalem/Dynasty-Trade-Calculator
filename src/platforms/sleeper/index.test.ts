@@ -285,17 +285,39 @@ describe('loadProjections', () => {
   });
 });
 
-describe('loadStartedTeams', () => {
-  it('names both teams of every game this week that is no longer pre_game', async () => {
+describe('loadWeekMatchups', () => {
+  it('pairs the week and carries every player’s points so far', async () => {
+    client.getMatchups.mockResolvedValue([
+      ...matchup(),
+      { roster_id: 2, matchup_id: 1, points: 12, starters: ['c'], players: ['c'], players_points: { c: 12 } } as SleeperMatchup,
+    ]);
+
+    const week = await sleeperProvider.loadWeekMatchups!('L2026', 6);
+
+    expect(client.getMatchups).toHaveBeenCalledWith('L2026', 6);
+    expect(week.fixtures).toEqual([{ week: 6, rosterIds: [1, 2], points: [20, 12] }]);
+    expect(week.points.get('a')).toBe(20);
+    expect(week.points.get('c')).toBe(12);
+  });
+});
+
+describe('loadWeekGames', () => {
+  beforeEach(() => {
     client.getNflSchedule.mockResolvedValue([
       { week: 4, home: 'CLE', away: 'PIT', status: 'complete' },
       { week: 4, home: 'BAL', away: 'TEN', status: 'in_game' },
       { week: 4, home: 'BUF', away: 'NE', status: 'pre_game' },
       { week: 3, home: 'KC', away: 'LV', status: 'complete' },
     ]);
+  });
 
-    const started = await sleeperProvider.loadStartedTeams!('2026', 4);
-
+  it('names both teams of every game this week that is no longer pre_game', async () => {
+    const { started } = await sleeperProvider.loadWeekGames!('2026', 4);
     expect([...started].sort()).toEqual(['BAL', 'CLE', 'PIT', 'TEN']);
+  });
+
+  it('counts a game as finished only once it is complete', async () => {
+    const { finished } = await sleeperProvider.loadWeekGames!('2026', 4);
+    expect([...finished].sort()).toEqual(['CLE', 'PIT']);
   });
 });

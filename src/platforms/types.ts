@@ -464,13 +464,39 @@ export interface LeagueProvider {
     positions: readonly string[],
   ): Promise<WeekProjections>;
   /**
-   * NFL teams whose game in `week` has kicked off, by the codes rosters use.
+   * Where each NFL game in `week` stands, by the team codes rosters use.
    *
    * The platform locks a player at his kickoff, so from Thursday night on part
-   * of a lineup can no longer change (#152). Optional and allowed to fail: the
-   * panel then assumes nothing has started, which is right until Thursday.
+   * of a lineup can no longer change (#152); and once his game is over, what he
+   * scored is final (#162). Optional and allowed to fail: the panel then
+   * assumes nothing has started, which is right until Thursday.
    */
-  loadStartedTeams?(season: string, week: number): Promise<ReadonlySet<string>>;
+  loadWeekGames?(season: string, week: number): Promise<WeekGames>;
+  /**
+   * Who plays whom in one week, and what every player has scored in it so far
+   * (#162).
+   *
+   * Separate from `loadSchedule` because that one is fetched once a day for
+   * the playoff simulation, and this one has to be live on a Sunday. Optional
+   * and allowed to fail: the matchup line is then simply absent.
+   */
+  loadWeekMatchups?(leagueId: string, week: number): Promise<WeekMatchups>;
+}
+
+/** One week's NFL games, as the two sets of teams a lineup cares about. */
+export interface WeekGames {
+  /** Teams whose game has kicked off, finished ones included. */
+  started: ReadonlySet<string>;
+  /** Teams whose game is over, so their players' points are final. */
+  finished: ReadonlySet<string>;
+}
+
+/** One week of a league's fixtures, live. */
+export interface WeekMatchups {
+  /** Fixtures, with each roster's score so far (null before anybody scores). */
+  fixtures: Matchup[];
+  /** Points each rostered player has scored this week, under the league's rules. */
+  points: ReadonlyMap<string, number>;
 }
 
 /** One player's projection for one week, before any league's scoring is applied. */
