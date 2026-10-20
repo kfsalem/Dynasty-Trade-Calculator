@@ -3,6 +3,7 @@ import type {
   AwardedPoints,
   HistoryPlayer,
   LeagueBundle,
+  LeagueChoice,
   LeagueHistory,
   LeagueProvider,
   LeagueTransaction,
@@ -15,6 +16,7 @@ import type {
 import type { KnownDraftOrder, TradedPickRef } from '../../engine/picks';
 import {
   getDraft,
+  getAccountByUsername,
   getDrafts,
   getLeague,
   getMatchups,
@@ -26,6 +28,7 @@ import {
   getState,
   getTradedPicks,
   getTransactions,
+  getUserLeagues,
   getUsers,
   parseLeagueId,
 } from './client';
@@ -69,6 +72,13 @@ function mapSeasonPhase(seasonType: string | undefined): SeasonPhase {
       return 'unknown';
   }
 }
+
+/** Sleeper's `settings.type`, checked on a live dynasty league (2). */
+const LEAGUE_FORMATS: Record<number, LeagueChoice['format']> = {
+  0: 'redraft',
+  1: 'keeper',
+  2: 'dynasty',
+};
 
 export const sleeperProvider: LeagueProvider = {
   id: 'sleeper',
@@ -198,6 +208,34 @@ export const sleeperProvider: LeagueProvider = {
       out.set(row.player_id, { opponent: row.opponent ?? null, stats });
     }
     return out;
+  },
+
+  async findLeagues(username) {
+    const [account, state] = await Promise.all([
+      getAccountByUsername(username),
+      getState().catch(() => null),
+    ]);
+    const current = state?.league_season ?? state?.season ?? String(new Date().getFullYear());
+    const previous = state?.previous_season ?? String(Number(current) - 1);
+
+    let season = current;
+    let rows = await getUserLeagues(account.user_id, current);
+    if (rows.length === 0) {
+      season = previous;
+      rows = await getUserLeagues(account.user_id, previous);
+    }
+
+    return {
+      userId: account.user_id,
+      displayName: account.display_name ?? account.username ?? username.trim(),
+      season,
+      leagues: rows.map((row) => ({
+        leagueId: row.league_id,
+        name: row.name,
+        teams: row.total_rosters ?? null,
+        format: LEAGUE_FORMATS[row.settings?.type ?? -1] ?? null,
+      })),
+    };
   },
 
   async loadWeekGames(season, week) {

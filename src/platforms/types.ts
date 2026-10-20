@@ -414,6 +414,15 @@ export interface LeagueProvider {
   label: string;
   /** Accept a raw id or a pasted league URL. Returns null if unrecognizable. */
   parseLeagueId(input: string): string | null;
+  /**
+   * A user's leagues, found by username (#160).
+   *
+   * This season's when there are any, and last season's otherwise: a league
+   * only appears in a season's list once it has renewed, so in the offseason
+   * the new list is often empty while the old one is full. Rejects with a
+   * readable message for a username that does not exist.
+   */
+  findLeagues?(username: string): Promise<LeagueSearch>;
   loadLeague(leagueId: string): Promise<LeagueBundle>;
   /**
    * The regular season's fixtures, weeks 1 through `throughWeek`.
@@ -481,6 +490,23 @@ export interface LeagueProvider {
    * and allowed to fail: the matchup line is then simply absent.
    */
   loadWeekMatchups?(leagueId: string, week: number): Promise<WeekMatchups>;
+}
+
+/** A username's leagues, for picking one to load. */
+export interface LeagueSearch {
+  userId: string;
+  /** How the platform shows the user, for "Leagues for …". */
+  displayName: string;
+  /** The season the list is for, which is last season's when this one has none. */
+  season: string;
+  leagues: LeagueChoice[];
+}
+
+export interface LeagueChoice {
+  leagueId: string;
+  name: string;
+  teams: number | null;
+  format: 'dynasty' | 'keeper' | 'redraft' | null;
 }
 
 /** One week's NFL games, as the two sets of teams a lineup cares about. */

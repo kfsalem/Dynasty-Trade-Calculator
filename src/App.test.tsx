@@ -315,8 +315,8 @@ describe('App — switching leagues', () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Change league' }));
-    await user.type(screen.getByLabelText(/Sleeper league ID/i), '222222');
-    await user.click(screen.getByRole('button', { name: 'Load league' }));
+    await user.type(screen.getByLabelText(/league ID or URL/i), '222222');
+    await user.click(screen.getByRole('button', { name: 'Find my league' }));
 
     // League 2 has neither roster 1 nor player p1. Rendering at all is the
     // assertion; the old code threw `Unknown roster 1` from `buildSide`.
@@ -469,5 +469,40 @@ describe('App — the walk that prices a claim', () => {
     await screen.findByRole('tab', { name: 'My team' });
 
     await waitFor(() => expect(mocks.bidWalk.some(Boolean)).toBe(true));
+  });
+});
+
+describe('App — a league found by username (#160)', () => {
+  it('claims the user’s own team once the picked league loads', async () => {
+    mocks.states['80'] = ready(leagueWithRosters('80', 1, 2), [1, 2]);
+    await openAt('/');
+    // The same module instance App imported after `openAt` reset the registry.
+    const { sleeperProvider } = await import('./platforms/sleeper');
+    vi.spyOn(sleeperProvider, 'findLeagues').mockResolvedValue({
+      userId: 'u2',
+      displayName: 'Owner 2',
+      season: '2026',
+      leagues: [{ leagueId: '80', name: 'League 80', teams: 2, format: 'dynasty' }],
+    });
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/Sleeper username/i), 'owner2');
+    await user.click(screen.getByRole('button', { name: 'Find my league' }));
+    await user.click(await screen.findByRole('button', { name: /League 80/ }));
+
+    await waitFor(() => expect(localStorage.getItem('dynasty:myRoster:80')).toBe('2'));
+    expect(screen.queryByText('Which team is yours?')).not.toBeInTheDocument();
+  });
+
+  it('leaves the claim to the reader for a league loaded by id', async () => {
+    mocks.states['810000'] = ready(leagueWithRosters('810000', 1, 2), [1, 2]);
+    await openAt('/');
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/league ID or URL/i), '810000');
+    await user.click(screen.getByRole('button', { name: 'Find my league' }));
+
+    expect(await screen.findByText('Which team is yours?')).toBeInTheDocument();
+    expect(localStorage.getItem('dynasty:myRoster:810000')).toBeNull();
   });
 });
