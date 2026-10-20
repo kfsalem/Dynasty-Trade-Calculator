@@ -15,7 +15,8 @@ import type { DraftPick } from '../types';
 import { isGameWeek } from '../engine/season';
 import type { PositionScarcity } from '../engine/replacement';
 import type { FreeAgentBoard } from '../engine/freeAgents';
-import type { WeekProjections } from '../platforms/types';
+import type { WeekMatchups, WeekProjections } from '../platforms/types';
+import { matchupOdds, opponentOf } from '../engine/matchup';
 import type { WeekEvidence } from '../engine/weekEvidence';
 import type { BenchReport } from '../engine/benchPoints';
 import { POSITION_STYLES, formatValue } from '../lib/format';
@@ -25,6 +26,7 @@ import { PositionalStrengthChart } from './charts/PositionalStrengthChart';
 import { SlotStrengthChart } from './charts/SlotStrengthChart';
 import { ScarcityChart } from './charts/ScarcityChart';
 import { WeeklyLineup } from './WeeklyLineup';
+import { MatchupCard } from './MatchupCard';
 import { PlayerName } from './PlayerName';
 import { PlayerAvatar } from './PlayerAvatar';
 import type { BidModel } from '../engine/bids';
@@ -56,6 +58,10 @@ interface Props {
   evidenceWeek?: number | null;
   /** NFL teams whose game this week has kicked off. */
   lockedTeams?: ReadonlySet<string>;
+  /** …and those whose game is over. */
+  finishedTeams?: ReadonlySet<string>;
+  /** This week's fixtures and points so far, for the matchup line. */
+  weekMatchups?: WeekMatchups;
   /** Whether the activity data describes the season being played. */
   activityCurrent: boolean;
   /**
@@ -177,6 +183,8 @@ export function TeamAnalysis({
   evidence,
   evidenceWeek,
   lockedTeams,
+  finishedTeams,
+  weekMatchups,
   activityCurrent,
   bench,
   bids,
@@ -246,6 +254,45 @@ export function TeamAnalysis({
       leagueFielded(league.rosters, summaries, league.settings.startingSlots, byeTeams),
     );
   }, [seasonPhase, myRosterId, league.rosters, summaries, league.settings.startingSlots, byeTeams]);
+
+  /*
+    This week's matchup (#162). Only on projections and in a game week: without
+    them there is no total to compare, and out of season the fixture is last
+    January's.
+  */
+  const matchup = useMemo(() => {
+    if (!isGameWeek(seasonPhase ?? 'unknown') || !projected || !weekMatchups || !roster) return null;
+    const opponentId = opponentOf(weekMatchups.fixtures, myRosterId);
+    const opponent = league.rosters.find((r) => r.rosterId === opponentId);
+    const mine = summaries.find((s) => s.rosterId === myRosterId);
+    const theirs = summaries.find((s) => s.rosterId === opponentId);
+    if (!opponent || !mine || !theirs) return null;
+    return {
+      opponent: opponent.teamName,
+      odds: matchupOdds({
+        me: { rosterId: myRosterId, entries: mine.players, setLineup: roster.setLineup },
+        them: { rosterId: opponent.rosterId, entries: theirs.players, setLineup: opponent.setLineup },
+        startingSlots: league.settings.startingSlots,
+        byeTeams,
+        projected,
+        started: lockedTeams,
+        finished: finishedTeams,
+        live: weekMatchups.points,
+      }),
+    };
+  }, [
+    seasonPhase,
+    projected,
+    weekMatchups,
+    roster,
+    myRosterId,
+    league.rosters,
+    league.settings.startingSlots,
+    summaries,
+    byeTeams,
+    lockedTeams,
+    finishedTeams,
+  ]);
 
   if (!analysis || !roster) {
     return (
@@ -368,6 +415,15 @@ export function TeamAnalysis({
         the lineup has a deadline this Sunday, and a returning manager should
         land on the thing he can still do something about.
       */}
+      {matchup && currentWeek !== null && (
+        <MatchupCard
+          odds={matchup.odds}
+          week={currentWeek}
+          opponent={matchup.opponent}
+          bestBall={league.settings.bestBall}
+        />
+      )}
+
       {summary && (
         <WeeklyLineup
           roster={roster}

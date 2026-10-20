@@ -224,6 +224,8 @@ function App() {
     evidence,
     evidenceWeek,
     lockedTeams,
+    finishedTeams,
+    weekMatchups,
     claimable,
     activityCurrent,
     adjustments,
@@ -624,6 +626,8 @@ function App() {
                     evidence={evidence}
                     evidenceWeek={evidenceWeek}
                     lockedTeams={lockedTeams}
+                    finishedTeams={finishedTeams}
+                    weekMatchups={weekMatchups}
                     activityCurrent={activityCurrent}
                     bench={bench}
                     bids={bids}
