@@ -1,23 +1,19 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { LeagueImport } from './components/LeagueImport';
 import { LeagueHeader } from './components/LeagueHeader';
 import { ScoringBadge } from './components/ScoringBadge';
 import { ValuesBadge } from './components/ValuesBadge';
 import { PlayerDetail } from './components/PlayerDetail';
-import { LeagueHistory } from './components/LeagueHistory';
 import { useStandingsMode } from './hooks/useStandingsMode';
 import { OpenPlayerContext } from './hooks/useOpenPlayer';
 import { pickDetail, playerDetail } from './engine/playerDetail';
-import { RosterList } from './components/RosterList';
-import { TradeBuilder, type PendingTrade } from './components/TradeBuilder';
-import { TradeSuggestions } from './components/TradeSuggestions';
+import type { PendingTrade } from './components/TradeBuilder';
 import { TeamAnalysis } from './components/TeamAnalysis';
 import { ClaimTeam } from './components/ClaimTeam';
 import { ThemeToggle } from './components/ThemeToggle';
-import { LeagueSkeleton } from './components/LeagueSkeleton';
+import { LeagueSkeleton, TabSkeleton } from './components/LeagueSkeleton';
 import { LeagueError } from './components/LeagueError';
 import { ReplacementLevel } from './components/ReplacementLevel';
-import { FreeAgentBoard } from './components/FreeAgentBoard';
 import { EmptyState } from './components/EmptyState';
 import {
   useBenchReport,
@@ -30,6 +26,43 @@ import { runsFaab } from './engine/bids';
 import { useMyRoster } from './hooks/useMyRoster';
 import { decodeTrade, encodeTrade, resolveShare } from './lib/share';
 import { picksForRoster } from './engine/picks';
+
+/*
+  Every tab but My team loads its code when it is first wanted (#170). My team
+  is the default tab and stays in the first load, with the import screen.
+  `prefetchTabs` then fetches the rest once the league is on screen, so a click
+  is rarely the thing that starts a download.
+*/
+const tabModules = {
+  ideas: () => import('./components/TradeSuggestions'),
+  rosters: () => import('./components/RosterList'),
+  agents: () => import('./components/FreeAgentBoard'),
+  trade: () => import('./components/TradeBuilder'),
+  league: () => import('./components/LeagueHistory'),
+};
+const TradeSuggestions = lazy(() =>
+  tabModules.ideas().then((m) => ({ default: m.TradeSuggestions })),
+);
+const RosterList = lazy(() => tabModules.rosters().then((m) => ({ default: m.RosterList })));
+const FreeAgentBoard = lazy(() =>
+  tabModules.agents().then((m) => ({ default: m.FreeAgentBoard })),
+);
+const TradeBuilder = lazy(() => tabModules.trade().then((m) => ({ default: m.TradeBuilder })));
+const LeagueHistory = lazy(() =>
+  tabModules.league().then((m) => ({ default: m.LeagueHistory })),
+);
+
+/**
+ * Start every tab's download once the browser is idle. A failed prefetch is
+ * ignored: the tab tries again, and fails visibly, when it is opened.
+ */
+function prefetchTabs() {
+  const run = () => {
+    for (const load of Object.values(tabModules)) load().catch(() => {});
+  };
+  if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 3000 });
+  else setTimeout(run, 1000);
+}
 
 const STORAGE_KEY = 'dynasty:leagueId';
 
@@ -237,6 +270,13 @@ function App() {
     retry,
     retrying,
   } = useLeagueSummaries(leagueId);
+
+  // Once there is a league to show, and not before: the import screen never
+  // needs a tab, and a visitor who leaves from it should not pay for five.
+  const hasLeague = league !== undefined;
+  useEffect(() => {
+    if (hasLeague) prefetchTabs();
+  }, [hasLeague]);
 
   /**
    * Points left on the bench, and the only query in the app somebody has to ask
@@ -607,6 +647,7 @@ function App() {
               tabIndex={-1}
               className="mt-6"
             >
+              <Suspense fallback={<TabSkeleton />}>
               {tab === 'analysis' &&
                 (myRosterId === null ? (
                   <ClaimTeam league={league} onClaim={setMyRoster} />
@@ -744,6 +785,7 @@ function App() {
                   myKey={league.rosters.find((r) => r.rosterId === myRosterId)?.ownerId ?? null}
                 />
               )}
+              </Suspense>
             </div>
           </>
         )}
