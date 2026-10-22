@@ -619,6 +619,52 @@ describe('startSit on projections (#149)', () => {
     expect(ids(plan)).not.toContain('wr2');
   });
 
+  describe('a starter projected for nothing (#179)', () => {
+    it('is a fact, not an upgrade', () => {
+      const projected = week(14);
+      projected.set('wr2', 0);
+      const plan = startSit({ entries, startingSlots: SLOTS, setLineup: set, projected });
+      const change = plan.changes.find((c) => c.sit?.player.id === 'wr2');
+
+      expect(change?.cause).toBe('unprojected');
+      expect(change?.decisive).toBe(true);
+    });
+
+    it('is stated however little the newcomer is projected for', () => {
+      // Two points against nothing is 58% on the curve, under the bar. It is
+      // still two points against a man who will not play.
+      const projected = week(2);
+      projected.set('wr2', 0);
+      projected.set('wr1', 1);
+      const plan = startSit({ entries, startingSlots: SLOTS, setLineup: set, projected });
+      const change = plan.changes.find((c) => c.sit?.player.id === 'wr2');
+
+      expect(change?.cause).toBe('unprojected');
+      expect(plan.decisive).toContain(change);
+    });
+
+    it('gives way to a designation, which names the reason', () => {
+      const projected = week(14);
+      projected.set('wr2', 0);
+      const hurt = entries.map((e) =>
+        e.player.id === 'wr2' ? entry('wr2', 'WR', 600, { status: 'out' }) : e,
+      );
+      const plan = startSit({ entries: hurt, startingSlots: SLOTS, setLineup: set, projected });
+
+      expect(plan.changes.find((c) => c.sit?.player.id === 'wr2')?.cause).toBe('sidelined');
+    });
+
+    it('does not apply on a value plan, which has no projections to be missing from', () => {
+      const plan = startSit({
+        entries: entries.map((e) => (e.player.id === 'wr3' ? entry('wr3', 'WR', 900) : e)),
+        startingSlots: SLOTS,
+        setLineup: set,
+      });
+
+      expect(plan.changes.every((c) => c.cause !== 'unprojected')).toBe(true);
+    });
+  });
+
   it('is the value plan it always was when there are no projections', () => {
     const plan = startSit({ entries, startingSlots: SLOTS, setLineup: set });
 
