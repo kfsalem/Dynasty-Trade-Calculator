@@ -16,6 +16,7 @@
     "test": "vitest run",
     "check:contrast": "tsx scripts/check-contrast.ts",
     "check:slots": "tsx scripts/check-slots.ts",
+    "grade:calls": "tsx scripts/grade-calls.ts",
     "preview": "vite preview"
   },
   "dependencies": {
