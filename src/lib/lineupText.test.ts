@@ -9,6 +9,7 @@ const evidence = (overrides: Partial<WeekEvidence> = {}): WeekEvidence => ({
   targetsPerGame: 7.3,
   carriesPerGame: 0,
   pointsPerGame: 15.2,
+  track: null,
   ...overrides,
 });
 
@@ -44,6 +45,18 @@ describe('describeChange', () => {
 });
 
 describe('evidenceLine', () => {
+  it('sets what he scored against what he was projected, over the same games (#181)', () => {
+    expect(
+      evidenceLine('ARI', evidence({ track: { games: 6, projected: 19.2, scored: 13.8 } }), 'QB'),
+    ).toBe('vs ARI · 13.8 points a game against 19.2 projected');
+  });
+
+  it('keeps plain points a game until three games make an average worth reading', () => {
+    expect(
+      evidenceLine('ARI', evidence({ track: { games: 2, projected: 19.2, scored: 13.8 } }), 'QB'),
+    ).toBe('vs ARI · 15.2 points a game');
+  });
+
   it('reads opponent, role and scoring in that order', () => {
     expect(evidenceLine('PIT', evidence())).toBe(
       'vs PIT · 81% of snaps · 7.3 targets a game · 15.2 points a game',

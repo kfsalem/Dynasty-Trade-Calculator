@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { evidenceThrough, weekEvidence } from './weekEvidence';
 import {
   OPPORTUNITY_COLUMNS,
+  PROJECTED_COLUMNS,
   SCORING_COLUMNS,
   SNAP_COLUMNS,
   type OpportunityFile,
+  type ProjectedFile,
   type ScoringFile,
   type SnapCountsFile,
 } from '../data/types';
@@ -50,6 +52,18 @@ const scoring = (season: number): ScoringFile => ({
 
 const RULES = { rec: 1, rec_yd: 0.1 };
 
+/** A projected row: the weeks summed as a bitmask, then the named sums. */
+const projectedRow = (weeks: number[], sums: Record<string, number>): number[] => [
+  weeks.reduce((mask, week) => mask | (1 << week), 0),
+  ...PROJECTED_COLUMNS.slice(1).map((key) => sums[key] ?? 0),
+];
+
+const projected = (season: number, row: number[]): ProjectedFile => ({
+  ...meta(season),
+  columns: PROJECTED_COLUMNS,
+  players: { wr: row },
+});
+
 describe('weekEvidence', () => {
   it("averages this season's snaps, targets, carries and league points", () => {
     const evidence = weekEvidence({
@@ -80,6 +94,68 @@ describe('weekEvidence', () => {
     });
 
     expect(evidence.size).toBe(0);
+  });
+
+  describe('against his projection (#181)', () => {
+    it('sets what he scored against what he was projected, per game, in league points', () => {
+      // Projected 10 catches for 140 yards over the two weeks: (10 + 14) / 2 = 12 a game.
+      const track = weekEvidence({
+        season: 2026,
+        snaps: null,
+        usage: null,
+        scoring: scoring(2026),
+        projected: projected(2026, projectedRow([1, 2], { rec: 10, rec_yd: 140 })),
+        rules: RULES,
+      }).get('wr')?.track;
+
+      expect(track?.games).toBe(2);
+      expect(track?.projected).toBeCloseTo(12);
+      expect(track?.scored).toBeCloseTo(11);
+    });
+
+    it('scores only the weeks that had a projection, on both sides', () => {
+      // Week 2 had no projection, so his week-2 points are left out too: 14, not 11.
+      const track = weekEvidence({
+        season: 2026,
+        snaps: null,
+        usage: null,
+        scoring: scoring(2026),
+        projected: projected(2026, projectedRow([1], { rec: 5, rec_yd: 70 })),
+        rules: RULES,
+      }).get('wr')?.track;
+
+      expect(track?.games).toBe(1);
+      expect(track?.projected).toBeCloseTo(12);
+      expect(track?.scored).toBeCloseTo(14);
+    });
+
+    it("applies the league's own rules to the projection, as to what he scored", () => {
+      const track = weekEvidence({
+        season: 2026,
+        snaps: null,
+        usage: null,
+        scoring: scoring(2026),
+        projected: projected(2026, projectedRow([1, 2], { rec: 10, rec_yd: 140 })),
+        rules: { rec: 0, rec_yd: 0.1 },
+      }).get('wr')?.track;
+
+      // Standard scoring: 14 projected yards a game, 6 scored.
+      expect(track?.projected).toBeCloseTo(7);
+      expect(track?.scored).toBeCloseTo(6);
+    });
+
+    it('says nothing from a projection file for another season', () => {
+      const evidence = weekEvidence({
+        season: 2026,
+        snaps: null,
+        usage: null,
+        scoring: scoring(2026),
+        projected: projected(2025, projectedRow([1, 2], { rec: 10, rec_yd: 140 })),
+        rules: RULES,
+      }).get('wr');
+
+      expect(evidence?.track).toBeNull();
+    });
   });
 
   it('survives files that have not loaded', () => {

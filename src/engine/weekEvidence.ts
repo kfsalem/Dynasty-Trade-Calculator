@@ -1,6 +1,13 @@
-import type { OpportunityFile, ScoringFile, SnapCountsFile } from '../data/types';
+import {
+  PROJECTED_COLUMNS,
+  type OpportunityFile,
+  type ProjectedFile,
+  type ScoringFile,
+  type SnapCountsFile,
+} from '../data/types';
 import type { ScoringSettings } from '../types';
 import { scoreWeeks } from './scoring';
+import { scoreProjection } from './projections';
 
 /**
  * What a player has actually done this season, for the lineup panel to show
@@ -23,6 +30,16 @@ export interface WeekEvidence {
   carriesPerGame: number | null;
   /** Points per game this season, under the league's own rules. */
   pointsPerGame: number | null;
+  /**
+   * What he was projected to score and what he scored, per game, over the
+   * same games: the ones he played that had a projection (#181). Both under the
+   * league's own rules. Null without a projection file for this season.
+   *
+   * Beside the call, never in it. Over 2024–26 a player's season-to-date miss
+   * did not predict his next one, so a manager may weigh it; the ranking does
+   * not.
+   */
+  track: { games: number; projected: number; scored: number } | null;
 }
 
 const mean = (xs: number[]): number | null =>
@@ -41,12 +58,14 @@ export function weekEvidence({
   snaps,
   usage,
   scoring,
+  projected,
   rules,
 }: {
   season: number;
   snaps: SnapCountsFile | null | undefined;
   usage: OpportunityFile | null | undefined;
   scoring: ScoringFile | null | undefined;
+  projected?: ProjectedFile | null;
   rules: ScoringSettings;
 }): Map<string, WeekEvidence> {
   const out = new Map<string, WeekEvidence>();
@@ -59,6 +78,7 @@ export function weekEvidence({
         targetsPerGame: null,
         carriesPerGame: null,
         pointsPerGame: null,
+        track: null,
       };
       out.set(id, evidence);
     }
@@ -87,6 +107,23 @@ export function weekEvidence({
     for (const [id, player] of Object.entries(scoring.players)) {
       if (player.weeks.length === 0) continue;
       row(id).pointsPerGame = scoreWeeks(player.weeks, player.pos, rules) / player.weeks.length;
+    }
+  }
+
+  if (scoring?.season === season && projected?.season === season) {
+    const keys = PROJECTED_COLUMNS.slice(1);
+    for (const [id, sums] of Object.entries(projected.players)) {
+      const player = scoring.players[id];
+      const mask = sums[0] ?? 0;
+      // The bitmask names the weeks summed; only those count on the scored side too.
+      const weeks = player?.weeks.filter(([week]) => (mask >> week) & 1) ?? [];
+      if (weeks.length === 0) continue;
+      const stats = Object.fromEntries(keys.map((key, i) => [key, sums[i + 1] ?? 0]));
+      row(id).track = {
+        games: weeks.length,
+        projected: scoreProjection(stats, rules) / weeks.length,
+        scored: scoreWeeks(weeks, player.pos, rules) / weeks.length,
+      };
     }
   }
 

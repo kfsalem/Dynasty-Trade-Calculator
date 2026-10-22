@@ -120,6 +120,9 @@ export function outscoreSentence(
  * handful of scrambles counted as "carries" read as though they were his job,
  * which is what the live panel said about Patrick Mahomes the first time it ran.
  */
+/** Fewest matched games before the line sets scored against projected. */
+export const TRACK_GAMES = 3;
+
 export function evidenceLine(
   opponent: string | null | undefined,
   evidence: WeekEvidence | undefined,
@@ -134,7 +137,14 @@ export function evidenceLine(
     if (targets >= 1 && targets >= carries) parts.push(`${targets.toFixed(1)} targets a game`);
     else if (carries >= 1) parts.push(`${carries.toFixed(1)} carries a game`);
   }
-  if (evidence?.pointsPerGame != null) {
+  // Against his projection once there are enough games for an average to mean
+  // anything; one or two is a single bad Sunday (#181).
+  const track = evidence?.track;
+  if (track && track.games >= TRACK_GAMES) {
+    parts.push(
+      `${formatPoints(track.scored)} points a game against ${formatPoints(track.projected)} projected`,
+    );
+  } else if (evidence?.pointsPerGame != null) {
     parts.push(`${formatPoints(evidence.pointsPerGame)} points a game`);
   }
   return parts.length > 0 ? parts.join(' · ') : null;
