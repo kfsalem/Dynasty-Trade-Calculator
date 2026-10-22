@@ -38,7 +38,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: npm
       - run: npm ci
+      # The one ingest that adds a point to the value histories (#158): this run
+      # commits what it writes, so the point is kept. Deploys leave them alone.
       - run: npm run ingest
+        env:
+          VALUE_HISTORY: append
 
       - id: diff
         run: |

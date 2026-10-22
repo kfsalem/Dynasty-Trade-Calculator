@@ -820,6 +820,7 @@ function App() {
         pick={openPick}
         chartSeason={snapsMeta?.chartSeason ?? null}
         priced={priced}
+        numQbs={league?.settings.numQbs === 2 ? 2 : 1}
         onClose={closePlayer}
       />
     </main>

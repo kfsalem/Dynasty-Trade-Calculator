@@ -42,6 +42,7 @@ import { reduceSnapCounts } from './ingest/snapCounts';
 import { reduceWeeklyStats } from './ingest/weeklyStats';
 import { reduceScoring } from './ingest/scoring';
 import { ingestValueSnapshots } from './ingest/valueSnapshot';
+import { appendValueHistory } from './ingest/valueHistory';
 import { ingestTrackRecord } from './ingest/trackRecord';
 import { ingestProjected } from './ingest/projectedSoFar';
 
@@ -414,6 +415,8 @@ async function main(): Promise<void> {
   // data, are never downloaded unless FantasyCalc fails, and so sit outside
   // both the index and the budget below. See `ingest/valueSnapshot`.
   await ingestValueSnapshots(OUT_DIR, generatedAt);
+  // From the snapshots just written, and only on the weekly refresh. See `ingest/valueHistory`.
+  await appendValueHistory(OUT_DIR, generatedAt);
 
   // Also beside them: it is fetched only when a reader opens the lineup panel's
   // record, and it never fails a build. See `ingest/trackRecord`.
