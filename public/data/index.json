@@ -40,6 +40,14 @@
       "throughWeek": 18,
       "rows": 32,
       "fresh": true
+    },
+    "projected": {
+      "file": "projected.json",
+      "generatedAt": "2026-10-22T18:26:30.819Z",
+      "season": 2026,
+      "throughWeek": 6,
+      "rows": 472,
+      "fresh": true
     }
   }
 }

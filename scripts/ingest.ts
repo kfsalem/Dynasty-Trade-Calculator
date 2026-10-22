@@ -22,6 +22,7 @@ import {
   type DataIndexEntry,
   type DatasetMeta,
   type DatasetName,
+  type ScoringFile,
 } from '../src/data/types';
 import { reduceStartedSeason } from './ingest/seasonPick';
 import { IngestError } from './ingest/errors';
@@ -42,6 +43,7 @@ import { reduceWeeklyStats } from './ingest/weeklyStats';
 import { reduceScoring } from './ingest/scoring';
 import { ingestValueSnapshots } from './ingest/valueSnapshot';
 import { ingestTrackRecord } from './ingest/trackRecord';
+import { ingestProjected } from './ingest/projectedSoFar';
 
 const OUT_DIR = fileURLToPath(new URL('../public/data/', import.meta.url));
 
@@ -396,6 +398,18 @@ async function main(): Promise<void> {
   datasets.byes = byes;
   if (!byes.fresh) stale++;
 
+  // After the datasets, because it is matched against the scoring file just
+  // written — or its committed copy, if that fell back. Never fails a build;
+  // see `ingest/projectedSoFar`.
+  const scoring = await readFile(`${OUT_DIR}${DATA_FILES.scoring}`, 'utf8')
+    .then((text) => JSON.parse(text) as ScoringFile)
+    .catch(() => null);
+  const projected = await ingestProjected(OUT_DIR, generatedAt, scoring);
+  if (projected) {
+    datasets.projected = projected;
+    if (!projected.fresh) stale++;
+  }
+
   // Beside the datasets rather than among them: the snapshots are not nflverse
   // data, are never downloaded unless FantasyCalc fails, and so sit outside
   // both the index and the budget below. See `ingest/valueSnapshot`.
@@ -415,9 +429,9 @@ async function main(): Promise<void> {
 
   console.log(`  total  ${kb(total)} of a ${kb(BUDGET_BYTES)} budget`);
   if (stale > 0) {
-    // +1 for byes, which is ingested beside DATASETS rather than inside it.
+    // Byes and projections are ingested beside DATASETS rather than inside it.
     console.warn(
-      `  ${stale} of ${DATASETS.length + 1} datasets are the committed fallback, not fresh.`,
+      `  ${stale} of ${Object.keys(datasets).length} datasets are the committed fallback, not fresh.`,
     );
   }
 

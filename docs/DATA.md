@@ -180,6 +180,17 @@ The snapshots sit outside `index.json` and outside the 1 MB budget, because no
 visitor downloads one unless the live source has failed, and then only the one
 for their league's format.
 
+**So is `projected.json`** (#181). After the datasets, the run fetches Sleeper's
+weekly projections for every week `scoring.json` covers and sums each skill
+player's projected stat lines over the weeks he has there, with a bitmask of
+those weeks. The app scores the sums under the league's rules and averages his
+actual points over the same weeks, so the lineup panel can say "13.8 points a
+game against 19.3 projected" about the same games. About 55 KB, one row per
+player all season, and it does count against the budget: it loads with the
+rest. The endpoint is Sleeper's undocumented one, so a fetch that fails or a
+response that changed shape keeps the committed file rather than failing the
+build.
+
 **So is the track record** (#164). The same run replays the lineup panel over
 every finished week of the two test leagues and grades each start-or-sit call
 against what Sleeper paid, into `public/data/track-record.json`: about 600

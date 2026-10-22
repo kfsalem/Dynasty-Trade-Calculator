@@ -2,11 +2,13 @@ import { fetchDataFile } from './load';
 import {
   DATA_FILES,
   OPPORTUNITY_COLUMNS,
+  PROJECTED_COLUMNS,
   SCORING_COLUMNS,
   SNAP_COLUMNS,
   type ByeWeeksFile,
   type DepthChartsFile,
   type OpportunityFile,
+  type ProjectedFile,
   type ScoringFile,
   type SnapCountsFile,
 } from './types';
@@ -26,6 +28,10 @@ export const fetchOpportunity = (): Promise<OpportunityFile | null> =>
  */
 export const fetchScoring = (): Promise<ScoringFile | null> =>
   fetchDataFile<ScoringFile>(DATA_FILES.scoring, SCORING_COLUMNS);
+
+/** What each player was projected to score in the games he has played (#181). */
+export const fetchProjectedSoFar = (): Promise<ProjectedFile | null> =>
+  fetchDataFile<ProjectedFile>(DATA_FILES.projected, PROJECTED_COLUMNS);
 
 export const fetchDepthCharts = (): Promise<DepthChartsFile | null> =>
   fetchDataFile<DepthChartsFile>(DATA_FILES.depth);

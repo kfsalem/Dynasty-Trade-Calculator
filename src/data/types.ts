@@ -194,6 +194,79 @@ export interface ScoringFile extends DatasetMeta {
 }
 
 // ---------------------------------------------------------------------------
+// projected.json — Sleeper's weekly projections, summed over the weeks played
+// ---------------------------------------------------------------------------
+
+/**
+ * The Sleeper stat keys a projection is summed on (#181).
+ *
+ * Every additive key Sleeper projects for a skill player. Left out: the
+ * points totals (`pts_*`, already scored under somebody else's rules), ADP,
+ * `gp`, `cmp_pct` (a ratio, which does not sum), and IDP keys, which this app
+ * does not model. Sums are linear, so scoring a summed line under a league's
+ * rules is the same as summing the scored weeks.
+ */
+export const PROJECTED_COLUMNS = [
+  'weeks',
+  'bonus_rec_rb',
+  'bonus_rec_te',
+  'bonus_rec_wr',
+  'bonus_rush_td_qb',
+  'def_fum_td',
+  'def_kr_td',
+  'def_kr_yd',
+  'fum',
+  'fum_lost',
+  'pass_2pt',
+  'pass_att',
+  'pass_cmp',
+  'pass_cmp_40p',
+  'pass_fd',
+  'pass_inc',
+  'pass_int',
+  'pass_int_td',
+  'pass_sack',
+  'pass_td',
+  'pass_yd',
+  'pr',
+  'pr_td',
+  'pr_yd',
+  'rec',
+  'rec_0_4',
+  'rec_10_19',
+  'rec_20_29',
+  'rec_2pt',
+  'rec_30_39',
+  'rec_40p',
+  'rec_5_9',
+  'rec_fd',
+  'rec_td',
+  'rec_tgt',
+  'rec_yd',
+  'rush_2pt',
+  'rush_40p',
+  'rush_att',
+  'rush_fd',
+  'rush_td',
+  'rush_yd',
+] as const;
+
+/**
+ * `weeks` is a bitmask of the weeks summed — bit *n* set for week *n* — and
+ * each of the rest is that key's total over them. They are exactly the weeks
+ * the player has in `scoring.json` *and* had a projection for, so what he
+ * scored and what he was projected to score cover the same games. Trailing
+ * zeros are trimmed, as in `scoring.json`.
+ */
+export type ProjectedRow = number[];
+
+export interface ProjectedFile extends DatasetMeta {
+  columns: typeof PROJECTED_COLUMNS;
+  /** Keyed by Sleeper player id. */
+  players: Record<string, ProjectedRow>;
+}
+
+// ---------------------------------------------------------------------------
 // depth.json — nflverse depth_charts, newest snapshot only
 // ---------------------------------------------------------------------------
 
@@ -264,6 +337,7 @@ export const DATA_FILES = {
   scoring: 'scoring.json',
   depth: 'depth.json',
   byes: 'byes.json',
+  projected: 'projected.json',
   index: 'index.json',
 } as const;
 

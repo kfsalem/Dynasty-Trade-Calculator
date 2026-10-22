@@ -37,6 +37,7 @@ import {
   fetchDepthCharts,
   fetchOpportunity,
   fetchScoring,
+  fetchProjectedSoFar,
   fetchSnapCounts,
 } from '../data/activity';
 import {
@@ -315,6 +316,19 @@ export function useOpportunity() {
 }
 
 /**
+ * What each player was projected to score in the games he has played, beside
+ * what he scored in them (#181). Evidence only, like the rest of `weekEvidence`.
+ */
+export function useProjectedSoFar() {
+  return useQuery({
+    queryKey: ['projectedSoFar'],
+    queryFn: fetchProjectedSoFar,
+    staleTime: Infinity,
+    retry: 1,
+  });
+}
+
+/**
  * Per-week stat lines, so the app can score players in the league's own rules.
  *
  * Its own query rather than a widening of `useOpportunity`: different columns,
@@ -431,6 +445,7 @@ export function useLeagueSummaries(leagueId: string | null) {
     [projectionsQuery.data, settings],
   );
   const scoringQuery = useScoringStats();
+  const projectedSoFarQuery = useProjectedSoFar();
   const depthQuery = useDepthCharts();
   const byesQuery = useByeWeeks();
 
@@ -626,9 +641,17 @@ export function useLeagueSummaries(leagueId: string | null) {
       snaps: snapsQuery.data,
       usage: opportunityQuery.data,
       scoring: scoringQuery.data,
+      projected: projectedSoFarQuery.data,
       rules: settings.scoring,
     });
-  }, [leagueQuery.data, settings, snapsQuery.data, opportunityQuery.data, scoringQuery.data]);
+  }, [
+    leagueQuery.data,
+    settings,
+    snapsQuery.data,
+    opportunityQuery.data,
+    scoringQuery.data,
+    projectedSoFarQuery.data,
+  ]);
 
   /** How current that evidence is, so the panel can date it. */
   const evidenceWeek = useMemo(() => {

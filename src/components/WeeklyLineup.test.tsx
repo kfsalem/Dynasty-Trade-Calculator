@@ -527,7 +527,14 @@ describe("WeeklyLineup — on this week's projections (#149)", () => {
       evidence: new Map([
         [
           'wr3',
-          { games: 3, snapShare: 0.78, targetsPerGame: 7, carriesPerGame: 0, pointsPerGame: 13.1 },
+          {
+            games: 3,
+            snapShare: 0.78,
+            targetsPerGame: 7,
+            carriesPerGame: 0,
+            pointsPerGame: 13.1,
+            track: null,
+          },
         ],
       ]),
     });
