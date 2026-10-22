@@ -180,6 +180,18 @@ The snapshots sit outside `index.json` and outside the 1 MB budget, because no
 visitor downloads one unless the live source has failed, and then only the one
 for their league's format.
 
+**So is the track record** (#164). The same run replays the lineup panel over
+every finished week of the two test leagues and grades each start-or-sit call
+against what Sleeper paid, into `public/data/track-record.json`: about 600
+calls and 16 KB, growing by roughly 6 KB a season. A finished week never
+changes, so each run grades only the weeks the committed file has not, which is
+nothing most Tuesdays and one week in season. It follows the snapshot's policy,
+not the datasets': a failure keeps the committed file, and nothing fails a
+build. It sits outside `index.json` and the budget too, because it is fetched
+only when a reader opens "How often these calls come true" under the lineup
+panel. `npm run grade:calls` brings it up to date and prints it by bucket,
+season and position.
+
 ## The match gate
 
 If an id format changes upstream, nothing throws. Every file arrives, every

@@ -1,4 +1,9 @@
 import type { DatasetMeta } from './types';
+import {
+  TRACK_RECORD_COLUMNS,
+  TRACK_RECORD_FILE,
+  type TrackRecordFile,
+} from '../engine/trackRecord';
 
 /**
  * Load one of the static files `npm run ingest` writes into `public/data/`.
@@ -88,4 +93,41 @@ function validate<T extends DatasetMeta>(
   }
 
   return parsed as T;
+}
+
+/**
+ * The lineup panel's graded record (#164), from `public/data/track-record.json`.
+ *
+ * Separate from `fetchDataFile` because it is not a dataset: its rows are a
+ * flat list rather than keyed by player or team, and it is fetched only when a
+ * reader opens the record, never on load. The policy is the same — never
+ * throw, return null and say why — and so is the column check, for the same
+ * reason: the rows are positional.
+ */
+export async function fetchTrackRecord(): Promise<TrackRecordFile | null> {
+  const url = `${import.meta.env.BASE_URL}data/${TRACK_RECORD_FILE}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn(`${TRACK_RECORD_FILE} unavailable: ${url} returned ${res.status}.`);
+      return null;
+    }
+    const body = (await res.json()) as Partial<TrackRecordFile> | null;
+    const columns = body?.columns;
+    if (
+      !body ||
+      !Array.isArray(body.rows) ||
+      !Array.isArray(body.graded) ||
+      !Array.isArray(columns) ||
+      columns.length !== TRACK_RECORD_COLUMNS.length ||
+      columns.some((column, i) => column !== TRACK_RECORD_COLUMNS[i])
+    ) {
+      console.warn(`${TRACK_RECORD_FILE} at ${url} is not the shape this build reads; ignoring it.`);
+      return null;
+    }
+    return body as TrackRecordFile;
+  } catch (err) {
+    console.warn(`${TRACK_RECORD_FILE} unavailable: ${err instanceof Error ? err.message : err}`);
+    return null;
+  }
 }
