@@ -180,6 +180,22 @@ The snapshots sit outside `index.json` and outside the 1 MB budget, because no
 visitor downloads one unless the live source has failed, and then only the one
 for their league's format.
 
+**The value histories sit beside the snapshots** (#158). `values/history-1qb.json`
+and `values/history-2qb.json` keep FantasyCalc's dynasty and win-now value for
+every player at each refresh: one point a week in season, one a month out of
+it. One format per QB setting, at 10 teams and PPR, because within a QB setting
+the formats are the same market: every 1QB format's week-over-week change
+correlated 0.992–1.000 with the 10-team PPR one's, and superflex the same.
+About 5 KB a point, so around 110 KB a season each, outside the budget, and
+fetched only when a player panel opens.
+
+Only the weekly refresh appends, because it is the only run that commits what
+it writes: it sets `VALUE_HISTORY=append`, and a deploy's ingest leaves the
+histories as committed. A point is added only from a snapshot that run actually
+refreshed, never by redating last week's copy. The first six points
+(2026-09-29 to 10-22) were seeded from the committed snapshots and the saved
+forward-test responses (#157); the files' `source` says which.
+
 **So is `projected.json`** (#181). After the datasets, the run fetches Sleeper's
 weekly projections for every week `scoring.json` covers and sums each skill
 player's projected stat lines over the weeks he has there, with a bitmask of

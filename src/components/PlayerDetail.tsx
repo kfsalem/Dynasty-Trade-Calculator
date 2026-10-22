@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react';
 import type { Position } from '../types';
 import type { PickDetail, PlayerDetail as Detail } from '../engine/playerDetail';
 import { injuryNote } from '../engine/availability';
@@ -7,6 +7,16 @@ import { describeRole } from '../lib/roleText';
 import { describeAdjustment, describeMetric, describeSnaps } from '../lib/activityText';
 import { UnvaluedCell } from './UnvaluedCell';
 import { PlayerAvatar } from './PlayerAvatar';
+import type { HistoryQbs } from '../values/valueHistory';
+
+/*
+  Loaded with the panel's first use rather than the app, like the tabs (#170):
+  the first load has a 500 kB budget, and a chart nobody has opened yet should
+  not spend it.
+*/
+const ValueHistoryChart = lazy(() =>
+  import('./charts/ValueHistoryChart').then((m) => ({ default: m.ValueHistoryChart })),
+);
 
 interface Props {
   /** The player to show, or null. */
@@ -15,6 +25,8 @@ interface Props {
   pick?: PickDetail | null;
   chartSeason: number | null;
   priced?: Set<Position>;
+  /** Which value history the panel charts: the league's QB setting (#158). */
+  numQbs?: HistoryQbs;
   onClose: () => void;
 }
 
@@ -154,7 +166,14 @@ function PickContent({ detail, onClose }: { detail: PickDetail; onClose: () => v
  * the main reading surface; a panel from the right from `sm` up, so the table
  * that opened it stays in view.
  */
-export function PlayerDetail({ detail, pick = null, chartSeason, priced, onClose }: Props) {
+export function PlayerDetail({
+  detail,
+  pick = null,
+  chartSeason,
+  priced,
+  numQbs = 1,
+  onClose,
+}: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const returnTo = useRef<HTMLElement | null>(null);
   const open = detail !== null || pick !== null;
@@ -273,6 +292,13 @@ export function PlayerDetail({ detail, pick = null, chartSeason, priced, onClose
                 . Both figures above are that price measured against this league: what
                 he adds over the best player at his position nobody here is starting.
               </p>
+              <Suspense fallback={null}>
+                <ValueHistoryChart
+                  playerId={detail.player.id}
+                  position={detail.player.position}
+                  numQbs={numQbs}
+                />
+              </Suspense>
             </>
           ) : (
             <p className="rounded-xl border border-line bg-raised p-3 text-sm text-muted">

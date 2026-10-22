@@ -4,6 +4,7 @@ import {
   TRACK_RECORD_FILE,
   type TrackRecordFile,
 } from '../engine/trackRecord';
+import { historyFile, type HistoryQbs, type ValueHistoryFile } from '../values/valueHistory';
 
 /**
  * Load one of the static files `npm run ingest` writes into `public/data/`.
@@ -128,6 +129,31 @@ export async function fetchTrackRecord(): Promise<TrackRecordFile | null> {
     return body as TrackRecordFile;
   } catch (err) {
     console.warn(`${TRACK_RECORD_FILE} unavailable: ${err instanceof Error ? err.message : err}`);
+    return null;
+  }
+}
+
+/**
+ * Load one history from `public/data`. Never throws: a missing or malformed
+ * file costs the player panel one chart, so it returns null and says why in
+ * the console, as `fetchDataFile` does.
+ */
+export async function fetchValueHistory(numQbs: HistoryQbs): Promise<ValueHistoryFile | null> {
+  const url = `${import.meta.env.BASE_URL}data/${historyFile(numQbs)}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn(`${historyFile(numQbs)} unavailable: ${url} returned ${res.status}.`);
+      return null;
+    }
+    const body = (await res.json()) as Partial<ValueHistoryFile> | null;
+    if (!body || !Array.isArray(body.dates) || !body.players || typeof body.players !== 'object') {
+      console.warn(`${historyFile(numQbs)} at ${url} is not the shape this build reads; ignoring it.`);
+      return null;
+    }
+    return body as ValueHistoryFile;
+  } catch (err) {
+    console.warn(`${historyFile(numQbs)} unavailable: ${err instanceof Error ? err.message : err}`);
     return null;
   }
 }
