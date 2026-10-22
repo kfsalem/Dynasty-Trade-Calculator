@@ -152,3 +152,29 @@ describe('useLeagueSummaries — picksSettled', () => {
     expect(result.current.picks).toEqual([]);
   });
 });
+
+describe('useLeagueSummaries — injury designations (#184)', () => {
+  it('reads each man’s designation from this week’s projections, not the day-old index', async () => {
+    vi.mocked(sleeperProvider.loadLeague).mockResolvedValue({
+      ...bundle,
+      currentWeek: 8,
+      seasonPhase: 'regular',
+    });
+    vi.mocked(fetchFantasyCalcValues).mockResolvedValue(valueBundle);
+    vi.mocked(fetchPickValues).mockResolvedValue(pickTable);
+    const loadProjections = vi.fn(async () =>
+      new Map([['p1', { opponent: 'LV', stats: {}, injury: { status: 'out', description: 'Out' } as const }]]),
+    );
+    Object.assign(sleeperProvider, { loadProjections });
+
+    try {
+      const { result } = renderHook(() => useLeagueSummaries('L1'), { wrapper: withClient() });
+
+      await waitFor(() => expect(result.current.players?.get('p1')?.injury?.status).toBe('out'));
+      expect(loadProjections).toHaveBeenCalledWith('2026', 8, ['QB', 'RB']);
+      expect(result.current.players?.get('p2')?.injury).toBeUndefined();
+    } finally {
+      Object.assign(sleeperProvider, { loadProjections: undefined });
+    }
+  });
+});

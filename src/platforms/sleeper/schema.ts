@@ -353,12 +353,20 @@ export const sleeperDraftsSchema = z.array(sleeperDraftSchema);
  *
  * `opponent` is null for players with no game projected, which is most of the
  * payload. A defence's `player_id` is its team code, as on a roster.
+ *
+ * Each row also embeds the player, including his `injury_status`, which is the
+ * fresher copy of the designation (#184): the full index is cached for a day
+ * because Sleeper asks for that, and this is refetched every half hour. Checked
+ * live on 2026-10-22: identical to the index for all 3,302 rows, and both are
+ * held for ten minutes at Sleeper's CDN. Optional, so a row without it changes
+ * nothing.
  */
 export const sleeperProjectionSchema = z.object({
   player_id: z.string(),
   team: z.string().nullish(),
   opponent: z.string().nullish(),
   stats: z.record(z.string(), z.number().nullish()),
+  player: z.object({ injury_status: z.string().nullish() }).nullish(),
 });
 export const sleeperProjectionsSchema = z.array(sleeperProjectionSchema);
 

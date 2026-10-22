@@ -67,7 +67,7 @@ const KNOWN_STATUS: Record<string, InjuryStatus['status']> = {
  * `engine/availability`, so an unfamiliar word shows on the row and changes no
  * arithmetic, which is the right amount of trust to place in it.
  */
-function mapInjury(status: string | null): InjuryStatus | undefined {
+export function mapInjury(status: string | null): InjuryStatus | undefined {
   if (!status?.trim()) return undefined;
   const normalized = status.trim().toLowerCase();
   return { status: KNOWN_STATUS[normalized] ?? 'unknown', description: status };

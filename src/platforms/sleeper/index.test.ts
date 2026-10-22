@@ -285,6 +285,22 @@ describe('loadProjections', () => {
     expect(projections.get('CLE')?.opponent).toBe('PIT');
     expect(projections.get('999')).toEqual({ opponent: null, stats: {} });
   });
+
+  it('carries the injury designation each row embeds, and says nothing when it does not (#184)', async () => {
+    client.getProjections.mockResolvedValue([
+      { player_id: '1', opponent: 'LV', stats: {}, player: { injury_status: 'Out' } },
+      { player_id: '2', opponent: 'LV', stats: {}, player: { injury_status: null } },
+      { player_id: '3', opponent: 'LV', stats: {}, player: {} },
+      { player_id: '4', opponent: 'LV', stats: {} },
+    ]);
+
+    const projections = await sleeperProvider.loadProjections!('2026', 8, ['WR']);
+
+    expect(projections.get('1')?.injury).toEqual({ status: 'out', description: 'Out' });
+    expect(projections.get('2')?.injury).toBeNull();
+    expect(projections.get('3')).not.toHaveProperty('injury');
+    expect(projections.get('4')).not.toHaveProperty('injury');
+  });
 });
 
 describe('findLeagues', () => {

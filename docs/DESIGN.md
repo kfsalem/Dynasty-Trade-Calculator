@@ -1368,6 +1368,19 @@ including the two halves that must not move together: an injured player is out o
 this season's lineup and still in the three-year projection, because a torn ACL
 this August is not a fact about 2029.
 
+**The designation is only as fresh as its source.** *(2026-10-22, #184)* It was
+read from the full player index, which is cached for a day because Sleeper asks
+callers not to pull it more often than that. A day is long enough to miss a
+Saturday-night ruling: the starter reads as healthy on Sunday morning and the
+lineup panel keeps him in. Sleeper itself was never the stale part. Both the index
+and the weekly projections are held for about ten minutes at its CDN, and each
+projection row embeds the player with the same `injury_status`, matching the
+index on all 3,302 rows when checked. The projections are refetched every half
+hour, so in a game week `engine/freshInjuries` lays their designation over the
+index for rostered players and free agents alike. Where the two disagree, the
+projection wins, including when it says a designation has lifted. A row that does
+not carry the field changes nothing. No value moves, for the reason above.
+
 **A trade you can paste into the group chat.** *(2026-08-03, closes #12)*
 
 Trades are argued in league chats, and until now the app could only be described

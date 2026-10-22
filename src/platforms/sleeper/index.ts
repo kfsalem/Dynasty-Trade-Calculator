@@ -38,6 +38,7 @@ import {
   mapAwardedPoints,
   mapClaimedTotals,
   mapFreeAgents,
+  mapInjury,
   mapLeague,
   mapMatchups,
   mapPlayer,
@@ -205,7 +206,13 @@ export const sleeperProvider: LeagueProvider = {
       for (const [key, value] of Object.entries(row.stats)) {
         if (typeof value === 'number' && value !== 0) stats[key] = value;
       }
-      out.set(row.player_id, { opponent: row.opponent ?? null, stats });
+      const status = row.player?.injury_status;
+      out.set(row.player_id, {
+        opponent: row.opponent ?? null,
+        stats,
+        // Undefined when the row did not carry the field, so silence is not read as healthy.
+        ...(status !== undefined && { injury: mapInjury(status) ?? null }),
+      });
     }
     return out;
   },
