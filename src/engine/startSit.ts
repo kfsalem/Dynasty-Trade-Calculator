@@ -55,8 +55,23 @@ import { outscoreChance, WORTH_ACTING } from './projections';
  * `bye` outranks `sidelined` because it is the more certain of the two — a
  * questionable starter usually plays and a team on bye never does — and because
  * it is the one a manager is least likely to have noticed himself.
+ *
+ * `unprojected` is the last of the facts (#179): on a projection plan, a man
+ * with no designation and no bye whom the week's projections give nothing,
+ * which almost always means he is inactive before his designation catches up.
+ * As an `upgrade` it read as "85% likely to outscore him", which undersold it —
+ * benching a man who was on bye or projected for nothing came true 35 times in
+ * 36 over 2024–26 — and a newcomer projected under about 2.6 points left the
+ * row below the bar, filed as too close to call.
  */
-export type ChangeCause = 'empty' | 'dropped' | 'bye' | 'sidelined' | 'upgrade' | 'move';
+export type ChangeCause =
+  | 'empty'
+  | 'dropped'
+  | 'bye'
+  | 'sidelined'
+  | 'unprojected'
+  | 'upgrade'
+  | 'move';
 
 /**
  * How much better the recommended man has to be before the app calls it a
@@ -485,7 +500,9 @@ export function startSit({
       const gain =
         (startIsNew ? (start?.winNowValue ?? 0) : 0) - (leaving ? sit.winNowValue : 0);
 
-      const why = cause({ setId, sit, sitStays, startIsNew, off });
+      const unprojected =
+        basis === 'projection' && sit !== null && (projected?.get(sit.player.id) ?? 0) <= 0;
+      const why = cause({ setId, sit, sitStays, startIsNew, off, unprojected });
 
       /*
         Measured between the two men in this slot, not from `gain`.
@@ -615,7 +632,7 @@ function linkChains(
     }
   }
 
-  const FACTS: ChangeCause[] = ['empty', 'dropped', 'bye', 'sidelined'];
+  const FACTS: ChangeCause[] = ['empty', 'dropped', 'bye', 'sidelined', 'unprojected'];
 
   for (let id = 0; id < next; id++) {
     const rows = changes.filter((_, row) => chainOf[row] === id);
@@ -660,12 +677,15 @@ function cause({
   sitStays,
   startIsNew,
   off,
+  unprojected,
 }: {
   setId: string | null;
   sit: ValuedPlayer | null;
   sitStays: boolean;
   startIsNew: boolean;
   off: ReadonlySet<string>;
+  /** On a projection plan, `sit` is projected for nothing this week. */
+  unprojected: boolean;
 }): ChangeCause {
   if (setId === null) return 'empty';
   if (!sit) return 'dropped';
@@ -677,5 +697,7 @@ function cause({
   // receiver whose team is off is not questionable, he is unavailable, and
   // "check again before kickoff" is the wrong thing to tell his manager.
   if (onBye(sit.player.team, off)) return 'bye';
-  return canPlayThisWeek(sit.player) ? 'upgrade' : 'sidelined';
+  if (!canPlayThisWeek(sit.player)) return 'sidelined';
+  // After the designation, which names the reason; this only says there is one.
+  return unprojected ? 'unprojected' : 'upgrade';
 }

@@ -46,6 +46,15 @@ export function describeChange(change: LineupChange): string {
       return name ? `${name} — ${label.toLowerCase()}.` : `${label}.`;
     }
 
+    /*
+      No percentage: the curve would price this from the newcomer's projection
+      alone, and the man going to the bench is expected to score nothing. Not
+      "inactive" either — the app does not know why, only that the week's
+      projections have no game for him (#179).
+    */
+    case 'unprojected':
+      return `${name} is projected for nothing this week, which usually means he is not expected to play.`;
+
     case 'move':
       return 'The same players, in different slots. Worth nothing on its own.';
 

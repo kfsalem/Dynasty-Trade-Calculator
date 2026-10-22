@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { evidenceLine, outscoreSentence } from './lineupText';
+import { describeChange, evidenceLine, outscoreSentence } from './lineupText';
+import type { LineupChange } from '../engine/startSit';
 import type { WeekEvidence } from '../engine/weekEvidence';
 
 const evidence = (overrides: Partial<WeekEvidence> = {}): WeekEvidence => ({
@@ -22,6 +23,23 @@ describe('outscoreSentence', () => {
     expect(outscoreSentence(0.52, 'Pittman', 10.1, 9.6)).toBe(
       'A coin flip with Pittman: 10.1 projected against 9.6.',
     );
+  });
+});
+
+describe('describeChange', () => {
+  it('says a starter projected for nothing is not expected to play, with no percentage (#179)', () => {
+    const change = {
+      cause: 'unprojected',
+      chance: 0.85,
+      sitStays: false,
+      sit: { player: { name: 'Pittman' } },
+    } as unknown as LineupChange;
+
+    const sentence = describeChange(change);
+    expect(sentence).toBe(
+      'Pittman is projected for nothing this week, which usually means he is not expected to play.',
+    );
+    expect(sentence).not.toMatch(/%/);
   });
 });
 
