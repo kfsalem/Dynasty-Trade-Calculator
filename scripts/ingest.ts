@@ -41,6 +41,7 @@ import { reduceSnapCounts } from './ingest/snapCounts';
 import { reduceWeeklyStats } from './ingest/weeklyStats';
 import { reduceScoring } from './ingest/scoring';
 import { ingestValueSnapshots } from './ingest/valueSnapshot';
+import { ingestTrackRecord } from './ingest/trackRecord';
 
 const OUT_DIR = fileURLToPath(new URL('../public/data/', import.meta.url));
 
@@ -399,6 +400,10 @@ async function main(): Promise<void> {
   // data, are never downloaded unless FantasyCalc fails, and so sit outside
   // both the index and the budget below. See `ingest/valueSnapshot`.
   await ingestValueSnapshots(OUT_DIR, generatedAt);
+
+  // Also beside them: it is fetched only when a reader opens the lineup panel's
+  // record, and it never fails a build. See `ingest/trackRecord`.
+  await ingestTrackRecord(OUT_DIR, generatedAt);
 
   const index: DataIndex = { generatedAt, datasets };
   await writeFile(`${OUT_DIR}${DATA_FILES.index}`, `${JSON.stringify(index, null, 2)}\n`);

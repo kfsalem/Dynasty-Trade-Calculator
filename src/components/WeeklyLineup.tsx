@@ -21,6 +21,7 @@ import {
 } from '../lib/format';
 import { PlayerAvatar } from './PlayerAvatar';
 import { PlayerName } from './PlayerName';
+import { TrackRecord } from './TrackRecord';
 import {
   changeAction,
   describeChange,
@@ -345,6 +346,13 @@ export function WeeklyLineup({
           ones that can still change.
         </p>
       )}
+
+      {/*
+        Last of the folded sections, after every action: it is the receipt for
+        the percentages above, and only where the panel states them — a
+        value-ranked plan has no odds to grade.
+      */}
+      {plan.basis === 'projection' && <TrackRecord />}
 
       <div className="mt-4">
         <button
