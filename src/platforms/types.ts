@@ -1,4 +1,5 @@
 import type {
+  InjuryStatus,
   League,
   LineupSlot,
   Matchup,
@@ -531,6 +532,12 @@ export interface PlayerProjection {
   opponent: string | null;
   /** Stat line keyed by the platform's scoring keys. Zeros may be absent. */
   stats: Readonly<Record<string, number>>;
+  /**
+   * His injury designation as of this projection (#184): null when he has none,
+   * absent when the platform did not say. Fresher than the player index, which
+   * is cached for a day — see `engine/freshInjuries`.
+   */
+  injury?: InjuryStatus | null;
 }
 
 /** Keyed by player id — a defence by its team code, as on a roster. */

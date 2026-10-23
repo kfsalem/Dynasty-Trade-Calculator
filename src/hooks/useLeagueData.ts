@@ -13,6 +13,7 @@ import {
   type FreeAgentBoard,
 } from '../engine/freeAgents';
 import { projectedPoints } from '../engine/projections';
+import { withFreshInjuries } from '../engine/freshInjuries';
 import { evidenceThrough, weekEvidence } from '../engine/weekEvidence';
 import { slotEligibility } from '../engine/rosterValue';
 import { pricedPositions, valueLeague, type LeagueActivity } from '../engine/replacement';
@@ -435,7 +436,16 @@ export function useLeagueSummaries(leagueId: string | null) {
     projectionWeek,
     startedPositions,
   );
-  const gamesQuery = useWeekGames(leagueQuery.data?.currentSeason, projectionWeek);
+  /*
+    Everything below reads the league through this, not `leagueQuery.data`:
+    the same bundle with this week's injury designations laid over the day-old
+    index (#184), so a Saturday-night ruling reaches Sunday's lineup.
+  */
+  const leagueData = useMemo(
+    () => withFreshInjuries(leagueQuery.data, projectionsQuery.data),
+    [leagueQuery.data, projectionsQuery.data],
+  );
+  const gamesQuery = useWeekGames(leagueData?.currentSeason, projectionWeek);
   const weekMatchupsQuery = useWeekMatchups(leagueId, projectionWeek);
   const projected = useMemo(
     () =>
@@ -475,7 +485,7 @@ export function useLeagueSummaries(leagueId: string | null) {
    * its own rather than trusting one to speak for both.
    */
   const activity = useMemo<LeagueActivity | undefined>(() => {
-    const season = leagueQuery.data?.currentSeason;
+    const season = leagueData?.currentSeason;
     if (!season) return undefined;
 
     const played = Number(season);
@@ -487,7 +497,7 @@ export function useLeagueSummaries(leagueId: string | null) {
       usage: usageLive && usage ? usage : new Map(),
       current: snapsLive || usageLive,
     };
-  }, [leagueQuery.data, snapsQuery.data, opportunityQuery.data, snaps, usage]);
+  }, [leagueData, snapsQuery.data, opportunityQuery.data, snaps, usage]);
 
   /**
    * Teams with no game this week.
@@ -516,14 +526,14 @@ export function useLeagueSummaries(leagueId: string | null) {
    * not the same value as the empty set a week with no byes produces.
    */
   const byeTeams = useMemo(() => {
-    const bundle = leagueQuery.data;
+    const bundle = leagueData;
     if (!isGameWeek(bundle?.seasonPhase ?? 'unknown')) return null;
     return teamsOnBye(
       byesQuery.data,
       bundle?.currentSeason ? Number(bundle.currentSeason) : null,
       bundle?.currentWeek ?? null,
     );
-  }, [byesQuery.data, leagueQuery.data]);
+  }, [byesQuery.data, leagueData]);
 
   /**
    * Market values feed one pass of lineups, which reveals how many of each
@@ -577,7 +587,7 @@ export function useLeagueSummaries(leagueId: string | null) {
   );
 
   const adjusted = useMemo(() => {
-    const bundle = leagueQuery.data;
+    const bundle = leagueData;
     const market = valuesQuery.data?.bySleeperId;
     if (!bundle || !market) return undefined;
 
@@ -589,7 +599,7 @@ export function useLeagueSummaries(leagueId: string | null) {
       activity,
       scoringStats,
     );
-  }, [leagueQuery.data, valuesQuery.data, activity, scoringStats]);
+  }, [leagueData, valuesQuery.data, activity, scoringStats]);
 
   /**
    * The waiver wire, priced against the levels the rostered pool produced.
@@ -604,7 +614,7 @@ export function useLeagueSummaries(leagueId: string | null) {
    * it on screen.
    */
   const freeAgents = useMemo<FreeAgentBoard | undefined>(() => {
-    const bundle = leagueQuery.data;
+    const bundle = leagueData;
     const market = valuesQuery.data?.bySleeperId;
     if (!bundle || !market || !adjusted) return undefined;
 
@@ -616,7 +626,7 @@ export function useLeagueSummaries(leagueId: string | null) {
       usage,
       current: activity?.current ?? false,
     });
-  }, [leagueQuery.data, valuesQuery.data, adjusted, snaps, usage, activity]);
+  }, [leagueData, valuesQuery.data, adjusted, snaps, usage, activity]);
 
   /**
    * The subset of that board a manager could actually claim today.
@@ -627,14 +637,14 @@ export function useLeagueSummaries(leagueId: string | null) {
    * face value.
    */
   const claimable = useMemo(() => {
-    const bundle = leagueQuery.data;
+    const bundle = leagueData;
     if (!bundle || !freeAgents) return undefined;
     return claimableFreeAgents(freeAgents, bundle.league, bundle.currentSeason);
-  }, [freeAgents, leagueQuery.data]);
+  }, [freeAgents, leagueData]);
 
   /** What each player has done this season, shown beside the lineup's calls. */
   const evidence = useMemo(() => {
-    const season = leagueQuery.data?.currentSeason;
+    const season = leagueData?.currentSeason;
     if (!season || !settings) return undefined;
     return weekEvidence({
       season: Number(season),
@@ -645,7 +655,7 @@ export function useLeagueSummaries(leagueId: string | null) {
       rules: settings.scoring,
     });
   }, [
-    leagueQuery.data,
+    leagueData,
     settings,
     snapsQuery.data,
     opportunityQuery.data,
@@ -655,21 +665,21 @@ export function useLeagueSummaries(leagueId: string | null) {
 
   /** How current that evidence is, so the panel can date it. */
   const evidenceWeek = useMemo(() => {
-    const season = leagueQuery.data?.currentSeason;
+    const season = leagueData?.currentSeason;
     if (!season) return null;
     return evidenceThrough(Number(season), [
       snapsQuery.data,
       opportunityQuery.data,
       scoringQuery.data,
     ]);
-  }, [leagueQuery.data, snapsQuery.data, opportunityQuery.data, scoringQuery.data]);
+  }, [leagueData, snapsQuery.data, opportunityQuery.data, scoringQuery.data]);
 
   /** The wire as the lineup panel may offer it: no undrafted rookie class. */
   const wireBoard = useMemo(() => {
-    const bundle = leagueQuery.data;
+    const bundle = leagueData;
     if (!bundle || !freeAgents) return undefined;
     return lineupBoard(freeAgents, bundle.league, bundle.currentSeason);
-  }, [freeAgents, leagueQuery.data]);
+  }, [freeAgents, leagueData]);
 
   const summaries = useMemo<RosterSummary[]>(
     () => [...(adjusted?.summaries ?? [])].sort((a, b) => b.starterValue - a.starterValue),
@@ -677,7 +687,7 @@ export function useLeagueSummaries(leagueId: string | null) {
   );
 
   const picks = useMemo<DraftPick[]>(() => {
-    const bundle = leagueQuery.data;
+    const bundle = leagueData;
     const table = pickValuesQuery.data;
     if (!bundle || !table || !adjusted) return [];
 
@@ -695,7 +705,7 @@ export function useLeagueSummaries(leagueId: string | null) {
       adjusted.shrink,
       bundle.draftOrders,
     );
-  }, [leagueQuery.data, pickValuesQuery.data, adjusted, summaries]);
+  }, [leagueData, pickValuesQuery.data, adjusted, summaries]);
 
   /**
    * Everything the playoff simulation needs, or undefined if it cannot run.
@@ -707,7 +717,7 @@ export function useLeagueSummaries(leagueId: string | null) {
    * nothing or to say the season is done.
    */
   const oddsContext = useMemo<OddsContext | undefined>(() => {
-    const bundle = leagueQuery.data;
+    const bundle = leagueData;
     const schedule = scheduleQuery.data?.matchups;
     if (!bundle || !schedule || !adjusted || summaries.length === 0) return undefined;
 
@@ -730,7 +740,7 @@ export function useLeagueSummaries(leagueId: string | null) {
       // them, and assumed where there are not — see `calibrate`.
       model: calibrate(teams, playedFixtures(schedule)),
     };
-  }, [leagueQuery.data, scheduleQuery.data, adjusted, summaries]);
+  }, [leagueData, scheduleQuery.data, adjusted, summaries]);
 
   /**
    * The league as it stands, simulated — no trade, just the season.
@@ -756,7 +766,7 @@ export function useLeagueSummaries(leagueId: string | null) {
    * would be zero there anyway; this makes it explicit rather than incidental.
    */
   const season = useMemo<SeasonOdds | undefined>(() => {
-    const bundle = leagueQuery.data;
+    const bundle = leagueData;
     if (!bundle || bundle.seasonPhase !== 'regular' || !baselineOdds.odds) return undefined;
 
     const weeksTotal = bundle.league.settings.playoffWeekStart - 1;
@@ -771,7 +781,7 @@ export function useLeagueSummaries(leagueId: string | null) {
       weeksPlayed: Math.min(Math.max(week - 1, 0), weeksTotal),
       weeksTotal,
     };
-  }, [leagueQuery.data, baselineOdds.odds]);
+  }, [leagueData, baselineOdds.odds]);
 
   const roles = useMemo(() => {
     const snapFile = snapsQuery.data;
@@ -840,15 +850,15 @@ export function useLeagueSummaries(leagueId: string | null) {
   }, [leagueQuery.isError, valuesQuery.isError, leagueRefetch, valuesRefetch]);
 
   return {
-    league: leagueQuery.data?.league,
-    players: leagueQuery.data?.players,
+    league: leagueData?.league,
+    players: leagueData?.players,
     /** What the app can and cannot reproduce of this league's scoring rules. */
     scoringFidelity,
     /** How this league's scoring moved each position against the market's. */
     premium: adjusted?.premium,
     /** Where the NFL calendar stands, so a week number can be read correctly. */
-    seasonPhase: leagueQuery.data?.seasonPhase,
-    currentWeek: leagueQuery.data?.currentWeek ?? null,
+    seasonPhase: leagueData?.seasonPhase,
+    currentWeek: leagueData?.currentWeek ?? null,
     values: adjusted?.values,
     scarcity: adjusted?.scarcity,
     /** Positions with a published market, for telling "~0" from "no market". */
