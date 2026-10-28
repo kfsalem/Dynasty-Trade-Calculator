@@ -1699,6 +1699,50 @@ The panel says which basis it used. Odds carry more authority than they have
 earned, and the difference between a number tuned to your league and one assumed
 from a typical one belongs where the user can find it.
 
+**Graded against finished seasons, and given drift.** *(2026-10-27, #164)*
+
+`npm run grade:odds` replays every regular-season week of the six finished
+seasons of the two test leagues (2023–2025): the standings before the week, the
+fixtures left, `calibrate` on the weeks played and `simulate` as the app runs
+it. Then it grades each team's odds against Sleeper's winners bracket. That is
+840 statements from 60 team-seasons. Wins then points for, the cut the
+simulation sorts by, reproduces all six real brackets, so the Tight Ends
+league's two divisions have never changed who got in.
+
+Strength is the one input that cannot be replayed, because FantasyCalc
+publishes only today's values. The replay uses each roster's best lineup by that
+week's Sleeper projection instead, carrying a man's latest projection through
+his bye.
+
+- **From week 8 the odds are calibrated.** Stated 60–80%, 70% made it; stated
+  80–95%, 88%.
+- **Before that they were overconfident.** In weeks 1–7, teams given 5–20% made
+  it 42% of the time. In weeks 1–4 the odds scored worse than stating the base
+  rate to everyone (Brier 0.261 against 0.240).
+
+**The simulation held every team at today's strength all season.** Weekly noise
+is independent, so over ten games it averages away and a strong roster reads as
+nearly safe. But strength itself moves: starters get hurt and managers trade.
+Beyond weekly noise, a team's scoring over the rest of the season strayed from
+its strength with a variance of about four points² per game left, which is a
+random walk of about 3.5 points a week. `STRENGTH_DRIFT` adds that walk. Each
+simulated week after the current one, every team's expected score takes a
+step, so all of its remaining games move together.
+
+It improves the odds overall by a Brier score of 0.003 (95% interval 0.001 to
+0.005, resampling team-seasons) and by 0.010 in weeks 1–4. No week gets worse.
+A larger drift scores better still on this replay, but 3.5 is what the scores
+measure, and it is not tuned.
+
+**One finding is left open, because it may belong to the stand-in.** Early on,
+strength predicted the rest of the season more weakly than `pointsPerSD`
+assumes. At week 1 the slope against points still to come was 3.2 per SD,
+against the model's 7. In weeks 3–4 `calibrate` read 9–12, because it pairs
+today's strength with points already scored, against 5.5–6.9 going forward.
+FantasyCalc's season-long values may predict a season better than one week's
+projection does, and there is no way to check it until the app's own odds are
+kept and graded.
+
 ---
 
 ### What comes next

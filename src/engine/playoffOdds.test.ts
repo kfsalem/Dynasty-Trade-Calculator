@@ -166,6 +166,28 @@ describe('simulate — the model', () => {
     expect(best).toBeLessThan(0.95);
   });
 
+  /**
+   * Drift (#164): over a long season a team's strength wanders, and all of its
+   * remaining games wander together. Held still, a strong roster's ten games
+   * average its luck away and it reads as nearly safe.
+   */
+  it('makes a favourite less certain over a long season', () => {
+    const teams = [team(1, { strength: 1600 }), ...evenTeams(10).slice(1)];
+    const remaining = Array.from({ length: 12 }, (_, i) => round(i + 2, 10)).flat();
+    const input = { teams, remaining, playoffTeams: 6, iterations: 4000 };
+
+    const still = oddsFor(simulate({ ...input, drift: 0 }), 1);
+    const drifting = oddsFor(simulate(input), 1);
+    expect(drifting).toBeLessThan(still);
+    expect(drifting).toBeGreaterThan(0.6);
+  });
+
+  it('leaves the week being played alone, since strength was measured for it', () => {
+    const teams = [team(1, { strength: 1600 }), ...evenTeams(4).slice(1)];
+    const input = { teams, remaining: round(14, 4), playoffTeams: 2, iterations: 2000 };
+    expect(simulate(input)).toEqual(simulate({ ...input, drift: 0 }));
+  });
+
   it('counts games already banked, not just the ones left', () => {
     const strong = team(1, { wins: 8, pointsFor: 1200 });
     const weak = team(2, { wins: 0, losses: 8, pointsFor: 700 });
