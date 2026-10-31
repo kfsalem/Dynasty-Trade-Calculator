@@ -44,6 +44,7 @@ import { reduceScoring } from './ingest/scoring';
 import { ingestValueSnapshots } from './ingest/valueSnapshot';
 import { appendValueHistory } from './ingest/valueHistory';
 import { ingestTrackRecord } from './ingest/trackRecord';
+import { ingestSampleLeague } from './ingest/sampleLeague';
 import { ingestProjected } from './ingest/projectedSoFar';
 
 const OUT_DIR = fileURLToPath(new URL('../public/data/', import.meta.url));
@@ -421,6 +422,10 @@ async function main(): Promise<void> {
   // Also beside them: it is fetched only when a reader opens the lineup panel's
   // record, and it never fails a build. See `ingest/trackRecord`.
   await ingestTrackRecord(OUT_DIR, generatedAt);
+
+  // Also beside them: downloaded only when a visitor asks for the sample
+  // league, and it never fails a build. See `ingest/sampleLeague` (#159).
+  await ingestSampleLeague(OUT_DIR, generatedAt);
 
   const index: DataIndex = { generatedAt, datasets };
   await writeFile(`${OUT_DIR}${DATA_FILES.index}`, `${JSON.stringify(index, null, 2)}\n`);
