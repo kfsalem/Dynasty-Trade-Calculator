@@ -1,7 +1,13 @@
 import { useMemo } from 'react';
 import type { DraftPick, League, Player, PlayerValue } from '../types';
 import type { RosterSummary } from '../engine/rosterValue';
-import { suggestTrades, type SuggestContext, type SuggestedTrade, type TradeAsset } from '../engine/suggest';
+import {
+  suggestTrades,
+  tradesForPlayer,
+  type SuggestContext,
+  type SuggestedTrade,
+  type TradeAsset,
+} from '../engine/suggest';
 import type { FreeAgent } from '../engine/freeAgents';
 import type { RoleTrends } from '../engine/roleTrend';
 import type { ManagerModel } from '../engine/managers';
@@ -49,6 +55,12 @@ interface Props {
    * engine then makes exactly the suggestions it always did.
    */
   claimable?: FreeAgent[];
+  /**
+   * A player to build every offer around (#165), from his panel. Null for the
+   * open search. The page says which it is showing and offers the way back.
+   */
+  pinnedPlayerId?: string | null;
+  onClearPin?: () => void;
 }
 
 const TRADES: Countable = { one: 'trade', many: 'trades' };
@@ -265,6 +277,8 @@ export function TradeSuggestions({
   managersLoading,
   managersFailed,
   claimable,
+  pinnedPlayerId = null,
+  onClearPin,
 }: Props) {
   const result = useMemo(() => {
     const ctx: SuggestContext = {
@@ -278,8 +292,30 @@ export function TradeSuggestions({
       managers,
       claimable,
     };
-    return suggestTrades(myRosterId, ctx);
-  }, [league, players, values, picks, summaries, myRosterId, trends, odds, managers, claimable]);
+    return pinnedPlayerId
+      ? tradesForPlayer(myRosterId, pinnedPlayerId, ctx)
+      : suggestTrades(myRosterId, ctx);
+  }, [
+    league,
+    players,
+    values,
+    picks,
+    summaries,
+    myRosterId,
+    trends,
+    odds,
+    managers,
+    claimable,
+    pinnedPlayerId,
+  ]);
+
+  const pinned = pinnedPlayerId
+    ? {
+        name: players.get(pinnedPlayerId)?.name ?? 'This player',
+        direction: 'direction' in result ? result.direction : 'buy',
+        owner: league.rosters.find((r) => r.playerIds.includes(pinnedPlayerId))?.teamName,
+      }
+    : null;
 
   /**
    * The deadline, said out loud while there is still time to act on it.
@@ -295,6 +331,33 @@ export function TradeSuggestions({
 
   const partners = summaries.length - 1;
   const firstPartner = summaries.find((s) => s.rosterId !== myRosterId)?.rosterId;
+  /**
+   * Where "Build one in the calculator" starts: empty against the first
+   * partner, or with the pinned player already on his side of the table.
+   */
+  const startingTrade = (): PendingTrade => {
+    const none = { playerIds: [] as string[], pickIds: [] as string[] };
+    const ownerId = pinnedPlayerId
+      ? league.rosters.find((r) => r.playerIds.includes(pinnedPlayerId))?.rosterId
+      : undefined;
+    if (pinnedPlayerId && ownerId !== undefined && ownerId !== myRosterId) {
+      return {
+        teamA: myRosterId,
+        teamB: ownerId,
+        givesA: none,
+        givesB: { playerIds: [pinnedPlayerId], pickIds: [] },
+      };
+    }
+    return {
+      teamA: myRosterId,
+      teamB: firstPartner ?? myRosterId,
+      givesA: pinnedPlayerId && ownerId === myRosterId
+        ? { playerIds: [pinnedPlayerId], pickIds: [] }
+        : none,
+      givesB: none,
+    };
+  };
+
   // The search ran and found nothing, as against a rule that stopped it
   // before it started (trading off, deadline passed, a spare-less roster).
   const searched = result.considered > 0;
@@ -319,12 +382,28 @@ export function TradeSuggestions({
       */}
       <div>
         <h2 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
-          Trade ideas
+          {pinned
+            ? pinned.direction === 'buy'
+              ? `What ${pinned.name} would cost`
+              : `Who would trade for ${pinned.name}`
+            : 'Trade ideas'}
         </h2>
         <p className="mt-1 text-sm text-muted">
-          Offers where both teams come out ahead — measured in what each team actually
-          wants, which is not the same thing for a contender and a rebuilder.
+          {pinned
+            ? pinned.direction === 'buy'
+              ? `Packages ${pinned.owner ?? 'his manager'} would take for him, cheapest first. Both teams come out ahead in every one.`
+              : 'The teams he does the most for, each with its best offer that works for both sides.'
+            : 'Offers where both teams come out ahead — measured in what each team actually wants, which is not the same thing for a contender and a rebuilder.'}
         </p>
+        {pinned && onClearPin && (
+          <button
+            type="button"
+            onClick={onClearPin}
+            className="-mx-2 mt-1 inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-medium text-accent hover:bg-surface fine:min-h-8"
+          >
+            Back to all trade ideas
+          </button>
+        )}
 
         {(managers || managersLoading || managersFailed) && (
           <details className="group mt-2">
@@ -418,14 +497,7 @@ export function TradeSuggestions({
               <button
                 type="button"
                 className="btn-primary text-sm"
-                onClick={() =>
-                  onOpenInCalculator({
-                    teamA: myRosterId,
-                    teamB: firstPartner,
-                    givesA: { playerIds: [], pickIds: [] },
-                    givesB: { playerIds: [], pickIds: [] },
-                  })
-                }
+                onClick={() => onOpenInCalculator(startingTrade())}
               >
                 Build one in the calculator
               </button>
