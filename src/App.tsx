@@ -475,6 +475,17 @@ function App() {
   */
   const [openPlayerId, setOpenPlayerId] = useState<string | null>(null);
   useEffect(() => setOpenPlayerId(null), [leagueId]);
+  /*
+    The player a trade search is built around (#165), set from his panel and
+    shown on Trade ideas until cleared. Cleared with the league for the same
+    reason the panel is.
+  */
+  const [pinnedPlayerId, setPinnedPlayerId] = useState<string | null>(null);
+  useEffect(() => setPinnedPlayerId(null), [leagueId]);
+  const tradeFor = useCallback((id: string) => {
+    setPinnedPlayerId(id);
+    setTab('ideas');
+  }, []);
   const openPlayer = useCallback((id: string) => setOpenPlayerId(id), []);
   const closePlayer = useCallback(() => setOpenPlayerId(null), []);
   // A pick id ("2027-1-3") and a player id never collide, so one id in state
@@ -741,6 +752,8 @@ function App() {
                     managersLoading={managers.loading}
                     managersFailed={managers.failed}
                     claimable={claimable}
+                    pinnedPlayerId={pinnedPlayerId}
+                    onClearPin={() => setPinnedPlayerId(null)}
                     onOpenInCalculator={(trade) => {
                       seedTrade(trade);
                       setTab('trade');
@@ -834,6 +847,9 @@ function App() {
         priced={priced}
         numQbs={league?.settings.numQbs === 2 ? 2 : 1}
         onClose={closePlayer}
+        onTrade={
+          myRosterId !== null && league && !league.settings.tradesDisabled ? tradeFor : undefined
+        }
       />
     </main>
     </OpenPlayerContext.Provider>

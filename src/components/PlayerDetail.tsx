@@ -28,6 +28,12 @@ interface Props {
   /** Which value history the panel charts: the league's QB setting (#158). */
   numQbs?: HistoryQbs;
   onClose: () => void;
+  /**
+   * Start a trade from this player (#165): what he would cost, or who would
+   * want him. Absent where no trade can be built from here — no claimed team,
+   * or a league with trading switched off.
+   */
+  onTrade?: (playerId: string) => void;
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -173,6 +179,7 @@ export function PlayerDetail({
   priced,
   numQbs = 1,
   onClose,
+  onTrade,
 }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const returnTo = useRef<HTMLElement | null>(null);
@@ -331,6 +338,19 @@ export function PlayerDetail({
                     ? `Would start on ${teams(detail.wouldStartOn)} other than his own.`
                     : `Would start on ${teams(detail.wouldStartOn)} in this league.`}
               </p>
+            )}
+            {/* Free agents are claimed, not traded for, so the wire has no button. */}
+            {detail.owner && onTrade && (
+              <button
+                type="button"
+                onClick={() => {
+                  onTrade(detail.player.id);
+                  close();
+                }}
+                className="btn-secondary mt-2 text-sm"
+              >
+                {detail.owner.mine ? 'Who would trade for him?' : 'What would he cost?'}
+              </button>
             )}
           </Section>
 

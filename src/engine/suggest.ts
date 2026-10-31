@@ -1419,20 +1419,22 @@ function buildSuggestion(
   };
 }
 
-export function suggestTrades(
+/**
+ * What every search checks before it builds a single package: the league's
+ * trading rules, and an analysis of every roster. Shared by `suggestTrades` and
+ * `tradesForPlayer` so the two can never disagree about whether a trade is
+ * possible at all.
+ */
+function prepareSearch(
   myRosterId: number,
   ctx: SuggestContext,
-  options: SuggestOptions = {},
-): SuggestionResult {
-  const {
-    maxResults = 6,
-    perPartner = 2,
-    tolerance = 0.1,
-    candidatesPerTeam = 5,
-    minBenefitShare = 0.005,
-  } = options;
-
-  const { pickTrading, tradesDisabled } = ctx.league.settings;
+):
+  | { early: SuggestionResult }
+  | {
+      analyses: Map<number, TeamAnalysis>;
+      mine: { summary: RosterSummary; analysis: TeamAnalysis };
+    } {
+  const { tradesDisabled } = ctx.league.settings;
 
   /*
     Two league rules that end the search before it starts, checked here rather
@@ -1444,20 +1446,24 @@ export function suggestTrades(
   */
   if (tradesDisabled) {
     return {
-      trades: [],
-      considered: 0,
-      rejections: noRejections(),
-      note: 'This league has trading switched off, so there are no offers to make. Everything else in the app still works — the rosters, the values and the weekly lineup do not depend on being able to trade.',
+      early: {
+        trades: [],
+        considered: 0,
+        rejections: noRejections(),
+        note: 'This league has trading switched off, so there are no offers to make. Everything else in the app still works — the rosters, the values and the weekly lineup do not depend on being able to trade.',
+      },
     };
   }
 
   const window = tradeWindow(ctx.league.settings, ctx.season);
   if (!window.open) {
     return {
-      trades: [],
-      considered: 0,
-      rejections: noRejections(),
-      note: `This league's trade deadline passed in week ${window.deadline}, so the roster you have is the one you finish the season with. Suggestions come back in the offseason, when they can be acted on again.`,
+      early: {
+        trades: [],
+        considered: 0,
+        rejections: noRejections(),
+        note: `This league's trade deadline passed in week ${window.deadline}, so the roster you have is the one you finish the season with. Suggestions come back in the offseason, when they can be acted on again.`,
+      },
     };
   }
 
@@ -1476,14 +1482,37 @@ export function suggestTrades(
   const myAnalysis = analyses.get(myRosterId);
   if (!mySummary || !myAnalysis) {
     return {
-      trades: [],
-      considered: 0,
-      rejections: noRejections(),
-      note: 'That team is no longer in this league.',
+      early: {
+        trades: [],
+        considered: 0,
+        rejections: noRejections(),
+        note: 'That team is no longer in this league.',
+      },
     };
   }
 
-  const mine = { summary: mySummary, analysis: myAnalysis };
+  return { analyses, mine: { summary: mySummary, analysis: myAnalysis } };
+}
+
+export function suggestTrades(
+  myRosterId: number,
+  ctx: SuggestContext,
+  options: SuggestOptions = {},
+): SuggestionResult {
+  const {
+    maxResults = 6,
+    perPartner = 2,
+    tolerance = 0.1,
+    candidatesPerTeam = 5,
+    minBenefitShare = 0.005,
+  } = options;
+
+  const { pickTrading } = ctx.league.settings;
+
+  const prepared = prepareSearch(myRosterId, ctx);
+  if ('early' in prepared) return prepared.early;
+  const { analyses, mine } = prepared;
+  const { summary: mySummary, analysis: myAnalysis } = mine;
   const myAssets = movableAssets(myAnalysis, mySummary, ctx, candidatesPerTeam);
 
   if (myAssets.length === 0) {
@@ -1678,4 +1707,165 @@ export function suggestTrades(
   const note = ranked.length > 0 ? null : `${searched}${because}${alsoUnder}`;
 
   return { trades: ranked, considered, rejections, note };
+}
+
+/** Which way a player-first search runs: buying his, or selling yours (#165). */
+export type PinnedDirection = 'buy' | 'sell';
+
+export interface PinnedResult extends SuggestionResult {
+  direction: PinnedDirection;
+}
+
+/**
+ * Packages built around one player, the way a manager usually starts (#165):
+ * "I want him, what does he cost?" or "I'm done with him, who wants him?"
+ *
+ * The same search as `suggestTrades` with one asset pinned. Every package still
+ * goes through `buildSuggestion`, so the bar a trade has to clear — balanced on
+ * market value, legal for both rosters, and good for both teams in the terms
+ * each cares about — and the reasons on the card are exactly the ones Trade
+ * ideas uses. Only the pools widen, because the question is narrower:
+ *
+ * - **Buy** (his roster is not yours): his manager receives packages from your
+ *   spare players and your picks, singly and in pairs. Ranked cheapest first,
+ *   since that is the question — what is the least he will take.
+ * - **Sell** (he is yours): every other roster is offered him for what it could
+ *   send back — nothing but a balancing pick, one spare, or a pair — and keeps
+ *   its best offer. Rosters are ranked by how much he does for them.
+ *
+ * Picks are the currency here whatever a roster's window, unlike the open
+ * search, which spends them only for contenders: a manager who asks what a
+ * player costs is asking in every currency he has.
+ */
+export function tradesForPlayer(
+  myRosterId: number,
+  playerId: string,
+  ctx: SuggestContext,
+  options: SuggestOptions = {},
+): PinnedResult {
+  const {
+    maxResults = 5,
+    tolerance = 0.1,
+    candidatesPerTeam = 8,
+    minBenefitShare = 0.005,
+  } = options;
+
+  const owner = ctx.league.rosters.find((r) => r.playerIds.includes(playerId));
+  const direction: PinnedDirection = owner?.rosterId === myRosterId ? 'sell' : 'buy';
+  const empty = (note: string): PinnedResult => ({
+    trades: [],
+    considered: 0,
+    rejections: noRejections(),
+    note,
+    direction,
+  });
+
+  const player = ctx.players.get(playerId);
+  if (!owner || !player) return empty('He is not on a roster in this league, so there is no one to trade with for him.');
+
+  const prepared = prepareSearch(myRosterId, ctx);
+  if ('early' in prepared) return { ...prepared.early, direction };
+  const { analyses, mine } = prepared;
+
+  /** A roster's spare assets for this search: its movable pool, plus every pick it may trade. */
+  const pool = (rosterId: number, exclude: string): TradeAsset[] => {
+    const summary = ctx.summaries.find((s) => s.rosterId === rosterId);
+    const analysis = analyses.get(rosterId);
+    if (!summary || !analysis) return [];
+    const assets = new Map(
+      movableAssets(analysis, summary, ctx, candidatesPerTeam).map((a) => [a.id, a]),
+    );
+    if (ctx.league.settings.pickTrading) {
+      for (const pick of picksForRoster(ctx.picks, rosterId)) {
+        if (pick.marketValue > 0 && !assets.has(pick.id)) assets.set(pick.id, pickAsset(pick));
+      }
+    }
+    assets.delete(exclude);
+    return [...assets.values()]
+      .sort((a, b) => b.value - a.value)
+      .slice(0, candidatesPerTeam * 2);
+  };
+
+  /** Singles, pairs of depth, and pairs of picks — the packages the open search builds. */
+  const packages = (assets: TradeAsset[]): TradeAsset[][] => [
+    ...assets.map((a) => [a]),
+    ...depthPairs(assets, candidatesPerTeam),
+    ...pickPairs(assets, candidatesPerTeam),
+  ];
+
+  const market = ctx.values.get(playerId)?.marketValue ?? 0;
+  const value = ctx.summaries
+    .find((s) => s.rosterId === owner.rosterId)
+    ?.players.find((p) => p.player.id === playerId)?.value ?? market;
+  const pinned = playerAsset(player, value, market);
+
+  const rejections = noRejections();
+  let considered = 0;
+  const found: SuggestedTrade[] = [];
+
+  const offer = (
+    give: TradeAsset[],
+    get: TradeAsset[],
+    partner: { summary: RosterSummary; analysis: TeamAnalysis },
+  ) => {
+    considered++;
+    const trade = buildSuggestion(
+      give,
+      get,
+      myRosterId,
+      partner,
+      mine,
+      ctx,
+      tolerance,
+      minBenefitShare,
+      rejections,
+    );
+    if (trade) found.push(trade);
+  };
+
+  let trades: SuggestedTrade[];
+  if (direction === 'buy') {
+    const summary = ctx.summaries.find((s) => s.rosterId === owner.rosterId);
+    const analysis = analyses.get(owner.rosterId);
+    if (!summary || !analysis) return empty('That team is no longer in this league.');
+    const partner = { summary, analysis };
+    for (const give of packages(pool(myRosterId, playerId))) offer(give, [pinned], partner);
+
+    // Cheapest first: the least his manager will take is the question asked.
+    const cost = (trade: SuggestedTrade) => sum(trade.give.map((a) => a.marketValue));
+    const seen = new Set<string>();
+    trades = found
+      .sort((a, b) => cost(a) - cost(b) || b.score - a.score)
+      .filter((trade) => !seen.has(trade.id) && seen.add(trade.id))
+      .slice(0, maxResults);
+  } else {
+    const best = new Map<number, SuggestedTrade>();
+    for (const summary of ctx.summaries) {
+      if (summary.rosterId === myRosterId) continue;
+      const analysis = analyses.get(summary.rosterId);
+      if (!analysis) continue;
+      const partner = { summary, analysis };
+      const before = found.length;
+      // Nothing back but the pick `balancePackage` adds, then their spares.
+      offer([pinned], [], partner);
+      for (const get of packages(pool(summary.rosterId, playerId))) offer([pinned], get, partner);
+      for (const trade of found.slice(before)) {
+        const seen = best.get(summary.rosterId);
+        if (!seen || trade.score > seen.score) best.set(summary.rosterId, trade);
+      }
+    }
+    // The rosters he does the most for, each with its best offer.
+    trades = [...best.values()]
+      .sort((a, b) => b.theirBenefit.total - a.theirBenefit.total)
+      .slice(0, maxResults);
+  }
+
+  const searched = `Searched ${considered} packages around ${player.name} and found none worth proposing.`;
+  return {
+    trades,
+    considered,
+    rejections,
+    note: trades.length > 0 ? null : searched,
+    direction,
+  };
 }
