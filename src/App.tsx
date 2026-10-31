@@ -1,5 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { LeagueImport } from './components/LeagueImport';
+import { SampleBanner, TrySample } from './components/SampleLeague';
+import { isSampleId, SAMPLE_LEAGUE_ID, SAMPLE_CLAIM_USER } from './platforms/sleeper/sample';
 import { LeagueHeader } from './components/LeagueHeader';
 import { ScoringBadge } from './components/ScoringBadge';
 import { ValuesBadge } from './components/ValuesBadge';
@@ -361,7 +363,9 @@ function App() {
 
   useEffect(() => {
     try {
-      if (leagueId) localStorage.setItem(STORAGE_KEY, leagueId);
+      // The sample is never remembered as the visitor's league (#159): the
+      // next visit starts at the import form, not inside the sample.
+      if (leagueId && !isSampleId(leagueId)) localStorage.setItem(STORAGE_KEY, leagueId);
       else localStorage.removeItem(STORAGE_KEY);
     } catch {
       // Storage disabled — the app still works, it just won't remember.
@@ -554,6 +558,13 @@ function App() {
               <LeagueImport onSubmit={importLeague} busy={isLoading} />
             </div>
 
+            {/* The sample's team is claimed for the visitor, through the same
+                path a username's league is, so My team opens populated. */}
+            <TrySample
+              busy={isLoading}
+              onTry={() => importLeague(SAMPLE_LEAGUE_ID, SAMPLE_CLAIM_USER)}
+            />
+
             {error && (
               <LeagueError error={error as Error} onRetry={retry} retrying={retrying} />
             )}
@@ -568,6 +579,7 @@ function App() {
 
         {ready && (
           <>
+            {isSampleId(league.id) && <SampleBanner onLeave={() => changeLeague(null)} />}
             {/*
               A real tablist, not just the roles.
 

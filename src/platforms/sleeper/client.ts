@@ -1,6 +1,8 @@
 import { isPosition } from '../../types';
 import { fetchJson, ApiError } from '../../lib/http';
 import { cached, TTL } from '../../lib/cache';
+import { isSampleId, sampleResponse } from './sample';
+import type { ZodType } from 'zod';
 import {
   sleeperLeagueSchema,
   sleeperRostersSchema,
@@ -34,6 +36,22 @@ import {
 
 const BASE = 'https://api.sleeper.app/v1';
 
+/**
+ * A league-scoped endpoint: `/league/{id}…` or `/draft/{id}`.
+ *
+ * The one place the sample league (#159) is decided. A sample id reads the
+ * recorded response and validates it with the schema a live one would meet,
+ * so a stale recording fails the same way a changed API would.
+ */
+async function leagueScoped<T>(id: string, path: string, schema: ZodType<T>): Promise<T> {
+  if (!isSampleId(id)) return fetchJson(`${BASE}${path}`, schema);
+  const parsed = schema.safeParse(await sampleResponse(path));
+  if (!parsed.success) {
+    throw new ApiError(`The sample league's ${path} no longer matches what the app reads.`);
+  }
+  return parsed.data;
+}
+
 /** The subset of Sleeper's player blob we actually keep. */
 export interface SlimPlayer {
   id: string;
@@ -61,19 +79,19 @@ export function parseLeagueId(input: string): string | null {
 }
 
 export function getLeague(leagueId: string): Promise<SleeperLeague> {
-  return fetchJson(`${BASE}/league/${leagueId}`, sleeperLeagueSchema);
+  return leagueScoped(leagueId, `/league/${leagueId}`, sleeperLeagueSchema);
 }
 
 export function getRosters(leagueId: string): Promise<SleeperRoster[]> {
-  return fetchJson(`${BASE}/league/${leagueId}/rosters`, sleeperRostersSchema);
+  return leagueScoped(leagueId, `/league/${leagueId}/rosters`, sleeperRostersSchema);
 }
 
 export function getUsers(leagueId: string): Promise<SleeperUser[]> {
-  return fetchJson(`${BASE}/league/${leagueId}/users`, sleeperUsersSchema);
+  return leagueScoped(leagueId, `/league/${leagueId}/users`, sleeperUsersSchema);
 }
 
 export function getTradedPicks(leagueId: string): Promise<SleeperTradedPick[]> {
-  return fetchJson(`${BASE}/league/${leagueId}/traded_picks`, sleeperTradedPicksSchema);
+  return leagueScoped(leagueId, `/league/${leagueId}/traded_picks`, sleeperTradedPicksSchema);
 }
 
 /**
@@ -83,12 +101,12 @@ export function getTradedPicks(leagueId: string): Promise<SleeperTradedPick[]> {
  * already loads, so no `previous_league_id` walking is needed to reach it.
  */
 export function getDrafts(leagueId: string): Promise<SleeperDraft[]> {
-  return fetchJson(`${BASE}/league/${leagueId}/drafts`, sleeperDraftsSchema);
+  return leagueScoped(leagueId, `/league/${leagueId}/drafts`, sleeperDraftsSchema);
 }
 
 /** One draft in full. The list endpoint leaves out `slot_to_roster_id`. */
 export function getDraft(draftId: string): Promise<SleeperDraft> {
-  return fetchJson(`${BASE}/draft/${draftId}`, sleeperDraftSchema);
+  return leagueScoped(draftId, `/draft/${draftId}`, sleeperDraftSchema);
 }
 
 /**
@@ -99,7 +117,7 @@ export function getDraft(draftId: string): Promise<SleeperDraft> {
  * the provider fans them out in parallel rather than walking them.
  */
 export function getMatchups(leagueId: string, week: number): Promise<SleeperMatchup[]> {
-  return fetchJson(`${BASE}/league/${leagueId}/matchups/${week}`, sleeperMatchupsSchema);
+  return leagueScoped(leagueId, `/league/${leagueId}/matchups/${week}`, sleeperMatchupsSchema);
 }
 
 /**
@@ -112,7 +130,7 @@ export function getBracket(
   leagueId: string,
   which: 'winners' | 'losers',
 ): Promise<SleeperBracketMatch[]> {
-  return fetchJson(`${BASE}/league/${leagueId}/${which}_bracket`, sleeperBracketSchema);
+  return leagueScoped(leagueId, `/league/${leagueId}/${which}_bracket`, sleeperBracketSchema);
 }
 
 /**
@@ -127,8 +145,9 @@ export function getTransactions(
   leagueId: string,
   week: number,
 ): Promise<SleeperTransaction[]> {
-  return fetchJson(
-    `${BASE}/league/${leagueId}/transactions/${week}`,
+  return leagueScoped(
+    leagueId,
+    `/league/${leagueId}/transactions/${week}`,
     sleeperTransactionsSchema,
   );
 }
