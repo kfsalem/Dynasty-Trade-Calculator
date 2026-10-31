@@ -9,6 +9,14 @@
          which is the weaker guarantee. Read dist/index.html before "fixing" it. -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- The home screen (#171). The manifest itself is injected by
+         vite-plugin-pwa; iOS still reads its icon and title from these. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="Dynasty" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#f9fafb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0c10" media="(prefers-color-scheme: dark)" />
     <meta
       name="description"
       content="A dynasty fantasy football utility that knows your league: trade calculator, roster analysis, and trade suggestions."

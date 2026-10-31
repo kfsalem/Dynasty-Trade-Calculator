@@ -10,6 +10,7 @@
     "dev": "vite",
     "ingest": "tsx scripts/ingest.ts",
     "og": "tsx scripts/og.ts",
+    "icons": "tsx scripts/icons.ts",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
     "lint": "eslint .",
@@ -49,6 +50,8 @@
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.39.1",
     "vite": "^7.1.2",
-    "vitest": "^4.1.10"
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^4.1.10",
+    "workbox-window": "^7.4.1"
   }
 }

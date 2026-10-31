@@ -28,6 +28,8 @@ import { runsFaab } from './engine/bids';
 import { useMyRoster } from './hooks/useMyRoster';
 import { useSinceLastVisit } from './hooks/useSinceLastVisit';
 import { SinceLastVisit } from './components/SinceLastVisit';
+import { InstallButton, InstallCard } from './components/InstallApp';
+import { AppStatus } from './components/AppStatus';
 import { decodeTrade, encodeTrade, resolveShare } from './lib/share';
 import { picksForRoster } from './engine/picks';
 
@@ -569,9 +571,11 @@ function App() {
                 <ScoringBadge fidelity={scoringFidelity} premium={premium} />
               </>
             )}
+            <InstallButton />
             <ThemeToggle />
           </div>
         </header>
+        <AppStatus />
         {showImport && (
           <div className="mx-auto max-w-xl">
             <p className="text-sm font-semibold uppercase tracking-widest text-accent">
@@ -726,6 +730,7 @@ function App() {
                     since={sinceLastVisit.since}
                     onDismiss={sinceLastVisit.dismiss}
                   />
+                  <InstallCard />
                   <TeamAnalysis
                     league={league}
                     summaries={summaries}
