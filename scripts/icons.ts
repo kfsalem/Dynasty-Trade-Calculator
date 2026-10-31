@@ -1,9 +1,10 @@
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { ACTION, ARROWS, WHITE, coverage, inside, png } from './mark';
+import { ACTION, WHITE, coverage, onMark as onMarkSpace, png } from './mark';
 
 /**
- * Generate the home-screen icons (#171), from the same mark as the favicon.
+ * Generate the home-screen icons (#171), from the same mark as the favicon:
+ * the Equalace football, whose laces form an equals sign.
  *
  * Run with `npm run icons` and commit the output, as `og.png` is.
  *
@@ -36,8 +37,7 @@ function inRoundedSquare(x: number, y: number, size: number, r: number): boolean
 function icon(size: number, glyph: number, rounded: boolean): Buffer {
   const scale = glyph / 64;
   const offset = (size - glyph) / 2;
-  const onMark = (x: number, y: number) =>
-    ARROWS.some((arrow) => inside(arrow, (x - offset) / scale, (y - offset) / scale));
+  const onMark = (x: number, y: number) => onMarkSpace((x - offset) / scale, (y - offset) / scale);
   const onSquare = (x: number, y: number) => inRoundedSquare(x, y, size, size * CORNER);
 
   const stride = size * 4 + 1;
@@ -57,12 +57,12 @@ function icon(size: number, glyph: number, rounded: boolean): Buffer {
 }
 
 const ICONS: [file: string, size: number, glyph: number, rounded: boolean][] = [
-  // The favicon at full size: the mark spans 12-52 of 64, as it does there.
+  // The favicon at full size: the ball spans 7-57 of 64, as it does there.
   ['icon-192.png', 192, 192, true],
   ['icon-512.png', 512, 512, true],
-  // The mark's 40 units scaled to fill half the side, well inside the 80%
-  // circle Android may crop to.
-  ['icon-maskable-512.png', 512, 512 * (64 / 40) * 0.5, false],
+  // Drawn at 80%, so the tilted ball stays inside the circle Android may crop
+  // the tile to.
+  ['icon-maskable-512.png', 512, 512 * 0.8, false],
   ['apple-touch-icon.png', 180, 180, false],
 ];
 

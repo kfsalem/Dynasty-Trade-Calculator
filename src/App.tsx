@@ -121,27 +121,33 @@ const TAB_ICON: Record<Tab, ReactNode> = {
   league: <path d="M8 4h8v6a4 4 0 01-8 0zM8 6H5a3 3 0 003 3M16 6h3a3 3 0 01-3 3M12 14v4M8 21h8M10 18h4" />,
 };
 
-/** The product mark: a rising line on the action azure. */
+/**
+ * The product mark (#171): a football whose laces form an equals sign, on the
+ * action azure. The same geometry as `public/favicon.svg` and `scripts/mark.ts`.
+ * The laces are drawn in the tile's own colour, so they read as cut out.
+ */
 function BrandMark() {
   return (
     <div className="flex shrink-0 items-center gap-2.5">
-      <span className="grid h-9 w-9 place-items-center rounded-xl bg-action text-on-action elevation-raised">
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 24 24"
-          className="h-5 w-5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M4 17l5-5 4 4 7-8" />
-          <path d="M15 8h5v5" />
+      <span className="grid h-9 w-9 place-items-center rounded-xl bg-action elevation-raised">
+        <svg aria-hidden="true" viewBox="0 0 64 64" className="h-9 w-9">
+          <g transform="rotate(-35 32 32)">
+            <path
+              d="M7 32 C7 24 18 17 32 17 C46 17 57 24 57 32 C57 40 46 47 32 47 C18 47 7 40 7 32 Z"
+              className="fill-on-action"
+            />
+            <path
+              d="M23 29H41M23 35H41"
+              className="stroke-action"
+              strokeWidth="3.6"
+              strokeLinecap="round"
+              fill="none"
+            />
+          </g>
         </svg>
       </span>
       <span className="hidden font-display text-lg font-extrabold tracking-tight sm:inline">
-        Dynasty Utility
+        Equalace
       </span>
     </div>
   );

@@ -29,7 +29,7 @@ silently diverges and stops being updatable.
 
 ## Scope note: `web-artifacts-builder`
 
-**This skill does not apply to the Dynasty Utility app.**
+**This skill does not apply to the Equalace app.**
 
 It builds standalone claude.ai artifacts: `scripts/init-artifact.sh` scaffolds a
 throwaway project and `scripts/bundle-artifact.sh` collapses it into a single

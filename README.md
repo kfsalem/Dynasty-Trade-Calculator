@@ -1,4 +1,4 @@
-# Dynasty Utility
+# Equalace
 
 A dynasty fantasy football companion that knows **your league**, not just generic player values.
 

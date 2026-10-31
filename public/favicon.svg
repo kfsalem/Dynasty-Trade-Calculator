@@ -1,18 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Dynasty Utility">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Equalace">
   <!--
-    Two assets moving in opposite directions: the whole product in one glyph.
+    The Equalace mark: a football whose laces form an equals sign — the sport,
+    and the question the app answers about a trade, in one shape (#171).
 
-    Deliberately simple. A favicon is read at 16px, where anything with more
-    than a couple of shapes turns to mush, so this is two arrows and nothing
-    else — no text, no gradient, no third colour.
+    Two shapes and one colour, so it still reads at 16px. The laces are drawn
+    in the tile's azure over the white ball, which is the same as cutting them
+    out of it.
 
-    INTERIM. This replaced the stock Vite logo, which shipped as the product's
-    icon from the scaffold until 2026-08-03. It is not the outcome of a design
-    process and is not meant to survive one — see #15, where the brand work
-    lives. Replacing it means this file and a re-run of `npm run og`, which
-    reads the same two paths.
+    The same geometry is traced by `scripts/mark.ts` for the PNGs (`npm run
+    icons`, `npm run og`) and drawn by `BrandMark` in `src/App.tsx`. Change
+    one and change all of them.
   -->
   <rect width="64" height="64" rx="14" fill="#2563eb"/>
-  <path d="M12 20 H38 V14 L52 24 L38 34 V28 H12 Z" fill="#ffffff"/>
-  <path d="M52 36 H26 V30 L12 40 L26 50 V44 H52 Z" fill="#ffffff"/>
+  <g transform="rotate(-35 32 32)">
+    <path d="M7 32 C7 24 18 17 32 17 C46 17 57 24 57 32 C57 40 46 47 32 47 C18 47 7 40 7 32 Z" fill="#ffffff"/>
+    <path d="M23 29H41M23 35H41" stroke="#2563eb" stroke-width="3.6" stroke-linecap="round" fill="none"/>
+  </g>
 </svg>

@@ -58,10 +58,10 @@ const pwa = VitePWA({
   injectRegister: null,
   includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
   manifest: {
-    name: 'Dynasty Utility',
-    short_name: 'Dynasty',
+    name: 'Equalace',
+    short_name: 'Equalace',
     description:
-      'A dynasty fantasy football utility that knows your league: trade calculator, roster analysis, and trade suggestions.',
+      'A dynasty fantasy football app that knows your league: trade calculator, roster analysis, and trade suggestions.',
     // Relative, so both resolve against `base` on GitHub Pages.
     start_url: '.',
     scope: '.',

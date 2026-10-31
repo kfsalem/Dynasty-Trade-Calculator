@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { ARROWS, WHITE, coverage, inside, png, type RGB } from './mark';
+import { WHITE, coverage, onMark as onMarkSpace, png, type RGB } from './mark';
 
 /**
  * Generate `public/og.png`, the card image for a shared trade link.
@@ -39,7 +39,7 @@ const OFFSET_X = WIDTH / 2 - 32 * SCALE;
 const OFFSET_Y = HEIGHT / 2 - 32 * SCALE;
 
 const onMark = (x: number, y: number) =>
-  ARROWS.some((arrow) => inside(arrow, (x - OFFSET_X) / SCALE, (y - OFFSET_Y) / SCALE));
+  onMarkSpace((x - OFFSET_X) / SCALE, (y - OFFSET_Y) / SCALE);
 
 function render(): Buffer {
   // One filter byte per row, then RGB triples.
