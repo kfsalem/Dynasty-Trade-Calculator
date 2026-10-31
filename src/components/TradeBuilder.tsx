@@ -8,7 +8,14 @@ import type {
   TradeAnalysis,
   TradeSideResult,
 } from '../types';
-import { evaluateTrade, FAIRNESS_LABEL, type TradeContext } from '../engine/trade';
+import {
+  evaluateTrade,
+  FAIRNESS_LABEL,
+  type TradeContext,
+  type TradeSideInput,
+} from '../engine/trade';
+import { fixTrade, isFair } from '../engine/tradeFix';
+import { TradeFixes } from './TradeFixes';
 import { AssetPicker } from './AssetPicker';
 import { EmptyState } from './EmptyState';
 import { useChanged } from '../hooks/useChanged';
@@ -615,6 +622,22 @@ export function TradeBuilder({
   }, [anySelected, teamA, teamB, givesA, givesB, ctx]);
 
   /**
+   * The smallest changes that would make an uneven trade fair (#168).
+   *
+   * Only asked when the verdict is uneven, and only when both sides are sending
+   * something: a one-sided selection is a trade still being built, not a
+   * lopsided one, and offering to "fix" it would interrupt the building.
+   */
+  const fixes = useMemo(() => {
+    if (!analysis || isFair(analysis)) return null;
+    const a = { rosterId: teamA, playerIds: [...givesA.playerIds], pickIds: [...givesA.pickIds] };
+    const b = { rosterId: teamB, playerIds: [...givesB.playerIds], pickIds: [...givesB.pickIds] };
+    const sending = (side: TradeSideInput) => side.playerIds.length + side.pickIds.length > 0;
+    if (!sending(a) || !sending(b)) return null;
+    return fixTrade(a, b, ctx);
+  }, [analysis, teamA, teamB, givesA, givesB, ctx]);
+
+  /**
    * The league before and after the trade, as two scenarios to simulate.
    *
    * Both substitute, and that is the point. The obvious version leaves the
@@ -678,6 +701,14 @@ export function TradeBuilder({
       setTeamB(rosterId);
       setGivesB({ playerIds: new Set(), pickIds: new Set() });
     }
+  }
+
+  /** Load a fix into the builder. Teams are unchanged; only what each sends. */
+  function applyFix(sides: [TradeSideInput, TradeSideInput]) {
+    setDropped(0);
+    const [a, b] = sides;
+    setGivesA({ playerIds: new Set(a.playerIds), pickIds: new Set(a.pickIds) });
+    setGivesB({ playerIds: new Set(b.playerIds), pickIds: new Set(b.pickIds) });
   }
 
   function reset() {
@@ -869,6 +900,7 @@ export function TradeBuilder({
             oddsPending={after.pending}
             oddsModel={odds?.model}
           />
+          {fixes && <TradeFixes result={fixes} nameOf={nameOf} onApply={applyFix} />}
         </div>
       ) : (
         /*
