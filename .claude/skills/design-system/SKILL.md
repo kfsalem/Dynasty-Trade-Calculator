@@ -1,6 +1,6 @@
 ---
 name: design-system
-description: THIS PROJECT'S design system — tokens, position colours, density, light/dark rules. Authoritative for Dynasty Utility and wins over any general design skill. Load BEFORE styling or restyling any component, adding or changing a colour, picking a Tailwind utility for text/background/border, building a chart or bar, adding dark-mode support, or writing anything in src/index.css or src/lib/format.ts. Triggers on "style", "restyle", "colour/color", "palette", "theme", "dark mode", "token", "spacing", "typography", "chart", "make it look".
+description: THIS PROJECT'S design system — tokens, position colours, density, light/dark rules. Authoritative for Equalace and wins over any general design skill. Load BEFORE styling or restyling any component, adding or changing a colour, picking a Tailwind utility for text/background/border, building a chart or bar, adding dark-mode support, or writing anything in src/index.css or src/lib/format.ts. Triggers on "style", "restyle", "colour/color", "palette", "theme", "dark mode", "token", "spacing", "typography", "chart", "make it look".
 ---
 
 # Design system

@@ -1,4 +1,4 @@
-# Dynasty Utility — Design Document
+# Equalace — Design Document
 
 **Status:** Draft v1
 **Last updated:** 2026-07-28

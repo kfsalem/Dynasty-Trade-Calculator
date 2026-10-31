@@ -1,4 +1,4 @@
-# Dynasty Utility
+# Equalace
 
 Vite + React 19 + Tailwind 4, deployed to GitHub Pages.
 
