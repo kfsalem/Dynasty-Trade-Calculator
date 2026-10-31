@@ -26,6 +26,8 @@ import {
 } from './hooks/useLeagueData';
 import { runsFaab } from './engine/bids';
 import { useMyRoster } from './hooks/useMyRoster';
+import { useSinceLastVisit } from './hooks/useSinceLastVisit';
+import { SinceLastVisit } from './components/SinceLastVisit';
 import { decodeTrade, encodeTrade, resolveShare } from './lib/share';
 import { picksForRoster } from './engine/picks';
 
@@ -299,6 +301,24 @@ function App() {
     if (mine) setMyRoster(mine.rosterId);
     setPendingClaim(null);
   }, [pendingClaim, league, setMyRoster]);
+
+  /*
+    What moved on your team since this browser last opened the league (#167).
+    Taken only while My team is open with a team claimed and everything loaded,
+    so nothing is marked seen that was never on screen.
+  */
+  const sinceLastVisit = useSinceLastVisit({
+    leagueId,
+    myRosterId,
+    active:
+      tab === 'analysis' && myRosterId !== null && Boolean(league && players && values) && !isLoading && !error,
+    league,
+    players,
+    values,
+    summaries,
+    roles,
+    season,
+  });
 
   const hasLeague = league !== undefined;
   useEffect(() => {
@@ -700,6 +720,12 @@ function App() {
                 (myRosterId === null ? (
                   <ClaimTeam league={league} onClaim={setMyRoster} />
                 ) : (
+                  <>
+                  <SinceLastVisit
+                    changes={sinceLastVisit.changes}
+                    since={sinceLastVisit.since}
+                    onDismiss={sinceLastVisit.dismiss}
+                  />
                   <TeamAnalysis
                     league={league}
                     summaries={summaries}
@@ -725,6 +751,7 @@ function App() {
                     roles={roles}
                     onChangeTeam={() => setMyRoster(null)}
                   />
+                  </>
                 ))}
 
               {tab === 'ideas' &&
