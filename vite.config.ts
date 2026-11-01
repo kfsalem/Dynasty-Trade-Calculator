@@ -1,4 +1,5 @@
 /// <reference types="vitest/config" />
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -147,6 +148,14 @@ export default defineConfig({
           environment: 'jsdom',
           setupFiles: ['./src/test/setup.ts'],
           include: ['src/**/*.test.tsx'],
+          // The service worker's hook, stubbed: jsdom has no service worker,
+          // and on Windows the plugin's virtual module will not load in
+          // Vitest at all. See `src/test/pwaRegister.ts`.
+          alias: {
+            'virtual:pwa-register/react': fileURLToPath(
+              new URL('./src/test/pwaRegister.ts', import.meta.url),
+            ),
+          },
         },
       },
     ],
