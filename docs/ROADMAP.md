@@ -1971,7 +1971,7 @@ a cross-league source, and one league is far too thin for it.
 
 **Status:** Shipped 2026-09-30 — [#147](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/147), [#149](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/149) and
 [#152](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/152). The forward test of projection against value, at the end of this
-section, was scored over weeks 4–6 on 2026-10-22 ([#157](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/157)).
+section, was scored over weeks 4–6 on 2026-10-22 and over weeks 4–7 on 2026-10-27 ([#157](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/157)).
 
 Three issues on the lineup panel at the top of **My team** and the wire rows
 under it. They are here because the measurements behind them are the reason the
@@ -2043,13 +2043,13 @@ claimed player cannot use. Open roster spots now absorb claims first, and only
 an active-roster player is ever named, which is the rule `suggest.chooseDrops`
 already applied to trades.
 
-### Does the projection beat the value it replaced? Yes, by two to three points
+### Does the projection beat the value it replaced? Yes, by about a point and a half
 
 The replay proved projections beat *managers*. It could not compare projections
 with *value*, because FantasyCalc publishes only today's values: on 2026 weeks
 1–3 value won 70% of pairs against 64%, with values that had already seen those
-games. So both were frozen before each of weeks 4, 5 and 6 and scored
-afterwards on same-position pairs among startable players
+games. So both were frozen before each of weeks 4 to 7 and scored afterwards on
+same-position pairs among startable players
 ([#157](https://github.com/kfsalem/Dynasty-Trade-Calculator/issues/157)).
 
 | | pairs | projection | `redraftValue` | dynasty value |
@@ -2057,27 +2057,33 @@ afterwards on same-position pairs among startable players
 | week 4 | 2,178 | 58.9% | 59.5% | 60.6% |
 | week 5 (no DAL, TB) | 2,180 | 71.0% | 64.6% | 61.3% |
 | week 6 (no DEN, SEA) | 2,181 | 61.8% | 60.4% | 59.9% |
-| **weeks 4–6 pooled** | 6,539 | **63.9%** | 61.5% | 60.6% |
+| week 7 | 2,181 | 63.8% | 65.0% | 65.3% |
+| **weeks 4–7 pooled** | 8,711 | **63.9%** | 62.4% | 61.8% |
 
-Pooled, projection minus `redraftValue` is **+2.4 points, with a 95% interval of
-+0.3 to +4.4**. Against dynasty value it is +3.3 (+0.5 to +6.1). The intervals
+Pooled, projection minus `redraftValue` is **+1.5 points, with a 95% interval of
+−0.2 to +3.3**. Against dynasty value it is +2.1 (−0.2 to +4.5). The intervals
 come from resampling players within each week, not pairs, because pairs share
-players. The projection leads at every position, by 4.5 points at QB, 1.6 at
-RB, 2.2 at WR and 3.0 at TE.
+players. The projection leads by 4.8 points at QB, 0.9 at RB and 1.2 at WR, and
+is level at TE.
 
-- **The weeks vary:** −0.6, +6.4 and +1.4. Any one week sits inside its own
-  noise of about ±3.5 points, which is why it took three.
-- **The snapshot day does not decide it.** Week 4 was a Tuesday snapshot and
-  weeks 5 and 6 were Fridays, which give the projection more injury news. The
-  two Friday weeks give +3.9 and the Friday week 6 alone only +1.4, and scoring
-  week 6 on Tuesday's values instead gives +2.3 pooled.
+- **Week 7 took the lead down.** Over weeks 4–6 it was +2.4 (+0.3 to +4.4),
+  which met #157's rule of stopping once the interval clears zero. Week 7 went
+  to value by 1.3, inside its own noise, and the interval now just touches
+  zero. Scoring week 7 on Tuesday's values instead of Thursday's gives +1.8
+  (+0.1 to +3.7).
+- **The weeks vary:** −0.6, +6.4, +1.4 and −1.3. Any one week sits inside its
+  own noise of about ±3.5 points, which is why it takes several.
+- **QB is the steadiest part.** The projection has led there every week.
+- **The snapshot day does not decide it.** Week 4 was a Tuesday snapshot, weeks
+  5 and 6 Fridays and week 7 a Thursday. The later snapshots give the projection
+  more injury news, yet week 7 was one of its two weakest weeks.
 - **The test is tilted slightly against the projection.** It is frozen on the
   snapshot day, while the panel reads it live up to kickoff.
 - **The six-point lead value had on weeks 1–3 was hindsight.** On games it had
   not seen, value trails.
 
-So #151's ranking stands. The projection is the better ranking, and it also
-carries the odds on each call, which value cannot. A week-7 snapshot was taken
-on 2026-10-22 and can be added to the pool. The frozen inputs, scripts and
-weekly write-ups are kept outside the repo, since they are megabytes of research
-JSON.
+So #151's ranking stands. The projection ranks at least as well as value, most
+likely a point or two better, and it also carries the odds on each call, which
+value cannot. A week-8 snapshot was taken on 2026-10-27 and can be added to the
+pool. The frozen inputs, scripts and weekly write-ups are kept outside the
+repo, since they are megabytes of research JSON.
