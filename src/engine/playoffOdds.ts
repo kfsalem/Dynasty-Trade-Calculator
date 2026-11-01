@@ -202,6 +202,8 @@ export interface OddsInput {
   playoffTeams: number;
   /** Measured from the league where possible; assumed where not. */
   model?: ScoringModel;
+  /** Defaults to `STRENGTH_DRIFT`. Zero holds every team at today's strength. */
+  drift?: number;
   /** Defaults to 10,000 — see `simulate` for why that is the right order. */
   iterations?: number;
   seed?: number;
@@ -215,6 +217,24 @@ export interface TeamOdds {
 
 const DEFAULT_ITERATIONS = 10000;
 const DEFAULT_SEED = 0x5eed;
+
+/**
+ * How far a team's expected weekly score wanders per week, in points (#164).
+ *
+ * Today's strength is a snapshot, and the season does not hold still: starters
+ * get hurt, rookies break out, managers trade. Weekly noise alone treats every
+ * game left as independent, so over ten games it averages away and a strong
+ * roster reads as nearly safe. Drift moves all of a team's remaining games
+ * together, which is what keeps a September favourite from being a lock.
+ *
+ * Measured on six finished seasons of the two test leagues
+ * (`npm run grade:odds`). Beyond weekly noise, a team's scoring over the rest
+ * of the season strayed from what its strength predicted with a variance of
+ * about four points² per game left — 48 with twelve left, 21 with six, nothing
+ * with three — which is a random walk of about 3.5 points a week. Without it the
+ * odds stated in weeks 1–4 scored worse than giving every team the base rate.
+ */
+export const STRENGTH_DRIFT = 3.5;
 
 /**
  * Turn lineup strengths into an expected weekly score for each team.
@@ -263,25 +283,43 @@ export function simulate(input: OddsInput): TeamOdds[] {
   if (teams.length === 0) return [];
 
   const model = input.model ?? DEFAULT_MODEL;
+  const drift = input.drift ?? STRENGTH_DRIFT;
   const scores = expectedScores(teams, model);
   const madePlayoffs = new Map<number, number>(teams.map((t) => [t.rosterId, 0]));
   const cut = Math.min(Math.max(playoffTeams, 0), teams.length);
+  // Drift is drawn team by team, so the teams are visited in a fixed order
+  // rather than the order they were listed in, and the weeks in calendar order.
+  const rosterIds = teams.map((t) => t.rosterId).sort((x, y) => x - y);
+  const fixtures = [...remaining].sort((x, y) => x.week - y.week);
 
   for (let i = 0; i < iterations; i++) {
     const next = rng(mix(seed, i));
 
     const wins = new Map<number, number>();
     const points = new Map<number, number>();
+    const wander = new Map<number, number>();
     for (const team of teams) {
       // A tie is half a win for seeding, which is how every platform sorts it.
       wins.set(team.rosterId, team.wins + team.ties * 0.5);
       points.set(team.rosterId, team.pointsFor);
+      wander.set(team.rosterId, 0);
     }
 
-    for (const fixture of remaining) {
+    // This week's strength is the one measured; each week after it takes a
+    // step, and a gap of several weeks takes them all at once.
+    let week: number | null = null;
+    for (const fixture of fixtures) {
+      if (week !== null && fixture.week > week && drift > 0) {
+        const step = drift * Math.sqrt(fixture.week - week);
+        for (const id of rosterIds) wander.set(id, (wander.get(id) ?? 0) + normal(next) * step);
+      }
+      week = fixture.week;
+
       const [a, b] = fixture.rosterIds;
-      const scoreA = (scores.get(a) ?? model.baseline) + normal(next) * model.weeklySD;
-      const scoreB = (scores.get(b) ?? model.baseline) + normal(next) * model.weeklySD;
+      const expectedA = (scores.get(a) ?? model.baseline) + (wander.get(a) ?? 0);
+      const expectedB = (scores.get(b) ?? model.baseline) + (wander.get(b) ?? 0);
+      const scoreA = expectedA + normal(next) * model.weeklySD;
+      const scoreB = expectedB + normal(next) * model.weeklySD;
 
       points.set(a, (points.get(a) ?? 0) + scoreA);
       points.set(b, (points.get(b) ?? 0) + scoreB);
