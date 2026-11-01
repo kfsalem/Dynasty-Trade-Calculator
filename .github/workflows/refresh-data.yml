@@ -38,11 +38,13 @@ jobs:
           node-version-file: '.nvmrc'
           cache: npm
       - run: npm ci
-      # The one ingest that adds a point to the value histories (#158): this run
-      # commits what it writes, so the point is kept. Deploys leave them alone.
+      # The one ingest that adds a point to the value histories (#158) and to
+      # the record of the app's playoff odds (#164): this run commits what it
+      # writes, so the points are kept. Deploys leave both alone.
       - run: npm run ingest
         env:
           VALUE_HISTORY: append
+          ODDS_RECORD: append
 
       - id: diff
         run: |

@@ -1,0 +1,1 @@
+{"generatedAt":"","source":"The playoff odds the app would state for each league-week, taken by the weekly refresh (#164). Each team is a row of `columns`; strength is RosterSummary.starterValue, priced on that day's FantasyCalc snapshot.","columns":["rosterId","wins","losses","ties","pointsFor","strength","odds"],"points":[]}
