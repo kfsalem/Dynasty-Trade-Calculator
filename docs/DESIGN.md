@@ -1663,6 +1663,13 @@ README criticises every other calculator for. Sleeper's matchup rows already
 carry `points` for completed weeks, so the schedule was fetching the evidence and
 throwing it away.
 
+*Corrected 2026-11-01 (#195):* they carry points for the week being played too,
+filled in as its games finish. So from Thursday night to Monday the calibration
+read a half-played week as a finished week of low scores. On the test league on
+a Sunday evening that lowered the baseline from 143.4 to 139.9 and the slope
+from 8.76 to 7.58, and moved one team's odds by 4 points. `playedFixtures` now
+takes only the weeks before the current one, as `grade:odds` always had.
+
 `weeklySD` is pooled *within* team: each roster's variance about its own average,
 averaged. That distinction is the measurement. The spread of all scores in the
 league mixes how much a team bounces week to week with how much teams differ from

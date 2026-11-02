@@ -524,10 +524,24 @@ export function remainingFixtures(
 }
 
 /**
- * The fixtures with a result, which are the ones worth learning from.
+ * The fixtures with a final result, which are the ones worth learning from.
  *
- * Filtered on `points` rather than on the week number: a week can be in the past
- * and still have no result, and the schedule is the only thing that knows which.
+ * Filtered twice, and each filter catches what the other misses:
+ *
+ * - **On `points`.** A week can be in the past and still have no result, and
+ *   the schedule is the only thing that knows which.
+ * - **On the week.** Sleeper fills in a week's points as its games are played,
+ *   so from Thursday night to Monday the week being played has partial scores.
+ *   Counted, they read as a finished week of low scores: on the test league on
+ *   a Sunday evening of week 8 they took the baseline from 143.4 to 139.9 and
+ *   the slope from 8.76 to 7.58 points per SD, and moved one team's odds by
+ *   4 points (#195). Only weeks before `currentWeek` count, the rule the League
+ *   tab's history and `grade:odds` already use.
+ *
+ * `currentWeek` is the regular-season week, as `remainingFixtures` takes it.
+ * Null means the week is unknown, and then every week with points counts.
  */
-export const playedFixtures = (schedule: Matchup[]): Matchup[] =>
-  schedule.filter((fixture) => fixture.points !== null);
+export const playedFixtures = (schedule: Matchup[], currentWeek: number | null): Matchup[] =>
+  schedule.filter(
+    (fixture) => fixture.points !== null && (currentWeek === null || fixture.week < currentWeek),
+  );

@@ -328,14 +328,34 @@ describe('remainingFixtures', () => {
 
 describe('playedFixtures', () => {
   it('keeps only the fixtures that have a result', () => {
-    // Filtered on points rather than the week number: a week can be in the past
-    // and still have no result, and only the schedule knows which.
+    // A week can be in the past and still have no result, and only the
+    // schedule knows which.
     const schedule: Matchup[] = [
       { week: 1, rosterIds: [1, 2], points: [120, 98] },
       { week: 2, rosterIds: [1, 2], points: null },
     ];
-    expect(playedFixtures(schedule)).toHaveLength(1);
-    expect(playedFixtures(schedule)[0].week).toBe(1);
+    expect(playedFixtures(schedule, 3)).toHaveLength(1);
+    expect(playedFixtures(schedule, 3)[0].week).toBe(1);
+  });
+
+  it('leaves out the week being played, whose scores are partial (#195)', () => {
+    // Sunday evening: week 2 has points, but its Monday game is still to come.
+    const schedule: Matchup[] = [
+      { week: 1, rosterIds: [1, 2], points: [120, 98] },
+      { week: 2, rosterIds: [1, 2], points: [64.5, 101.2] },
+      { week: 3, rosterIds: [1, 2], points: null },
+    ];
+    expect(playedFixtures(schedule, 2).map((f) => f.week)).toEqual([1]);
+    // After the regular season, every week of it counts.
+    expect(playedFixtures(schedule, 15).map((f) => f.week)).toEqual([1, 2]);
+  });
+
+  it('counts every week with points when the week is unknown', () => {
+    const schedule: Matchup[] = [
+      { week: 1, rosterIds: [1, 2], points: [120, 98] },
+      { week: 2, rosterIds: [1, 2], points: [64.5, 101.2] },
+    ];
+    expect(playedFixtures(schedule, null)).toHaveLength(2);
   });
 });
 
