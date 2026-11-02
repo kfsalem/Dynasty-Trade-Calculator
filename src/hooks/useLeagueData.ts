@@ -723,22 +723,20 @@ export function useLeagueSummaries(leagueId: string | null) {
 
     const teams = teamStates(bundle.league, summaries);
     const playoffWeekStart = bundle.league.settings.playoffWeekStart;
+    // The week as a regular-season position, not as the platform's raw
+    // counter. Through August that counter reads 1 or 2 and means
+    // *preseason* — taken at face value it retired the first fortnight of a
+    // season nobody had played. See `engine/season`.
+    const week = regularSeasonWeek(bundle.currentWeek, bundle.seasonPhase, playoffWeekStart - 1);
 
     return {
       teams,
-      remaining: remainingFixtures(
-        schedule,
-        // The week as a regular-season position, not as the platform's raw
-        // counter. Through August that counter reads 1 or 2 and means
-        // *preseason* — taken at face value it retired the first fortnight of a
-        // season nobody had played. See `engine/season`.
-        regularSeasonWeek(bundle.currentWeek, bundle.seasonPhase, playoffWeekStart - 1),
-        playoffWeekStart,
-      ),
+      remaining: remainingFixtures(schedule, week, playoffWeekStart),
       playoffTeams: bundle.league.settings.playoffTeams,
-      // Measured from this league's completed weeks where there are enough of
-      // them, and assumed where there are not — see `calibrate`.
-      model: calibrate(teams, playedFixtures(schedule)),
+      // Measured from this league's finished weeks where there are enough of
+      // them, and assumed where there are not — see `calibrate`. Not the week
+      // being played, whose scores are partial until Monday (#195).
+      model: calibrate(teams, playedFixtures(schedule, week)),
     };
   }, [leagueData, scheduleQuery.data, adjusted, summaries]);
 

@@ -45,7 +45,7 @@ import { mapMatchups, mapPlayer, mapSettings } from '../src/platforms/sleeper/ma
 import { scoreProjection } from '../src/engine/projections';
 import { startSit } from '../src/engine/startSit';
 import { canStart } from '../src/engine/availability';
-import { calibrate, simulate, type TeamState } from '../src/engine/playoffOdds';
+import { calibrate, playedFixtures, simulate, type TeamState } from '../src/engine/playoffOdds';
 import type { ValuedPlayer } from '../src/engine/rosterValue';
 import type { LeagueSettings, Matchup } from '../src/types';
 import { TRACK_RECORD_LEAGUES } from './ingest/trackRecord';
@@ -181,7 +181,7 @@ async function replaySeason(leagueIndex: number, leagueId: string, players: Play
       ...table.get(rosterId)!,
       strength: strength.get(rosterId) ?? 0,
     }));
-    const played = fixtures.filter((f) => f.week < week && f.points);
+    const played = playedFixtures(fixtures, week);
     const remaining = fixtures.filter((f) => f.week >= week);
     const model = calibrate(teams, played);
 

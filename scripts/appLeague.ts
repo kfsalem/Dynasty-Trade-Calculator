@@ -134,7 +134,7 @@ export async function loadAppLeague(leagueId: string, options: AppLeagueOptions)
       teams,
       remaining: remainingFixtures(schedule.matchups, week, playoffWeekStart),
       playoffTeams: league.settings.playoffTeams,
-      model: calibrate(teams, playedFixtures(schedule.matchups)),
+      model: calibrate(teams, playedFixtures(schedule.matchups, week)),
     };
   }
 
