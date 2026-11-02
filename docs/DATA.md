@@ -219,6 +219,31 @@ only when a reader opens "How often these calls come true" under the lineup
 panel. `npm run grade:calls` brings it up to date and prints it by bucket,
 season and position.
 
+**And so is the odds record** (#164). The weekly refresh keeps the playoff odds
+the app would state for each league in the record that day, in
+`public/data/odds-record.json`, so they can be graded once the season is over.
+It needs keeping because it cannot be replayed: strength is priced on
+FantasyCalc, which publishes only today's values. Each point is a league-week
+holding everything the simulation was given beside what it answered: each
+team's record, points for and strength, the scoring model and the drift, then
+the stated odds. That lets a grader test strength against the points that
+followed, which is the question `grade:odds` left open, and rerun a later model
+on the same inputs. The league goes through the same code as `check:slots`
+(`scripts/appLeague.ts`), which shares it so neither drifts from
+`useLeagueData`, and strength is priced on the snapshot that same run wrote.
+
+Like the histories, only the weekly refresh appends (`ODDS_RECORD=append`), and
+only from a freshly refreshed snapshot. The first point of a league-week is the
+one kept, so a run dispatched by hand after Thursday's game adds nothing. About
+1 KB a point. One league plays in 2026, the track record's other one having not
+renewed, so this season adds weeks 9 to 14: about 60 stated odds. The early
+weeks the open question is about come with 2027.
+
+Which week Sleeper's `/state/nfl` reports when the refresh runs on a Tuesday is
+not yet verified. If it still names the week just finished, the app simulates
+that week again. Each point keeps `resultsThrough`, the last week with every
+fixture scored, beside `week`, and the log says when the two collide.
+
 ## The match gate
 
 If an id format changes upstream, nothing throws. Every file arrives, every

@@ -19,7 +19,8 @@
  * under test. It is a thing you run when you have changed a measure and want to
  * know what it does to real rosters.
  *
- * Drives the app's own pipeline — `loadLeague`, `fetchFantasyCalcValues`,
+ * Drives the app's own pipeline through `appLeague`, which the ingest's odds
+ * record shares — `loadLeague`, `fetchFantasyCalcValues`,
  * `valueLeague` — rather than reimplementing it, and feeds the suggestion
  * engine every input the app does: league-adjusted values, activity and the
  * league's scoring from the files under `public/data`, role trends, the
@@ -38,32 +39,18 @@
  * was not.
  */
 
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { sleeperProvider } from '../src/platforms/sleeper';
-import { snapShares } from '../src/engine/snapShare';
-import { opportunities } from '../src/engine/opportunity';
-import { checkScoring, scoringIsUsable } from '../src/engine/scoringCheck';
+import { loadAppLeague } from './appLeague';
 import { roleTrends } from '../src/engine/roleTrend';
 import { fetchFantasyCalcValues } from '../src/values/fantasycalc';
 import { fetchPickValues } from '../src/values/dynastyprocess';
 import { buildDraftPicks, tradeableSeasons } from '../src/engine/picks';
-import { valueLeague } from '../src/engine/replacement';
 import { analyzeTeam, futureLineup, leagueDemand } from '../src/engine/analysis';
 import { bucketRoster, type Bucket } from '../src/engine/buckets';
 import { bareSlots, fragility, slotStrengths } from '../src/engine/rosterDepth';
 import { suggestTrades } from '../src/engine/suggest';
 import { claimableFreeAgents, freeAgentBoard } from '../src/engine/freeAgents';
-import {
-  calibrate,
-  playedFixtures,
-  remainingFixtures,
-  simulate,
-  teamStates,
-} from '../src/engine/playoffOdds';
-import { regularSeasonWeek } from '../src/engine/season';
+import { simulate } from '../src/engine/playoffOdds';
 import type { SeasonOdds } from '../src/engine/analysis';
-import type { RosterSummary } from '../src/engine/rosterValue';
 
 const leagueId = process.argv[2];
 if (!leagueId) {
@@ -81,7 +68,15 @@ const bodies = (assets: { kind: string }[]) => assets.filter((a) => a.kind === '
 const BUCKETS: Bucket[] = ['core', 'depth', 'depreciating', 'lottery', 'dead'];
 
 async function main() {
-  const bundle = await sleeperProvider.loadLeague(leagueId);
+  /*
+    The league, valued with everything the app feeds the model and read the
+    way `useLeagueData` reads it: see `appLeague`. Without the activity and
+    scoring files this script priced a different league than the app shows,
+    and said so only in a comment: on the test league it once reported 16
+    trade suggestions where the app showed 14 (#138).
+  */
+  const app = await loadAppLeague(leagueId, { values: fetchFantasyCalcValues });
+  const { bundle, values, snaps, usage, activity, fidelity, valuation, summaries } = app;
   const { league, players } = bundle;
   const name = (rosterId: number) =>
     league.rosters.find((r) => r.rosterId === rosterId)?.teamName ?? `roster ${rosterId}`;
@@ -89,65 +84,6 @@ async function main() {
   console.log(`\n${league.name} — ${league.rosters.length} teams, ${league.season}`);
   console.log(`slots: ${league.settings.startingSlots.join(', ')}`);
 
-  const values = await fetchFantasyCalcValues(league.settings);
-
-  /*
-    Everything else the app feeds the model, read the way `useLeagueData` reads
-    it. The activity and scoring files the app fetches from `/data` are the
-    same files committed under `public/data`, so they are read from disk.
-    Without them this script priced a different league than the app shows, and
-    said so only in a comment: on the test league it once reported 16 trade
-    suggestions where the app showed 14 (#138).
-  */
-  const file = <T,>(name: string): T | null => {
-    try {
-      return JSON.parse(
-        readFileSync(fileURLToPath(new URL(`../public/data/${name}`, import.meta.url)), 'utf8'),
-      ) as T;
-    } catch {
-      return null;
-    }
-  };
-  type SnapFile = Parameters<typeof snapShares>[0];
-  type UsageFile = Parameters<typeof opportunities>[0];
-  type ScoringStats = NonNullable<Parameters<typeof checkScoring>[0]>;
-  const snapFile = file<SnapFile>('snaps.json');
-  const usageFile = file<UsageFile>('opportunity.json');
-  const scoringFile = file<ScoringStats>('scoring.json');
-  const snaps = snapFile ? snapShares(snapFile) : undefined;
-  const usage = usageFile ? opportunities(usageFile) : undefined;
-
-  // Activity counts only for the season being played, as in the app.
-  const played = Number(bundle.currentSeason);
-  const snapsLive = snapFile?.season === played;
-  const usageLive = usageFile?.season === played;
-  const activity = {
-    snaps: snapsLive && snaps ? snaps : new Map(),
-    usage: usageLive && usage ? usage : new Map(),
-    current: snapsLive || usageLive,
-  };
-
-  // The schedule carries both the awarded points the scoring check needs and
-  // the fixtures the playoff odds need, so it is loaded once, here.
-  const weeksTotal = league.settings.playoffWeekStart - 1;
-  const schedule =
-    sleeperProvider.loadSchedule && weeksTotal > 0
-      ? await sleeperProvider.loadSchedule(leagueId, weeksTotal)
-      : null;
-
-  // The league's own scoring corrects market prices only where this engine
-  // reproduces it — the gate the app applies.
-  const fidelity = checkScoring(scoringFile, schedule?.awarded, league.settings.scoring);
-  const scoringStats = scoringIsUsable(fidelity) ? scoringFile : null;
-
-  const valuation = valueLeague(
-    league.rosters,
-    players,
-    values.bySleeperId,
-    league.settings,
-    activity,
-    scoringStats,
-  );
   const trends = roleTrends({
     summaries: valuation.summaries,
     values: valuation.values,
@@ -156,10 +92,7 @@ async function main() {
     current: activity.current,
   });
   console.log(
-    `activity: ${activity.current ? 'this season' : 'not this season, factors at 1'} · scoring: ${fidelity.verdict}${scoringStats ? ', applied' : ', not applied'}`,
-  );
-  const summaries: RosterSummary[] = [...valuation.summaries].sort(
-    (a, b) => b.starterValue - a.starterValue,
+    `activity: ${activity.current ? 'this season' : 'not this season, factors at 1'} · scoring: ${fidelity.verdict}${app.scoringApplied ? ', applied' : ', not applied'}`,
   );
 
   /*
@@ -211,15 +144,9 @@ async function main() {
     told it exactly that. Only in the regular season, as in the app.
   */
   let season: SeasonOdds | undefined;
-  const week = regularSeasonWeek(bundle.currentWeek, bundle.seasonPhase, weeksTotal);
-  if (bundle.seasonPhase === 'regular' && week !== null && schedule) {
-    const teams = teamStates(league, summaries);
-    const odds = simulate({
-      teams,
-      remaining: remainingFixtures(schedule.matchups, week, league.settings.playoffWeekStart),
-      playoffTeams: league.settings.playoffTeams,
-      model: calibrate(teams, playedFixtures(schedule.matchups)),
-    });
+  const { week, weeksTotal } = app;
+  if (bundle.seasonPhase === 'regular' && week !== null && app.odds) {
+    const odds = simulate(app.odds);
     season = {
       odds: new Map(odds.map((o) => [o.rosterId, o.odds])),
       weeksPlayed: Math.min(Math.max(week - 1, 0), weeksTotal),

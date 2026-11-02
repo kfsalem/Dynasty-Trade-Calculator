@@ -1743,6 +1743,12 @@ FantasyCalc's season-long values may predict a season better than one week's
 projection does, and there is no way to check it until the app's own odds are
 kept and graded.
 
+They are kept from 2026 week 9: the weekly refresh writes each week's stated
+odds, with the strength and standings behind them, to
+`public/data/odds-record.json` (see `docs/DATA.md`). This season gives one
+league's weeks 9 to 14. The early weeks the question turns on will first be
+kept in 2027.
+
 ---
 
 ### What comes next

@@ -43,6 +43,7 @@ import { reduceWeeklyStats } from './ingest/weeklyStats';
 import { reduceScoring } from './ingest/scoring';
 import { ingestValueSnapshots } from './ingest/valueSnapshot';
 import { appendValueHistory } from './ingest/valueHistory';
+import { appendOddsRecord } from './ingest/oddsRecord';
 import { ingestTrackRecord } from './ingest/trackRecord';
 import { ingestSampleLeague } from './ingest/sampleLeague';
 import { ingestProjected } from './ingest/projectedSoFar';
@@ -418,6 +419,9 @@ async function main(): Promise<void> {
   await ingestValueSnapshots(OUT_DIR, generatedAt);
   // From the snapshots just written, and only on the weekly refresh. See `ingest/valueHistory`.
   await appendValueHistory(OUT_DIR, generatedAt);
+  // The playoff odds the app states this week, priced on those same snapshots,
+  // and also only on the weekly refresh. See `ingest/oddsRecord` (#164).
+  await appendOddsRecord(OUT_DIR, generatedAt);
 
   // Also beside them: it is fetched only when a reader opens the lineup panel's
   // record, and it never fails a build. See `ingest/trackRecord`.
