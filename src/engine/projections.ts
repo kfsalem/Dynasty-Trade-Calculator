@@ -85,6 +85,24 @@ export function projectedPoints(
  * 0.157 at QB, RB and WR (TE 0.205, whose gaps are smaller). Fitted in PPR
  * points; a league with richer scoring spreads everyone a little further
  * apart, which makes this slightly cautious there rather than bold.
+ *
+ * ## Why every player at a position shares it
+ *
+ * A player's own spread was tested and did not earn a place (#166). Measured
+ * on Sleeper's 2024–25 projections and results for startable players: how
+ * far a player lands from his projection, compared with others projected
+ * alike, does not carry from one half of a season to the other (r −0.10 and
+ * −0.07) or into the next season (+0.10, 95% −0.08 to +0.28). That is no
+ * more than a shuffle in which no player has a spread of his own. Raw weekly
+ * spread, the "consistency" fantasy sites print, carries over no better (+0.00
+ * and +0.12), while scoring average carries over at +0.57 and +0.55.
+ *
+ * Fitted on 2024 and tested on 2025's 39,166 pairs, every per-player variant
+ * stated worse odds than this curve (log loss +0.0006 to +0.0019), and none
+ * did better at any position by more than 0.0001. So did a spread that grows
+ * with the projection (+0.0005). So the
+ * app shows no floor or ceiling: it would be this curve with a player's name
+ * on it.
  */
 export const OUTSCORE_SLOPE = 0.156;
 
