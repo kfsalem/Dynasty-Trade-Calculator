@@ -191,3 +191,25 @@ export function resolveShare(
     dropped,
   };
 }
+
+/**
+ * A link to a league and nothing else, for the weekly post (#169).
+ *
+ * The same `l` parameter a trade link carries, so the two can't disagree
+ * about what a league id looks like. A link with a trade in it is a trade
+ * link, and `decodeTrade` reads it first.
+ */
+export function encodeLeague(leagueId: string): string {
+  const params = new URLSearchParams();
+  params.set('l', leagueId);
+  return `?${params.toString()}`;
+}
+
+/** The league a link names, or null. Read only once `decodeTrade` has said no. */
+export function decodeLeague(search: string): string | null {
+  try {
+    return new URLSearchParams(search).get('l') || null;
+  } catch {
+    return null;
+  }
+}

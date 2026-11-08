@@ -23,6 +23,7 @@ import {
   useBidModel,
   useLeagueSummaries,
   useManagerModel,
+  useWeeklyPostInput,
 } from './hooks/useLeagueData';
 import { runsFaab } from './engine/bids';
 import { useMyRoster } from './hooks/useMyRoster';
@@ -30,7 +31,7 @@ import { useSinceLastVisit } from './hooks/useSinceLastVisit';
 import { SinceLastVisit } from './components/SinceLastVisit';
 import { InstallButton, InstallCard } from './components/InstallApp';
 import { AppStatus } from './components/AppStatus';
-import { decodeTrade, encodeTrade, resolveShare } from './lib/share';
+import { decodeLeague, decodeTrade, encodeTrade, resolveShare } from './lib/share';
 import { picksForRoster } from './engine/picks';
 
 /*
@@ -189,13 +190,22 @@ function readStoredLeagueId(): string | null {
  */
 const linkedTrade = decodeTrade(window.location.search);
 
+/**
+ * A league named by a link with no trade in it: the weekly post's link back
+ * to the app (#169). It opens on the League tab, which is where the post's
+ * records and history come from.
+ */
+const linkedLeague = linkedTrade ? null : decodeLeague(window.location.search);
+
 function App() {
   // A link beats the remembered league. Someone opening a trade from their
   // group chat is asking for that league, whatever they looked at last.
   const [leagueId, setLeagueId] = useState<string | null>(
-    () => linkedTrade?.leagueId ?? readStoredLeagueId(),
+    () => linkedTrade?.leagueId ?? linkedLeague ?? readStoredLeagueId(),
   );
-  const [tab, setTab] = useState<Tab>(linkedTrade ? 'trade' : 'analysis');
+  const [tab, setTab] = useState<Tab>(
+    linkedTrade ? 'trade' : linkedLeague ? 'league' : 'analysis',
+  );
   /**
    * The trade the app currently believes in: what the builder holds, what the
    * address bar says, and what the builder is re-seeded from.
@@ -357,6 +367,15 @@ function App() {
       ? { season: league.season, lastCompleteWeek: Math.max(0, currentWeek - 1) }
       : undefined;
   const history = useHistoryStats(leagueId, tab === 'league', standingsMode, historyCurrent);
+  // The last finished week for the league chat (#169), off the same walk.
+  const weekly = useWeeklyPostInput(
+    leagueId,
+    tab === 'league' && seasonPhase === 'regular',
+    league,
+    summaries,
+    players,
+    historyCurrent ? historyCurrent.lastCompleteWeek : null,
+  );
   /*
     Gated on the tab that reads it, the same way the bench walk is. Nothing else
     in the app ranks a partner, so a visitor who never opens Trade ideas never
@@ -472,8 +491,14 @@ function App() {
    * error page with no link left to retry. The link outranks the empty state
    * until something real replaces it.
    */
+  // A league link is dealt with once its league is on screen: from then on
+  // the league is the app's own state, and the address bar can let it go.
   useEffect(() => {
-    if (!shared && linkedTrade && !linkHandled) return;
+    if (linkedLeague && league && !linkHandled) setLinkHandled(true);
+  }, [league, linkHandled]);
+
+  useEffect(() => {
+    if (!shared && (linkedTrade || linkedLeague) && !linkHandled) return;
     const url =
       leagueId && shared ? encodeTrade({ leagueId, ...shared }) : window.location.pathname;
     window.history.replaceState(null, '', url);
@@ -871,6 +896,7 @@ function App() {
                   mode={standingsMode}
                   onModeChange={setStandingsMode}
                   myKey={league.rosters.find((r) => r.rosterId === myRosterId)?.ownerId ?? null}
+                  weekly={weekly ? { input: weekly, leagueName: league.name, leagueId: league.id } : null}
                 />
               )}
               </Suspense>

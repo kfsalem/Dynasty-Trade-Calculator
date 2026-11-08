@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { LeagueHistory } from './LeagueHistory';
 import { leagueHistoryStats } from '../engine/leagueHistory';
 import type { LeagueHistory as History, SeasonHistory } from '../platforms/types';
+import type { Roster } from '../types';
 
 /*
   Four teams, one regular-season week, a four-team bracket. Roster 4 is an
@@ -103,5 +104,42 @@ describe('LeagueHistory', () => {
       />,
     );
     expect(screen.getByText(/history didn't load/)).toBeInTheDocument();
+  });
+
+  it("writes up the last finished week for the league chat from the post's input (#169)", () => {
+    const rosters = [1, 2, 3, 4].map((rosterId) => ({
+      rosterId,
+      ownerId: rosterId === 4 ? null : `u${rosterId}`,
+      teamName: ['Ann FC', 'Bo FC', 'Cy FC', 'Nine'][rosterId - 1],
+      ownerName: ['Ann', 'Bo', 'Cy', ''][rosterId - 1],
+    })) as unknown as Roster[];
+    render(
+      <LeagueHistory
+        stats={leagueHistoryStats(history)}
+        loading={false}
+        failed={false}
+        truncated={false}
+        mode="points"
+        onModeChange={vi.fn()}
+        myKey="u1"
+        weekly={{
+          input: {
+            history,
+            season: '2024',
+            week: 1,
+            rosters,
+            summaries: rosters.map((r) => ({ rosterId: r.rosterId, starterValue: 1000 * r.rosterId })),
+            moves: null,
+            playerName: () => null,
+          },
+          leagueName: 'The League',
+          leagueId: 'L2024',
+        }}
+      />,
+    );
+    expect(screen.getByRole('heading', { name: 'Week 1, for the league chat' })).toBeInTheDocument();
+    expect(screen.getByText('Ann, 150.00.')).toBeInTheDocument();
+    const rows = within(screen.getByRole('list', { name: 'Power rankings' })).getAllByRole('listitem');
+    expect(rows[0].textContent).toBe('1Nine1–0100');
   });
 });

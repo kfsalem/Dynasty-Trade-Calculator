@@ -274,6 +274,21 @@ export const sleeperProvider: LeagueProvider = {
   },
 
   /**
+   * One week's roster moves in this season's league: one request (#169).
+   *
+   * The weekly post wants a single week, and the walk below is around seventy
+   * requests for every week of every season. Rosters are this season's ids,
+   * which is what the caller names them against.
+   */
+  async loadWeekTransactions(
+    leagueId: string,
+    season: string,
+    week: number,
+  ): Promise<LeagueTransaction[]> {
+    return mapTransactions(season, week, await getTransactions(leagueId, week));
+  },
+
+  /**
    * Every roster move the league has made, newest first.
    *
    * The same walk `loadHistory` makes, reading one endpoint over. Kept separate

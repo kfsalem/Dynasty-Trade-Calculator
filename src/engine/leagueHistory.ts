@@ -149,9 +149,10 @@ function keyOf(season: SeasonHistory, rosterId: number): ManagerKey {
 /**
  * Regular-season fixtures: the two teams sharing a matchup id in a week before
  * the playoffs. A team with no fixture that week, or a fixture that did not
- * pair up, is not a game.
+ * pair up, is not a game. Shared with the weekly post (#169), so a game there
+ * is the same thing it is in the records.
  */
-function fixtures(season: SeasonHistory): [TeamResult, TeamResult][] {
+export function fixtures(season: SeasonHistory): [TeamResult, TeamResult][] {
   const byFixture = new Map<string, TeamResult[]>();
   for (const result of season.results) {
     if (result.week >= season.playoffs.weekStart || result.matchupId === null) continue;
