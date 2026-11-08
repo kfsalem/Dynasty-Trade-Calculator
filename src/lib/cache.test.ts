@@ -38,6 +38,46 @@ afterEach(() => {
 });
 
 describe('cached', () => {
+  it('shares one fetch between callers who ask at the same moment (#161)', async () => {
+    let finish: (value: string) => void = () => {};
+    const fetcher = vi.fn(() => new Promise<string>((resolve) => (finish = resolve)));
+
+    const first = cached('k', HOUR, fetcher);
+    const second = cached('k', HOUR, fetcher);
+    // Let both reach the source before it answers.
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalled());
+    finish('live');
+
+    expect(await Promise.all([first, second])).toEqual(['live', 'live']);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares only the read in progress: afterwards it reads the cache as before', async () => {
+    const fetcher = vi.fn(async () => 'live');
+    await cached('k', HOUR, fetcher);
+    idb.store.set('k', { data: 'cached', expiresAt: Date.now() + HOUR });
+
+    expect(await cached('k', HOUR, fetcher)).toBe('cached');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('forgets a failed read, so the next caller tries again', async () => {
+    const fetcher = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(new Error('down'))
+      .mockResolvedValueOnce('live');
+
+    await expect(cached('k', HOUR, fetcher)).rejects.toThrow('down');
+    expect(await cached('k', HOUR, fetcher)).toBe('live');
+  });
+
+  it('keeps different keys apart', async () => {
+    const a = vi.fn(async () => 'a');
+    const b = vi.fn(async () => 'b');
+
+    expect(await Promise.all([cached('a', HOUR, a), cached('b', HOUR, b)])).toEqual(['a', 'b']);
+  });
+
   it('serves a fresh entry without calling the source', async () => {
     idb.store.set('k', { data: 'cached', expiresAt: Date.now() + HOUR });
     const fetcher = vi.fn(async () => 'live');

@@ -15,7 +15,27 @@ interface CacheEntry<T> {
  * throw on open. A cache that is unavailable should slow the app down, not
  * break it, so failures fall through to a live fetch.
  */
-export async function cached<T>(
+export function cached<T>(key: string, ttlMs: number, fetcher: () => Promise<T>): Promise<T> {
+  const pending = inFlight.get(key);
+  if (pending) return pending as Promise<T>;
+  const read = readThrough(key, ttlMs, fetcher).finally(() => inFlight.delete(key));
+  inFlight.set(key, read);
+  return read;
+}
+
+/**
+ * Reads under way, by key, so callers who ask at the same moment share one
+ * (#161).
+ *
+ * Without this, two leagues loading side by side on a first visit both miss
+ * the cache and both download Sleeper's player index, 14.7 MB uncompressed
+ * each, and ten leagues would download it ten times. Only the read in progress
+ * is shared. Once it settles, the next caller reads IndexedDB as before, and a
+ * failed read is forgotten so the next caller tries again.
+ */
+const inFlight = new Map<string, Promise<unknown>>();
+
+async function readThrough<T>(
   key: string,
   ttlMs: number,
   fetcher: () => Promise<T>,
