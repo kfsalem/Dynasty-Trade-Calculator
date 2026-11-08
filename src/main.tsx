@@ -19,6 +19,12 @@ const queryClient = new QueryClient({
       // window focus buys nothing when values move on a daily cadence.
       refetchOnWindowFocus: false,
       staleTime: 5 * 60 * 1000,
+      // How long a league nobody is looking at stays in memory (#161).
+      // react-query's default is 5 minutes, after which switching back to a
+      // league reloads it from scratch: 21 requests, and every derived number
+      // recomputed. Half an hour covers going back and forth between leagues
+      // on a Sunday, and a stale league still refreshes in the background.
+      gcTime: 30 * 60 * 1000,
     },
   },
 })
