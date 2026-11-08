@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type {
   LeagueHistoryStats,
   ManagerKey,
@@ -7,7 +7,9 @@ import type {
   TableRow,
   WeekRecord,
 } from '../engine/leagueHistory';
+import { weeklyPost, type WeeklyPostInput } from '../engine/weeklyPost';
 import { EmptyState } from './EmptyState';
+import { WeeklyPostCard } from './WeeklyPostCard';
 
 interface Props {
   stats: LeagueHistoryStats | undefined;
@@ -19,6 +21,12 @@ interface Props {
   onModeChange: (mode: StandingsMode) => void;
   /** The claimed team's manager, so the rivalries open on him. */
   myKey: ManagerKey | null;
+  /**
+   * What the last finished week's post for the league chat is written from
+   * (#169). Written up here so the engine ships in this tab's chunk rather
+   * than in the first load; absent outside the regular season.
+   */
+  weekly?: { input: WeeklyPostInput; leagueName: string; leagueId: string } | null;
 }
 
 const points = (n: number) => n.toFixed(2);
@@ -53,8 +61,13 @@ export function LeagueHistory({
   mode,
   onModeChange,
   myKey,
+  weekly,
 }: Props) {
   const [rival, setRival] = useState<ManagerKey | null>(null);
+  // Keyed on the input, which the hook memoises; `weekly` itself is rebuilt
+  // on every render of the app, and the post walks the history twice.
+  const postInput = weekly?.input;
+  const post = useMemo(() => (postInput ? weeklyPost(postInput) : null), [postInput]);
 
   if (failed && !stats) {
     return (
@@ -106,6 +119,10 @@ export function LeagueHistory({
           fun: none of this feeds into what a player is worth.
         </p>
       </div>
+
+      {weekly && post && (
+        <WeeklyPostCard post={post} leagueName={weekly.leagueName} leagueId={weekly.leagueId} />
+      )}
 
       <Section
         title="Champions"

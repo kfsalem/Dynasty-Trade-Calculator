@@ -462,6 +462,15 @@ export interface LeagueProvider {
    */
   loadTransactions?(leagueId: string): Promise<TransactionHistory>;
   /**
+   * One week of one season's moves, for a surface that wants a single week and
+   * not the whole walk (#169). Rosters are that season's ids.
+   */
+  loadWeekTransactions?(
+    leagueId: string,
+    season: string,
+    week: number,
+  ): Promise<LeagueTransaction[]>;
+  /**
    * What each player is projected to do in one week, as raw stat lines (#149).
    *
    * Optional, and allowed to fail, for the same reason the schedule is: the

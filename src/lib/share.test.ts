@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeTrade, encodeTrade, resolveShare, type SharedTrade } from './share';
+import { decodeLeague, decodeTrade, encodeLeague, encodeTrade, resolveShare, type SharedTrade } from './share';
 import { makeLeague, makePick, makeRoster, makeSettings } from '../engine/testFixtures';
 
 const trade = (overrides: Partial<SharedTrade> = {}): SharedTrade => ({
@@ -164,5 +164,23 @@ describe('resolveShare', () => {
     );
     expect(resolved?.trade.givesA.pickIds).toEqual([]);
     expect(resolved?.dropped).toBe(1);
+  });
+});
+
+describe('a league link (#169)', () => {
+  it('round-trips a league id on its own', () => {
+    expect(encodeLeague('1336802780030988288')).toBe('?l=1336802780030988288');
+    expect(decodeLeague(encodeLeague('1336802780030988288'))).toBe('1336802780030988288');
+    expect(decodeLeague('?l=sample')).toBe('sample');
+  });
+
+  it('reads nothing from an address that names no league', () => {
+    expect(decodeLeague('')).toBeNull();
+    expect(decodeLeague('?l=')).toBeNull();
+    expect(decodeLeague('?x=1')).toBeNull();
+  });
+
+  it('is not a trade link, so a trade still decodes only from a full one', () => {
+    expect(decodeTrade(encodeLeague('123'))).toBeNull();
   });
 });

@@ -48,7 +48,8 @@ import {
   teamStates,
   type OddsContext,
 } from '../engine/playoffOdds';
-import type { DraftPick, LeagueSettings } from '../types';
+import type { DraftPick, League, LeagueSettings, Player } from '../types';
+import type { WeeklyPostInput } from '../engine/weeklyPost';
 
 export function useLeague(leagueId: string | null) {
   return useQuery({
@@ -169,6 +170,53 @@ export function useHistoryStats(
     failed: query.isError,
     truncated: query.data?.truncated ?? false,
   };
+}
+
+/**
+ * What the weekly post for the league chat is written from (#169).
+ *
+ * The same history walk the League tab has already paid for, plus the last
+ * finished week's transactions: one request, not the seventy-odd of the full
+ * walk. The post renders without them if they fail, minus its move line,
+ * since a missing line is better than a missing post.
+ *
+ * Inputs only: `weeklyPost` runs in the League tab's own chunk, which keeps
+ * it out of the first load and under its budget.
+ */
+export function useWeeklyPostInput(
+  leagueId: string | null,
+  enabled: boolean,
+  league: League | undefined,
+  summaries: RosterSummary[] | undefined,
+  players: Map<string, Player> | undefined,
+  week: number | null,
+): WeeklyPostInput | null {
+  const history = useLeagueHistory(leagueId, enabled);
+  const season = league?.season;
+  const moves = useQuery({
+    queryKey: ['week-transactions', leagueId, season, week],
+    queryFn: () =>
+      sleeperProvider.loadWeekTransactions!(leagueId as string, season as string, week as number),
+    enabled: Boolean(
+      enabled && leagueId && season && week && week > 1 && sleeperProvider.loadWeekTransactions,
+    ),
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
+  });
+
+  return useMemo(() => {
+    if (!history.data || !league || !summaries || week === null || week < 1) return null;
+    const names = history.data.players;
+    return {
+      history: history.data,
+      season: league.season,
+      week,
+      rosters: league.rosters,
+      summaries,
+      moves: moves.data ?? null,
+      playerName: (id: string) => players?.get(id)?.name ?? names.get(id)?.name ?? null,
+    };
+  }, [history.data, league, summaries, players, week, moves.data]);
 }
 
 /**
