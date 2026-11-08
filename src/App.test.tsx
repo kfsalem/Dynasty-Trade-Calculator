@@ -72,6 +72,9 @@ vi.mock('./hooks/useLeagueData', () => ({
   }),
   // The weekly post's inputs (#169), idle: the post has its own tests.
   useWeeklyPostInput: () => null,
+  // The claimed manager's leagues for the header's switcher (#161), idle: the
+  // switcher has its own tests.
+  useMyLeagues: () => ({ data: undefined }),
   // The manager model's walk, idle for the same reason: the suggestion list
   // renders identically with and without it, and these tests are about the
   // shell rather than about the ordering inside that list.
