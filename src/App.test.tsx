@@ -64,8 +64,8 @@ vi.mock('./hooks/useLeagueData', () => ({
   }),
   // The history walk behind the League tab (#52), idle: these tests are about
   // the shell, and the tab has its own.
-  useHistoryStats: () => ({
-    stats: undefined,
+  useHistoryWalk: () => ({
+    history: undefined,
     loading: false,
     failed: false,
     truncated: false,
@@ -75,9 +75,9 @@ vi.mock('./hooks/useLeagueData', () => ({
   // The manager model's walk, idle for the same reason: the suggestion list
   // renders identically with and without it, and these tests are about the
   // shell rather than about the ordering inside that list.
-  useManagerModel: (_leagueId: string | null, enabled: boolean) => {
+  useManagerWalk: (_leagueId: string | null, enabled: boolean) => {
     mocks.managerWalk.push(enabled);
-    return { model: undefined, loading: false, failed: false };
+    return { transactions: undefined, loading: false, failed: false };
   },
   // Same walk, different reading and a different gate. Idle for the same
   // reason: the lineup panel renders its rows with or without a price.
