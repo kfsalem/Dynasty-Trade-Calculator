@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { TradeSuggestions } from './TradeSuggestions';
+import type { TransactionHistory } from '../platforms/types';
 import {
   makeLeague,
   makePlayer,
@@ -16,7 +17,7 @@ import { summarizeRoster } from '../engine/rosterValue';
  * These are about the one thing the panel says before the list is trustworthy.
  *
  * The manager walk is around seventy requests and the list re-sorts when it
- * lands. `useManagerModel` computed `loading` and `failed` from the start and
+ * lands. The manager hook computed `loading` and `failed` from the start and
  * `App` passed neither, so a reader opening the tab got a list ranked with
  * every partner weighted alike, watched it re-order a couple of seconds later,
  * and was told nothing about either state.
@@ -32,7 +33,18 @@ const values = new Map<string, PlayerValue>([
   ['p2', makeValue('p2', 800, 'RB')],
 ]);
 
-/** A landed model, stated flat: these tests are about the notice, not the walk. */
+/**
+ * The panel models the managers itself from the walk it is given. These tests
+ * are about the notice, not the walk, so the model is stated flat: any walk
+ * passed in models as `model.current`.
+ */
+const model = vi.hoisted(() => ({ current: undefined as ManagerModel | undefined }));
+vi.mock('../engine/managers', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../engine/managers')>()),
+  modelManagers: () => model.current,
+}));
+const WALK = {} as TransactionHistory;
+
 const landed: ManagerModel = {
   managers: new Map(),
   rosters: new Map(),
@@ -77,7 +89,8 @@ describe('TradeSuggestions, while the manager walk is out', () => {
   });
 
   it('drops the notice once the model lands, and says what the order counts', () => {
-    renderPanel({ managers: landed, managersLoading: false });
+    model.current = landed;
+    renderPanel({ transactions: WALK, managersLoading: false });
 
     expect(screen.queryByText(/until it lands/)).not.toBeInTheDocument();
     expect(screen.getByText(/how often each manager/)).toBeInTheDocument();
@@ -88,7 +101,8 @@ describe('TradeSuggestions, while the manager walk is out', () => {
     // The walk stops at MAX_SEASONS or at the first season Sleeper has dropped,
     // and the trade count is then a floor. The bench panel says so for the same
     // walk; this one quoted the figure flat.
-    renderPanel({ managers: { ...landed, truncated: true } });
+    model.current = { ...landed, truncated: true };
+    renderPanel({ transactions: WALK });
 
     expect(
       screen.getByText(/as far back as Sleeper still publishes/),

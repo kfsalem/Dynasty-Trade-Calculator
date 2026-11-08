@@ -1,18 +1,28 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import type {
-  LeagueHistoryStats,
-  ManagerKey,
-  SeasonStanding,
-  StandingsMode,
-  TableRow,
-  WeekRecord,
+import {
+  leagueHistoryStats,
+  type ManagerKey,
+  type SeasonStanding,
+  type StandingsMode,
+  type TableRow,
+  type WeekRecord,
 } from '../engine/leagueHistory';
 import { weeklyPost, type WeeklyPostInput } from '../engine/weeklyPost';
+import type { LeagueHistory as History } from '../platforms/types';
 import { EmptyState } from './EmptyState';
 import { WeeklyPostCard } from './WeeklyPostCard';
 
 interface Props {
-  stats: LeagueHistoryStats | undefined;
+  /**
+   * The walked history. Its arithmetic runs here rather than in the hook that
+   * fetched it, so it ships in this tab's chunk and not in the first load.
+   */
+  history: History | undefined;
+  /**
+   * The season being played and its last finished week. A week in progress
+   * has partial scores that must not become records.
+   */
+  current?: { season: string; lastCompleteWeek: number };
   loading: boolean;
   failed: boolean;
   /** The walk could not reach every season, so "all time" is a floor. */
@@ -54,7 +64,8 @@ function Section({ title, note, children }: { title: string; note?: ReactNode; c
  * and the toilet bowl are played by teams already out of contention.
  */
 export function LeagueHistory({
-  stats,
+  history,
+  current,
   loading,
   failed,
   truncated,
@@ -64,6 +75,22 @@ export function LeagueHistory({
   weekly,
 }: Props) {
   const [rival, setRival] = useState<ManagerKey | null>(null);
+  // Keyed on primitives: the app rebuilds `current` on every render.
+  const season = current?.season;
+  const lastCompleteWeek = current?.lastCompleteWeek;
+  const stats = useMemo(
+    () =>
+      history
+        ? leagueHistoryStats(
+            history,
+            mode,
+            season !== undefined && lastCompleteWeek !== undefined
+              ? { season, lastCompleteWeek }
+              : undefined,
+          )
+        : undefined,
+    [history, mode, season, lastCompleteWeek],
+  );
   // Keyed on the input, which the hook memoises; `weekly` itself is rebuilt
   // on every render of the app, and the post walks the history twice.
   const postInput = weekly?.input;

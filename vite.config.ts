@@ -13,6 +13,12 @@ import { VitePWA } from 'vite-plugin-pwa'
  * line sits at Vite's own 500 kB warning, which every build printed for months
  * without anyone acting on it. So this one fails the build instead: going past
  * it means something heavy joined the first load, and it should be lazy.
+ *
+ * It reached 499.5 kB with #169, and went back to 490.9 kB on 2026-11-08 by
+ * moving the League tab's history arithmetic and Trade ideas' manager model
+ * out of the hooks and into those tabs' own chunks. The pattern holds for the
+ * next one: a hook in the first load fetches, and the tab that reads the
+ * answer computes it.
  */
 const FIRST_LOAD_BUDGET_KB = 500
 

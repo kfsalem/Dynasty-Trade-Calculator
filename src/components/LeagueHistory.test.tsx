@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LeagueHistory } from './LeagueHistory';
-import { leagueHistoryStats } from '../engine/leagueHistory';
 import type { LeagueHistory as History, SeasonHistory } from '../platforms/types';
 import type { Roster } from '../types';
 
@@ -52,7 +51,7 @@ const history: History = { seasons: [season], players: new Map(), truncated: fal
 function show(onModeChange = vi.fn()) {
   render(
     <LeagueHistory
-      stats={leagueHistoryStats(history)}
+      history={history}
       loading={false}
       failed={false}
       truncated={false}
@@ -94,7 +93,7 @@ describe('LeagueHistory', () => {
   it('says so when the history could not be read, rather than showing an empty table', () => {
     render(
       <LeagueHistory
-        stats={undefined}
+        history={undefined}
         loading={false}
         failed
         truncated={false}
@@ -115,7 +114,7 @@ describe('LeagueHistory', () => {
     })) as unknown as Roster[];
     render(
       <LeagueHistory
-        stats={leagueHistoryStats(history)}
+        history={history}
         loading={false}
         failed={false}
         truncated={false}

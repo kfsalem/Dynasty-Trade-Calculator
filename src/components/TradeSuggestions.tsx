@@ -10,7 +10,8 @@ import {
 } from '../engine/suggest';
 import type { FreeAgent } from '../engine/freeAgents';
 import type { RoleTrends } from '../engine/roleTrend';
-import type { ManagerModel } from '../engine/managers';
+import { modelManagers } from '../engine/managers';
+import type { TransactionHistory } from '../platforms/types';
 import { countPhrase, type Countable } from '../lib/learnedText';
 import { describeTrade } from '../lib/tradeText';
 import type { SeasonOdds } from '../engine/analysis';
@@ -42,9 +43,11 @@ interface Props {
   /**
    * What this league's managers have actually done, so offers are ranked by how
    * much good they do rather than only by how good they are. Absent until the
-   * walk lands, and the list is then exactly the list it always was.
+   * walk lands, and the list is then exactly the list it always was. Modelled
+   * here, not in the hook that fetched it, so `modelManagers` ships in this
+   * tab's chunk rather than the first load.
    */
-  managers?: ManagerModel;
+  transactions?: TransactionHistory;
   /** The walk is in flight, so the order on screen is not the final one yet. */
   managersLoading?: boolean;
   /** The walk lost a request. Every partner is weighted the same, as before. */
@@ -273,13 +276,17 @@ export function TradeSuggestions({
   trends,
   odds,
   season,
-  managers,
+  transactions,
   managersLoading,
   managersFailed,
   claimable,
   pinnedPlayerId = null,
   onClearPin,
 }: Props) {
+  const managers = useMemo(
+    () => (transactions ? modelManagers(transactions) : undefined),
+    [transactions],
+  );
   const result = useMemo(() => {
     const ctx: SuggestContext = {
       league,

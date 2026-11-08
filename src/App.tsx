@@ -19,10 +19,10 @@ import { ReplacementLevel } from './components/ReplacementLevel';
 import { EmptyState } from './components/EmptyState';
 import {
   useBenchReport,
-  useHistoryStats,
+  useHistoryWalk,
   useBidModel,
   useLeagueSummaries,
-  useManagerModel,
+  useManagerWalk,
   useWeeklyPostInput,
 } from './hooks/useLeagueData';
 import { runsFaab } from './engine/bids';
@@ -366,7 +366,7 @@ function App() {
     inSeason && league && currentWeek !== null
       ? { season: league.season, lastCompleteWeek: Math.max(0, currentWeek - 1) }
       : undefined;
-  const history = useHistoryStats(leagueId, tab === 'league', standingsMode, historyCurrent);
+  const history = useHistoryWalk(leagueId, tab === 'league');
   // The last finished week for the league chat (#169), off the same walk.
   const weekly = useWeeklyPostInput(
     leagueId,
@@ -386,7 +386,7 @@ function App() {
     so the walk would have bought seventy requests' worth of a ranking nothing
     was going to display.
   */
-  const managers = useManagerModel(
+  const managers = useManagerWalk(
     leagueId,
     tab === 'ideas' && myRosterId !== null && !league?.settings.tradesDisabled,
   );
@@ -811,7 +811,7 @@ function App() {
                     trends={trends}
                     odds={season}
                     season={snapsMeta?.season}
-                    managers={managers.model}
+                    transactions={managers.transactions}
                     managersLoading={managers.loading}
                     managersFailed={managers.failed}
                     claimable={claimable}
@@ -889,7 +889,8 @@ function App() {
 
               {tab === 'league' && (
                 <LeagueHistory
-                  stats={history.stats}
+                  history={history.history}
+                  current={historyCurrent}
                   loading={history.loading}
                   failed={history.failed}
                   truncated={history.truncated}

@@ -21,18 +21,12 @@ import { snapShares } from '../engine/snapShare';
 import { opportunities } from '../engine/opportunity';
 import { checkScoring, scoringIsUsable } from '../engine/scoringCheck';
 import { benchIsUsable, benchPoints, type BenchReport } from '../engine/benchPoints';
-import { modelManagers } from '../engine/managers';
 import { modelBids } from '../engine/bids';
 import { playerRoles } from '../engine/role';
 import { byeTeams as teamsOnBye } from '../engine/byes';
 import { roleTrends } from '../engine/roleTrend';
 import type { SeasonOdds } from '../engine/analysis';
 import { usePlayoffOdds } from './usePlayoffOdds';
-import {
-  leagueHistoryStats,
-  type LeagueHistoryStats,
-  type StandingsMode,
-} from '../engine/leagueHistory';
 import {
   fetchByeWeeks,
   fetchDepthCharts,
@@ -133,39 +127,17 @@ export function useLeagueHistory(leagueId: string | null, enabled: boolean) {
 }
 
 /**
- * Standings, records and rivalries across the league's whole history (#52).
+ * The walk behind the League tab's standings, records and rivalries (#52).
  *
  * The same walk as the bench report, from the same cached query, so opening
- * both costs one walk. `current` cuts the season being played off at its last
- * finished week: a week in progress has partial scores that must not become
- * records.
+ * both costs one walk. The arithmetic (`leagueHistoryStats`) runs in the
+ * League tab itself, which keeps it out of the first load.
  */
-export function useHistoryStats(
-  leagueId: string | null,
-  enabled: boolean,
-  mode: StandingsMode,
-  current: { season: string; lastCompleteWeek: number } | undefined,
-) {
+export function useHistoryWalk(leagueId: string | null, enabled: boolean) {
   const query = useLeagueHistory(leagueId, enabled);
-  const season = current?.season;
-  const lastCompleteWeek = current?.lastCompleteWeek;
-
-  const stats = useMemo<LeagueHistoryStats | undefined>(
-    () =>
-      query.data
-        ? leagueHistoryStats(
-            query.data,
-            mode,
-            season !== undefined && lastCompleteWeek !== undefined
-              ? { season, lastCompleteWeek }
-              : undefined,
-          )
-        : undefined,
-    [query.data, mode, season, lastCompleteWeek],
-  );
 
   return {
-    stats,
+    history: query.data,
     loading: query.isFetching && !query.data,
     failed: query.isError,
     truncated: query.data?.truncated ?? false,
@@ -269,16 +241,13 @@ export function useBenchReport(leagueId: string | null, enabled: boolean) {
  * by the shrinkage rather than by a gate — a model built from nothing returns a
  * factor of exactly 1.0 and changes no ranking.
  */
-export function useManagerModel(leagueId: string | null, enabled: boolean) {
+export function useManagerWalk(leagueId: string | null, enabled: boolean) {
   const query = useTransactions(leagueId, enabled);
 
-  const model = useMemo(
-    () => (query.data ? modelManagers(query.data) : undefined),
-    [query.data],
-  );
-
+  // The model itself (`modelManagers`) is built in the Trade ideas tab, which
+  // keeps it out of the first load.
   return {
-    model,
+    transactions: query.data,
     /** True while the walk is in flight, so a surface can say so rather than lie. */
     loading: query.isFetching && !query.data,
     failed: query.isError,
