@@ -350,6 +350,19 @@ describe('findLeagues', () => {
     expect(found.leagues.map((l) => [l.leagueId, l.format])).toEqual([['7', 'keeper']]);
   });
 
+  it('lists the same leagues for a manager known by id, without the username (#161)', async () => {
+    client.getUserLeagues.mockResolvedValue([league('1', 2)]);
+
+    const found = await sleeperProvider.leaguesForUser!('u9');
+
+    expect(client.getAccountByUsername).not.toHaveBeenCalled();
+    expect(found).toEqual({
+      userId: 'u9',
+      season: '2026',
+      leagues: [{ leagueId: '1', name: 'League 1', teams: 12, format: 'dynasty' }],
+    });
+  });
+
   it('passes on the lookup’s own error for a username that does not exist', async () => {
     client.getAccountByUsername.mockRejectedValue(new Error('No Sleeper user named "nobody".'));
     await expect(sleeperProvider.findLeagues!('nobody')).rejects.toThrow('No Sleeper user named');

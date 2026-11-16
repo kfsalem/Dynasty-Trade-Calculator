@@ -12,6 +12,7 @@ import type {
   SeasonHistory,
   SeasonManager,
   TransactionHistory,
+  UserLeagues,
 } from '../types';
 import type { KnownDraftOrder, TradedPickRef } from '../../engine/picks';
 import {
@@ -80,6 +81,34 @@ const LEAGUE_FORMATS: Record<number, LeagueChoice['format']> = {
   1: 'keeper',
   2: 'dynasty',
 };
+
+/**
+ * A manager's leagues this season, or last season's when none has renewed yet
+ * (#160). Shared by the username search and the header's switcher (#161).
+ */
+async function leaguesOf(userId: string): Promise<UserLeagues> {
+  const state = await getState().catch(() => null);
+  const current = state?.league_season ?? state?.season ?? String(new Date().getFullYear());
+  const previous = state?.previous_season ?? String(Number(current) - 1);
+
+  let season = current;
+  let rows = await getUserLeagues(userId, current);
+  if (rows.length === 0) {
+    season = previous;
+    rows = await getUserLeagues(userId, previous);
+  }
+
+  return {
+    userId,
+    season,
+    leagues: rows.map((row) => ({
+      leagueId: row.league_id,
+      name: row.name,
+      teams: row.total_rosters ?? null,
+      format: LEAGUE_FORMATS[row.settings?.type ?? -1] ?? null,
+    })),
+  };
+}
 
 export const sleeperProvider: LeagueProvider = {
   id: 'sleeper',
@@ -218,31 +247,20 @@ export const sleeperProvider: LeagueProvider = {
   },
 
   async findLeagues(username) {
-    const [account, state] = await Promise.all([
-      getAccountByUsername(username),
-      getState().catch(() => null),
-    ]);
-    const current = state?.league_season ?? state?.season ?? String(new Date().getFullYear());
-    const previous = state?.previous_season ?? String(Number(current) - 1);
-
-    let season = current;
-    let rows = await getUserLeagues(account.user_id, current);
-    if (rows.length === 0) {
-      season = previous;
-      rows = await getUserLeagues(account.user_id, previous);
-    }
-
+    const account = await getAccountByUsername(username);
     return {
-      userId: account.user_id,
       displayName: account.display_name ?? account.username ?? username.trim(),
-      season,
-      leagues: rows.map((row) => ({
-        leagueId: row.league_id,
-        name: row.name,
-        teams: row.total_rosters ?? null,
-        format: LEAGUE_FORMATS[row.settings?.type ?? -1] ?? null,
-      })),
+      ...(await leaguesOf(account.user_id)),
     };
+  },
+
+  /**
+   * The leagues of a manager the app already knows by id: the owner of the
+   * claimed team, for the header's league switcher (#161). The same list as a
+   * username search, without asking for the username.
+   */
+  leaguesForUser(userId) {
+    return leaguesOf(userId);
   },
 
   async loadWeekGames(season, week) {

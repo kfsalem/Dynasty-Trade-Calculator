@@ -45,6 +45,23 @@ import {
 import type { DraftPick, League, LeagueSettings, Player } from '../types';
 import type { WeeklyPostInput } from '../engine/weeklyPost';
 
+/**
+ * The claimed manager's leagues, for the header's switcher (#161).
+ *
+ * Keyed on the manager rather than the league, so switching between his
+ * leagues asks once. Null while no team is claimed: whose leagues to list is
+ * exactly what claiming a team says.
+ */
+export function useMyLeagues(userId: string | null) {
+  return useQuery({
+    queryKey: ['user-leagues', userId],
+    queryFn: () => sleeperProvider.leaguesForUser!(userId as string),
+    enabled: Boolean(userId && sleeperProvider.leaguesForUser),
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
+  });
+}
+
 export function useLeague(leagueId: string | null) {
   return useQuery({
     queryKey: ['league', leagueId],

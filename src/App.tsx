@@ -23,6 +23,7 @@ import {
   useBidModel,
   useLeagueSummaries,
   useManagerWalk,
+  useMyLeagues,
   useWeeklyPostInput,
 } from './hooks/useLeagueData';
 import { runsFaab } from './engine/bids';
@@ -321,6 +322,20 @@ function App() {
   }, [pendingClaim, league, setMyRoster]);
 
   /*
+    The claimed manager's other leagues, for the switcher in the header (#161).
+    The sample's managers are made up, so it has no other leagues to list.
+  */
+  const myUserId =
+    league && !isSampleId(league.id)
+      ? (league.rosters.find((r) => r.rosterId === myRosterId)?.ownerId ?? null)
+      : null;
+  const myLeagues = useMyLeagues(myUserId);
+  const switchLeague = useCallback(
+    (next: string) => importLeague(next, myUserId ?? undefined),
+    [importLeague, myUserId],
+  );
+
+  /*
     What moved on your team since this browser last opened the league (#167).
     Taken only while My team is open with a team claimed and everything loaded,
     so nothing is marked seen that was never on screen.
@@ -597,6 +612,8 @@ function App() {
                   league={league}
                   valuesOrigin={valuesOrigin}
                   onReset={() => changeLeague(null)}
+                  leagues={myLeagues.data?.leagues}
+                  onSwitch={switchLeague}
                 />
                 <ValuesBadge origin={valuesOrigin} />
                 <ScoringBadge fidelity={scoringFidelity} premium={premium} />

@@ -424,6 +424,11 @@ export interface LeagueProvider {
    * readable message for a username that does not exist.
    */
   findLeagues?(username: string): Promise<LeagueSearch>;
+  /**
+   * The same list for a manager known by id, such as the claimed team's
+   * owner: the header's league switcher (#161).
+   */
+  leaguesForUser?(userId: string): Promise<UserLeagues>;
   loadLeague(leagueId: string): Promise<LeagueBundle>;
   /**
    * The regular season's fixtures, weeks 1 through `throughWeek`.
@@ -511,6 +516,9 @@ export interface LeagueSearch {
   season: string;
   leagues: LeagueChoice[];
 }
+
+/** A manager's leagues, when the manager is already known by id. */
+export type UserLeagues = Omit<LeagueSearch, 'displayName'>;
 
 export interface LeagueChoice {
   leagueId: string;
