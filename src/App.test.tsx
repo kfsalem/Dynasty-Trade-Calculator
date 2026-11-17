@@ -25,6 +25,8 @@ const mocks = vi.hoisted(() => ({
   managerWalk: [] as boolean[],
   /** The same, for the bid model, which shares the walk and not the gate. */
   bidWalk: [] as boolean[],
+  /** What `useMyLeagues` lists once a team is claimed, when a test wants a list. */
+  myLeagues: null as unknown,
 }));
 
 vi.mock('./hooks/useLeagueData', () => ({
@@ -72,9 +74,10 @@ vi.mock('./hooks/useLeagueData', () => ({
   }),
   // The weekly post's inputs (#169), idle: the post has its own tests.
   useWeeklyPostInput: () => null,
-  // The claimed manager's leagues for the header's switcher (#161), idle: the
-  // switcher has its own tests.
-  useMyLeagues: () => ({ data: undefined }),
+  // The claimed manager's leagues for the header's switcher (#161). Idle
+  // unless a test lists some: the switcher has its own tests.
+  useMyLeagues: (userId: string | null) =>
+    userId && mocks.myLeagues ? { data: mocks.myLeagues } : { data: undefined },
   // The manager model's walk, idle for the same reason: the suggestion list
   // renders identically with and without it, and these tests are about the
   // shell rather than about the ordering inside that list.
@@ -171,6 +174,7 @@ beforeEach(() => {
   mocks.states = {};
   mocks.managerWalk = [];
   mocks.bidWalk = [];
+  mocks.myLeagues = null;
   localStorage.clear();
   window.history.replaceState(null, '', '/');
 });
@@ -509,5 +513,60 @@ describe('App — a league found by username (#160)', () => {
 
     expect(await screen.findByText('Which team is yours?')).toBeInTheDocument();
     expect(localStorage.getItem('dynasty:myRoster:810000')).toBeNull();
+  });
+});
+
+describe('App — all of a manager’s leagues at once (#161)', () => {
+  it('trades the tabs for the overview, and opens a league from it with his team claimed', async () => {
+    // Roster 1 is his (`u1`) in both leagues.
+    mocks.states['111111'] = ready(leagueWithRosters('111111', 1, 2), [1, 2]);
+    mocks.states['222222'] = ready(leagueWithRosters('222222', 1, 3), [1, 3]);
+    mocks.myLeagues = {
+      userId: 'u1',
+      season: '2026',
+      leagues: [
+        { leagueId: '111111', name: 'League 111111', teams: 2, format: 'dynasty' },
+        { leagueId: '222222', name: 'League 222222', teams: 2, format: 'dynasty' },
+      ],
+    };
+    localStorage.setItem('dynasty:leagueId', '111111');
+    localStorage.setItem('dynasty:myRoster:111111', '1');
+    await openAt('/');
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByLabelText(/^League 111111, /));
+    await user.click(screen.getByRole('button', { name: /^All leagues/ }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'All your leagues' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('tablist')).toBeNull();
+    // The open league's scoring check describes one league, not this screen.
+    expect(screen.queryByLabelText(/scoring/i)).toBeNull();
+
+    // Neither stub carries a valued roster, so each league says so and offers a way in.
+    await user.click(await screen.findByRole('button', { name: 'Open League 222222' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'League 222222' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('tablist')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'My team' })).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => expect(localStorage.getItem('dynasty:myRoster:222222')).toBe('1'));
+  });
+
+  it('offers no overview to a manager with one league', async () => {
+    mocks.states['111111'] = ready(leagueWithRosters('111111', 1, 2), [1, 2]);
+    mocks.myLeagues = {
+      userId: 'u1',
+      season: '2026',
+      leagues: [{ leagueId: '111111', name: 'League 111111', teams: 2, format: 'dynasty' }],
+    };
+    localStorage.setItem('dynasty:leagueId', '111111');
+    localStorage.setItem('dynasty:myRoster:111111', '1');
+    await openAt('/');
+
+    await userEvent.setup().click(await screen.findByLabelText(/^League 111111, /));
+    expect(screen.queryByRole('button', { name: /^All leagues/ })).toBeNull();
   });
 });

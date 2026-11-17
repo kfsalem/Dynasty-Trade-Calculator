@@ -1,13 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { LeagueSettings, Player, Roster, SeasonPhase } from '../types';
 import type { RosterSummary, ValuedPlayer } from '../engine/rosterValue';
-import {
-  startSit,
-  CLEAR_MARGIN,
-  type LineupBasis,
-  type LineupChange,
-} from '../engine/startSit';
-import { wireUpgrades, type WireUpgrade } from '../engine/wire';
+import { CLEAR_MARGIN, type LineupBasis, type LineupChange } from '../engine/startSit';
+import type { WireUpgrade } from '../engine/wire';
+import { weekCalls } from '../engine/weekCalls';
 import type { FreeAgentBoard } from '../engine/freeAgents';
 import { playingTime } from '../engine/freeAgents';
 import { isGameWeek } from '../engine/season';
@@ -139,41 +135,11 @@ export function WeeklyLineup({
 }: Props) {
   const [showLineup, setShowLineup] = useState(false);
 
-  const plan = useMemo(
+  // The same function the All leagues screen calls (#161), so the two agree.
+  const { plan, wire } = useMemo(
     () =>
-      startSit({
-        entries: summary.players,
-        startingSlots: settings.startingSlots,
-        setLineup: roster.setLineup,
-        byeTeams,
-        projected,
-        locked: lockedTeams,
-      }),
-    [summary.players, settings.startingSlots, roster.setLineup, byeTeams, projected, lockedTeams],
-  );
-
-  const wire = useMemo(
-    () =>
-      wireUpgrades({
-        lineup: plan.lineup,
-        entries: summary.players,
-        board,
-        byeTeams,
-        roster,
-        activeLimit: settings.allSlots.length,
-        projected,
-        locked: lockedTeams,
-      }),
-    [
-      plan.lineup,
-      summary.players,
-      board,
-      byeTeams,
-      roster,
-      settings.allSlots.length,
-      projected,
-      lockedTeams,
-    ],
+      weekCalls({ roster, summary, settings, board, byeTeams, projected, locked: lockedTeams }),
+    [roster, summary, settings, board, byeTeams, projected, lockedTeams],
   );
 
   /** One line of facts behind a player's number, or null. */
@@ -467,13 +433,14 @@ function Marginal({
  * The drop is named because nearly every claim is an add/drop and a
  * recommendation that ignores the cost is only half of one.
  */
-function Wire({
+export function Wire({
   upgrades,
   activityCurrent,
   bids,
   roster,
   basis,
   factsFor,
+  compact = false,
 }: {
   upgrades: WireUpgrade[];
   activityCurrent: boolean;
@@ -481,6 +448,11 @@ function Wire({
   roster: Roster;
   basis: LineupBasis;
   factsFor: (player: Player) => string | null;
+  /**
+   * Leave out the paragraph on what the numbers mean. The All leagues screen
+   * (#161) says it once at the top rather than once per league.
+   */
+  compact?: boolean;
 }) {
   const remaining = bids ? budgetLeft(bids, roster) : null;
   return (
@@ -488,20 +460,22 @@ function Wire({
       <h4 className="text-sm font-semibold text-accent">
         {upgrades.length === 1 ? 'A free agent beats' : 'Free agents beat'} your lineup
       </h4>
-      <p className="mt-1 text-xs text-accent/90">
-        {basis === 'projection'
-          ? "Unrostered, and projected under your league's scoring — the same numbers as your lineup."
-          : "Unrostered, and priced against this league's replacement levels — so these numbers mean the same thing as everyone else's."}
-        {/*
-          The budget is a fact about this manager and belongs once, at the top,
-          rather than repeated on every row. `remaining` can exceed the league's
-          own budget: FAAB moves in trades, and a manager who has acquired some
-          really does have more than $150 of a $150 budget.
-        */}
-        {remaining !== null && bids?.budget
-          ? ` You have $${remaining} of your $${bids.budget} waiver budget left.`
-          : ''}
-      </p>
+      {!compact && (
+        <p className="mt-1 text-xs text-accent/90">
+          {basis === 'projection'
+            ? "Unrostered, and projected under your league's scoring — the same numbers as your lineup."
+            : "Unrostered, and priced against this league's replacement levels — so these numbers mean the same thing as everyone else's."}
+          {/*
+            The budget is a fact about this manager and belongs once, at the top,
+            rather than repeated on every row. `remaining` can exceed the league's
+            own budget: FAAB moves in trades, and a manager who has acquired some
+            really does have more than $150 of a $150 budget.
+          */}
+          {remaining !== null && bids?.budget
+            ? ` You have $${remaining} of your $${bids.budget} waiver budget left.`
+            : ''}
+        </p>
+      )}
 
       <ul className="mt-3 space-y-3">
         {upgrades.map((upgrade) => {
@@ -630,7 +604,7 @@ function PositionChip({ entry }: { entry: ValuedPlayer }) {
  * else, so the sentence that explains the row gets its own line rather than
  * being cut to a word.
  */
-function ChangeRow({
+export function ChangeRow({
   change,
   basis,
   facts,

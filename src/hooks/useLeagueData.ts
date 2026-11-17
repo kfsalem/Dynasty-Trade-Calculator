@@ -445,7 +445,22 @@ export function useByeWeeks() {
   });
 }
 
-export function useLeagueSummaries(leagueId: string | null) {
+/**
+ * Everything one league needs to render, derived from what has loaded.
+ *
+ * A caller that loads several leagues at once to read their lineups (#161)
+ * can leave out two things no call depends on: `odds: false` skips the playoff
+ * simulation, and `evidence: false` the season's facts behind each call.
+ * Evidence was the single largest cost of loading a league, measured
+ * 2026-11-16: about 100 ms a league, against 60 for valuing it. Nothing else
+ * changes. The queries share their keys with the league's own view, so opening
+ * the league from there costs nothing, and every value is computed the same
+ * way, so the two never disagree about a call.
+ */
+export function useLeagueSummaries(
+  leagueId: string | null,
+  { odds = true, evidence: withEvidence = true }: { odds?: boolean; evidence?: boolean } = {},
+) {
   const leagueQuery = useLeague(leagueId);
   const settings = leagueQuery.data?.league.settings;
   const valuesQuery = useValues(settings);
@@ -679,7 +694,7 @@ export function useLeagueSummaries(leagueId: string | null) {
   /** What each player has done this season, shown beside the lineup's calls. */
   const evidence = useMemo(() => {
     const season = leagueData?.currentSeason;
-    if (!season || !settings) return undefined;
+    if (!withEvidence || !season || !settings) return undefined;
     return weekEvidence({
       season: Number(season),
       snaps: snapsQuery.data,
@@ -689,6 +704,7 @@ export function useLeagueSummaries(leagueId: string | null) {
       rules: settings.scoring,
     });
   }, [
+    withEvidence,
     leagueData,
     settings,
     snapsQuery.data,
@@ -783,7 +799,7 @@ export function useLeagueSummaries(leagueId: string | null) {
    * `usePlayoffOdds` returns null until an answer exists, so nothing here waits
    * on it.
    */
-  const baselineOdds = usePlayoffOdds(oddsContext ?? null);
+  const baselineOdds = usePlayoffOdds(odds ? (oddsContext ?? null) : null);
 
   /**
    * Playoff odds paired with how much season is behind them.
@@ -972,6 +988,15 @@ export function useLeagueSummaries(leagueId: string | null) {
           chartSeason: depthQuery.data?.season ?? null,
         }
       : undefined,
+    /**
+     * This week's projections or kickoffs are still on their way.
+     *
+     * The lineup panel shows its calls without waiting and re-ranks when they
+     * land. A screen that counts calls across leagues (#161) waits instead,
+     * because a count that changes as each league's projections arrive reads
+     * as the app changing its mind.
+     */
+    weekPending: projectionsQuery.isLoading || gamesQuery.isLoading,
     // Snap data deliberately absent: it enriches rows rather than gating them,
     // so the league loads and renders whether or not it arrives.
     isLoading: leagueQuery.isLoading || valuesQuery.isLoading,

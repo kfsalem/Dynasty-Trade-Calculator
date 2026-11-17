@@ -41,32 +41,18 @@ export function usePlayoffOdds(input: OddsInput | null): PlayoffOdds {
   const current = useRef(input);
   current.current = input;
 
-  useEffect(() => {
-    // No `Worker` means jsdom, or a browser old enough that the app has larger
-    // problems. Falling back to the main thread keeps the feature working
-    // rather than silently blank; it is slower, which is the whole reason the
-    // worker exists, and still better than nothing.
-    if (typeof Worker === 'undefined') return;
-
-    const instance = new Worker(
-      new URL('../workers/playoffOdds.worker.ts', import.meta.url),
-      { type: 'module' },
-    );
-
-    instance.onmessage = (event: MessageEvent<OddsReply>) => {
-      // A reply for a scenario the user has already edited past is worse than
-      // no reply: it would show odds for a trade that is no longer on screen.
-      if (event.data.id !== latest.current) return;
-      setOdds(new Map(event.data.odds.map((o) => [o.rosterId, o.odds])));
-      setPending(false);
-    };
-
-    worker.current = instance;
-    return () => {
-      instance.terminate();
+  /*
+    The worker starts with the first question, not on mount. A caller that
+    never asks one, such as each league the All leagues screen loads (#161),
+    would otherwise start a worker per league and leave every one of them idle.
+  */
+  useEffect(
+    () => () => {
+      worker.current?.terminate();
       worker.current = null;
-    };
-  }, []);
+    },
+    [],
+  );
 
   const signature = signatureOf(input);
 
@@ -80,6 +66,25 @@ export function usePlayoffOdds(input: OddsInput | null): PlayoffOdds {
 
     const id = latest.current + 1;
     latest.current = id;
+
+    // No `Worker` means jsdom, or a browser old enough that the app has larger
+    // problems. Falling back to the main thread keeps the feature working
+    // rather than silently blank; it is slower, which is the whole reason the
+    // worker exists, and still better than nothing.
+    if (!worker.current && typeof Worker !== 'undefined') {
+      const instance = new Worker(
+        new URL('../workers/playoffOdds.worker.ts', import.meta.url),
+        { type: 'module' },
+      );
+      instance.onmessage = (event: MessageEvent<OddsReply>) => {
+        // A reply for a scenario the user has already edited past is worse than
+        // no reply: it would show odds for a trade that is no longer on screen.
+        if (event.data.id !== latest.current) return;
+        setOdds(new Map(event.data.odds.map((o) => [o.rosterId, o.odds])));
+        setPending(false);
+      };
+      worker.current = instance;
+    }
 
     if (!worker.current) {
       // Main-thread fallback. Synchronous, so nothing to correlate.
