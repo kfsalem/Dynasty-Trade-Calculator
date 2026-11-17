@@ -158,7 +158,7 @@ const BUCKET_SHADE: Record<Bucket, string> = {
  * quadrant in the status colours, which are reserved; the verdict is carried by
  * its words now, and the tiles are neutral.
  */
-function Tile({ label, value, note }: { label: string; value: string; note?: string | null }) {
+export function Tile({ label, value, note }: { label: string; value: string; note?: string | null }) {
   return (
     <div className="rounded-xl border border-line bg-raised p-4">
       <dt className="text-xs font-semibold uppercase tracking-wide text-subtle">{label}</dt>

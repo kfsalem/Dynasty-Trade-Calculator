@@ -71,3 +71,66 @@ describe('LeagueHeader, as the league switcher (#161)', () => {
     expect(screen.queryByRole('navigation', { name: 'Your leagues' })).toBeNull();
   });
 });
+
+describe('LeagueHeader, as the way into All leagues (#161)', () => {
+  it('lists All leagues first, and opens it and closes itself when picked', async () => {
+    const onOverview = vi.fn();
+    render(
+      <LeagueHeader
+        league={league}
+        onReset={vi.fn()}
+        leagues={LEAGUES}
+        onSwitch={vi.fn()}
+        onOverview={onOverview}
+      />,
+    );
+    const user = await open();
+
+    const nav = screen.getByRole('navigation', { name: 'Your leagues' });
+    expect(within(nav).getAllByRole('listitem')[0]).toHaveTextContent(
+      'All leaguesThis week and shared players',
+    );
+
+    await user.click(within(nav).getByRole('button', { name: /^All leagues/ }));
+    expect(onOverview).toHaveBeenCalled();
+    expect(nav.closest('details')).not.toHaveAttribute('open');
+  });
+
+  it('closes itself when a league is picked, even one that opens with no wait', async () => {
+    render(<LeagueHeader league={league} onReset={vi.fn()} leagues={LEAGUES} onSwitch={vi.fn()} />);
+    const user = await open();
+
+    const nav = screen.getByRole('navigation', { name: 'Your leagues' });
+    await user.click(within(nav).getByRole('button', { name: /Tight Ends/ }));
+    expect(nav.closest('details')).not.toHaveAttribute('open');
+  });
+
+  it('names the overview while it is showing, and makes every league a way back', async () => {
+    const onSwitch = vi.fn();
+    render(
+      <LeagueHeader
+        league={league}
+        onReset={vi.fn()}
+        leagues={LEAGUES}
+        onSwitch={onSwitch}
+        onOverview={vi.fn()}
+        overview
+      />,
+    );
+    expect(screen.getByRole('heading', { level: 1, name: 'All your leagues' })).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText(/^All your leagues, 3 of them/));
+
+    const nav = screen.getByRole('navigation', { name: 'Your leagues' });
+    const items = within(nav).getAllByRole('listitem');
+    expect(items[0]).toHaveAttribute('aria-current', 'true');
+    expect(items[0]).toHaveTextContent('All leagues');
+    // The league behind the overview is no longer "Open": it is a way back.
+    await user.click(within(nav).getByRole('button', { name: /Test League/ }));
+    expect(onSwitch).toHaveBeenCalledWith('test');
+    // Its rules describe one league, and this screen is about all of them.
+    expect(screen.queryByText('League rules')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Find another league' })).toBeInTheDocument();
+  });
+});

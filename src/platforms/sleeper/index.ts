@@ -103,7 +103,10 @@ async function leaguesOf(userId: string): Promise<UserLeagues> {
     season,
     leagues: rows.map((row) => ({
       leagueId: row.league_id,
-      name: row.name,
+      // Trimmed: Sleeper keeps whatever spaces a commissioner typed, and a
+      // name ending in one put a gap before the full stop in "Nothing to
+      // change in …" (#161), seen live 2026-11-16.
+      name: row.name.trim(),
       teams: row.total_rosters ?? null,
       format: LEAGUE_FORMATS[row.settings?.type ?? -1] ?? null,
     })),

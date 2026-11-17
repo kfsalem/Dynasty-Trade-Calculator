@@ -59,6 +59,13 @@ const TradeBuilder = lazy(() => tabModules.trade().then((m) => ({ default: m.Tra
 const LeagueHistory = lazy(() =>
   tabModules.league().then((m) => ({ default: m.LeagueHistory })),
 );
+/*
+  The All leagues screen (#161). Not prefetched with the tabs: only a manager
+  with more than one league can reach it, and he does so from the header.
+*/
+const AllLeagues = lazy(() =>
+  import('./components/AllLeagues').then((m) => ({ default: m.AllLeagues })),
+);
 
 /**
  * Start every tab's download once the browser is idle. A failed prefetch is
@@ -231,6 +238,13 @@ function App() {
    * bar is left strictly alone; see the effect that writes it.
    */
   const [linkHandled, setLinkHandled] = useState(false);
+  /**
+   * Whether the All leagues screen (#161) is showing instead of the tabs.
+   *
+   * The open league stays loaded behind it: its claimed team is how the app
+   * knows whose leagues to list, and going back to it costs nothing.
+   */
+  const [overview, setOverview] = useState(false);
 
   const seedTrade = useCallback((trade: PendingTrade, dropped = 0) => {
     setShared(trade);
@@ -251,6 +265,8 @@ function App() {
     setLeagueId(next);
     setShared(null);
     setLinkHandled(true);
+    // A league chosen from anywhere is a league to look at, not the overview.
+    setOverview(false);
   }, []);
   const { myRosterId, setMyRoster } = useMyRoster(leagueId);
 
@@ -336,6 +352,27 @@ function App() {
   );
 
   /*
+    The All leagues screen, offered once there is a second league to put on it.
+    Claiming a different team, or none, takes it away with the list it reads.
+  */
+  const myChoices = myLeagues.data?.leagues;
+  const canOverview = Boolean(
+    myUserId && league && myChoices?.some((choice) => choice.leagueId !== league.id),
+  );
+  const showOverview = overview && canOverview;
+  /** The tab on screen, or none while the overview covers them. Gates every tab's loading. */
+  const shown: Tab | null = showOverview ? null : tab;
+  /** A league opened from the overview opens on My team, where its calls are. */
+  const openFromOverview = useCallback(
+    (next: string) => {
+      setTab('analysis');
+      if (next === leagueId) setOverview(false);
+      else switchLeague(next);
+    },
+    [leagueId, switchLeague],
+  );
+
+  /*
     What moved on your team since this browser last opened the league (#167).
     Taken only while My team is open with a team claimed and everything loaded,
     so nothing is marked seen that was never on screen.
@@ -344,7 +381,7 @@ function App() {
     leagueId,
     myRosterId,
     active:
-      tab === 'analysis' && myRosterId !== null && Boolean(league && players && values) && !isLoading && !error,
+      shown === 'analysis' && myRosterId !== null && Boolean(league && players && values) && !isLoading && !error,
     league,
     players,
     values,
@@ -368,7 +405,7 @@ function App() {
    * price a trade never pays for it; once it has loaded, react-query keeps it
    * and switching tabs costs nothing.
    */
-  const bench = useBenchReport(leagueId, tab === 'analysis' && myRosterId !== null);
+  const bench = useBenchReport(leagueId, shown === 'analysis' && myRosterId !== null);
 
   /*
     The league's history (#52), walked only when the League tab is open. The
@@ -381,11 +418,11 @@ function App() {
     inSeason && league && currentWeek !== null
       ? { season: league.season, lastCompleteWeek: Math.max(0, currentWeek - 1) }
       : undefined;
-  const history = useHistoryWalk(leagueId, tab === 'league');
+  const history = useHistoryWalk(leagueId, shown === 'league');
   // The last finished week for the league chat (#169), off the same walk.
   const weekly = useWeeklyPostInput(
     leagueId,
-    tab === 'league' && seasonPhase === 'regular',
+    shown === 'league' && seasonPhase === 'regular',
     league,
     summaries,
     players,
@@ -403,7 +440,7 @@ function App() {
   */
   const managers = useManagerWalk(
     leagueId,
-    tab === 'ideas' && myRosterId !== null && !league?.settings.tradesDisabled,
+    shown === 'ideas' && myRosterId !== null && !league?.settings.tradesDisabled,
   );
 
   /*
@@ -419,7 +456,7 @@ function App() {
     league?.settings,
     // The Free agents tab shows what a claim costs too (#152), and needs no
     // claimed team to: the prices are the league's, only the budget is his.
-    ((tab === 'analysis' && myRosterId !== null) || tab === 'agents') &&
+    ((shown === 'analysis' && myRosterId !== null) || shown === 'agents') &&
       runsFaab(league?.settings),
   );
 
@@ -612,11 +649,18 @@ function App() {
                   league={league}
                   valuesOrigin={valuesOrigin}
                   onReset={() => changeLeague(null)}
-                  leagues={myLeagues.data?.leagues}
-                  onSwitch={switchLeague}
+                  leagues={myChoices}
+                  onSwitch={showOverview ? openFromOverview : switchLeague}
+                  onOverview={canOverview ? () => setOverview(true) : undefined}
+                  overview={showOverview}
                 />
-                <ValuesBadge origin={valuesOrigin} />
-                <ScoringBadge fidelity={scoringFidelity} premium={premium} />
+                {/* Both describe the open league, which the overview is not about. */}
+                {!showOverview && (
+                  <>
+                    <ValuesBadge origin={valuesOrigin} />
+                    <ScoringBadge fidelity={scoringFidelity} premium={premium} />
+                  </>
+                )}
               </>
             )}
             <InstallButton />
@@ -660,7 +704,13 @@ function App() {
             page does not shift when the league lands. */}
         {leagueId && isLoading && !error && <LeagueSkeleton />}
 
-        {ready && (
+        {ready && showOverview && myUserId && myChoices && (
+          <Suspense fallback={<TabSkeleton />}>
+            <AllLeagues userId={myUserId} leagues={myChoices} onOpen={openFromOverview} />
+          </Suspense>
+        )}
+
+        {ready && !showOverview && (
           <>
             {isSampleId(league.id) && <SampleBanner onLeave={() => changeLeague(null)} />}
             {/*
