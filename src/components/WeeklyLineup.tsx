@@ -214,6 +214,29 @@ export function WeeklyLineup({
     );
   }
 
+  /*
+    Nobody on the roster: in a guillotine league, a team that has been chopped,
+    its players sent to the wire. The plan reads every slot as empty and the
+    wire fills each one, which told a team that can't claim anybody to make
+    eight claims. The All leagues screen says the same (#161).
+  */
+  if (roster.playerIds.length === 0) {
+    return (
+      <section className="card">
+        <p className="text-xs font-semibold uppercase tracking-wide text-subtle">
+          Weekly lineup
+        </p>
+        <h3 className="mt-1 text-lg font-bold tracking-tight">
+          Empty roster — no lineup to set
+        </h3>
+        <p className="mt-2 text-sm text-muted">
+          Your roster is empty, so there is no lineup to set and nobody to claim for it.
+          In a guillotine league, that means the team has been chopped.
+        </p>
+      </section>
+    );
+  }
+
   return (
     <section className="card">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">

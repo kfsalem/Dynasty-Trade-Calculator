@@ -91,6 +91,7 @@ export function makeRoster(rosterId: number, playerIds: string[]): Roster {
     ownerId: `u${rosterId}`,
     teamName: `Team ${rosterId}`,
     ownerName: `Owner ${rosterId}`,
+    coOwners: [],
     avatar: null,
     wins: 0,
     losses: 0,

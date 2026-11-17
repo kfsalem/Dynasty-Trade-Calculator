@@ -150,6 +150,12 @@ export const sleeperBracketSchema = z.array(sleeperBracketMatchSchema);
 export const sleeperRosterSchema = z.object({
   roster_id: z.number(),
   owner_id: z.string().nullish(),
+  /**
+   * The team's other managers, by user id: null when it has none. A co-owner
+   * has the league in his own league list and is in the league's users, so he
+   * is as much the team's manager as `owner_id` is (#161, checked 2026-11-16).
+   */
+  co_owners: z.array(z.string()).nullish(),
   players: z.array(z.string()).nullish(),
   starters: z.array(z.string()).nullish(),
   taxi: z.array(z.string()).nullish(),

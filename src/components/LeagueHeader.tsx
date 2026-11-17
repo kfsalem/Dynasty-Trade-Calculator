@@ -1,6 +1,6 @@
 import type { MouseEvent, ReactNode } from 'react';
 import type { LeagueChoice } from '../platforms/types';
-import type { League } from '../types';
+import type { League, Manager } from '../types';
 import { pprLabel, scoringBadges } from '../lib/scoringText';
 import { valuesLine, valuesSizeLine } from '../lib/valuesText';
 import type { ValueOrigin } from '../values/source';
@@ -23,6 +23,13 @@ interface Props {
    * league and the screen describes all of them.
    */
   overview?: boolean;
+  /**
+   * The claimed team's managers, owner first, when it has several and none is
+   * known to be the visitor. Asked here because the answer is used here: it
+   * decides whose leagues the switcher lists (#161).
+   */
+  managers?: Manager[];
+  onPickManager?: (userId: string) => void;
 }
 
 /**
@@ -82,6 +89,8 @@ export function LeagueHeader({
   onSwitch,
   onOverview,
   overview = false,
+  managers,
+  onPickManager,
 }: Props) {
   const { settings } = league;
   const values = valuesLine(valuesOrigin);
@@ -169,6 +178,9 @@ export function LeagueHeader({
             </ul>
           </nav>
         )}
+        {managers && onPickManager && !showsAll && (
+          <WhoAreYou managers={managers} onPick={onPickManager} />
+        )}
         {showsAll ? (
           <button
             type="button"
@@ -182,6 +194,37 @@ export function LeagueHeader({
         )}
       </HeaderPopover>
     </>
+  );
+}
+
+/**
+ * Which of a co-owned team's managers is the visitor. The answer stays open
+ * in the popover so his leagues can appear where the question was.
+ */
+function WhoAreYou({ managers, onPick }: { managers: Manager[]; onPick: (userId: string) => void }) {
+  return (
+    <section aria-labelledby="who-are-you" className="mb-4 border-b border-line pb-4">
+      <p id="who-are-you" className="text-xs font-semibold uppercase tracking-wide text-subtle">
+        Which manager are you?
+      </p>
+      <p className="mt-1 text-xs text-muted">
+        Your team has {managers.length} managers. Pick yourself to switch between your leagues here.
+      </p>
+      <ul className="mt-2 space-y-1">
+        {managers.map((manager, i) => (
+          <li key={manager.id}>
+            <button
+              type="button"
+              onClick={() => onPick(manager.id)}
+              className={`${ROW} transition-colors hover:bg-raised`}
+            >
+              <span className="min-w-0 truncate font-medium">{manager.name}</span>
+              <span className="shrink-0 text-xs text-subtle">{i === 0 ? 'Owner' : 'Co-owner'}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

@@ -134,3 +134,32 @@ describe('LeagueHeader, as the way into All leagues (#161)', () => {
     expect(screen.getByRole('button', { name: 'Find another league' })).toBeInTheDocument();
   });
 });
+
+describe('LeagueHeader, asking which manager of a co-owned team is the visitor (#161)', () => {
+  const MANAGERS = [
+    { id: 'owner', name: 'Owner One' },
+    { id: 'co', name: 'Co Two' },
+  ];
+
+  it('asks with every manager, owner first, and passes on who was picked', async () => {
+    const onPickManager = vi.fn();
+    render(
+      <LeagueHeader league={league} onReset={vi.fn()} managers={MANAGERS} onPickManager={onPickManager} />,
+    );
+    const user = await open();
+
+    const ask = screen.getByRole('region', { name: 'Which manager are you?' });
+    const rows = within(ask).getAllByRole('button');
+    expect(rows.map((row) => row.textContent)).toEqual(['Owner OneOwner', 'Co TwoCo-owner']);
+    await user.click(rows[1]);
+    expect(onPickManager).toHaveBeenCalledWith('co');
+    // The rules are still there below the question.
+    expect(screen.getByText('League rules')).toBeInTheDocument();
+  });
+
+  it('does not ask once nobody needs asking', async () => {
+    render(<LeagueHeader league={league} onReset={vi.fn()} leagues={LEAGUES} onSwitch={vi.fn()} />);
+    await open();
+    expect(screen.queryByText('Which manager are you?')).toBeNull();
+  });
+});

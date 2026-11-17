@@ -5,6 +5,7 @@ import { useLeagueSummaries } from '../hooks/useLeagueData';
 import { OpenPlayerContext } from '../hooks/useOpenPlayer';
 import { weekCalls, type WeekCalls } from '../engine/weekCalls';
 import { exposure, type Exposure, type HeldRoster } from '../engine/exposure';
+import { ownsRoster } from '../engine/owners';
 import { isGameWeek } from '../engine/season';
 import { POSITION_STYLES } from '../lib/format';
 import { joinWords } from '../lib/scoringText';
@@ -57,7 +58,7 @@ interface Props {
 type LeagueReport =
   | { leagueId: string; state: 'loading' }
   | { leagueId: string; state: 'failed' }
-  /** Loaded, but no roster is his. A co-owned team names only one owner. */
+  /** Loaded, but no roster is his, as owner or co-owner. */
   | { leagueId: string; state: 'unmatched' }
   | {
       leagueId: string;
@@ -116,7 +117,7 @@ function LeagueProbe({
     if (error) return { leagueId, state: 'failed' };
     if (isLoading || weekPending || !league || !values) return { leagueId, state: 'loading' };
 
-    const roster = league.rosters.find((r) => r.ownerId === userId);
+    const roster = league.rosters.find((r) => ownsRoster(r, userId));
     const summary = roster && summaries.find((s) => s.rosterId === roster.rosterId);
     if (!roster || !summary) return { leagueId, state: 'unmatched' };
 
@@ -530,7 +531,7 @@ function Problems({
           <span className="min-w-0">
             {report.state === 'failed'
               ? `${choice.name} couldn't be loaded.`
-              : `Your team in ${choice.name} wasn't found. If you co-own it, open the league to pick it.`}
+              : `Your team in ${choice.name} wasn't found. Open the league to pick it.`}
           </span>
           <OpenButton name={choice.name} onOpen={() => onOpen(choice.leagueId)} />
         </li>
