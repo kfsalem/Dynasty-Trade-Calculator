@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import type { League } from '../types';
 import { getAccountByUsername } from '../platforms/sleeper/client';
+import { ownsRoster } from '../engine/owners';
 
 interface Props {
   league: League;
-  onClaim: (rosterId: number) => void;
+  /** The team, and who claimed it when a username said so. */
+  onClaim: (rosterId: number, userId?: string) => void;
 }
 
 export function ClaimTeam({ league, onClaim }: Props) {
@@ -21,12 +23,13 @@ export function ClaimTeam({ league, onClaim }: Props) {
     setError(null);
     try {
       const account = await getAccountByUsername(name);
-      const roster = league.rosters.find((r) => r.ownerId === account.user_id);
+      // A co-owner manages the team as much as its owner does.
+      const roster = league.rosters.find((r) => ownsRoster(r, account.user_id));
       if (!roster) {
         setError(`"${account.display_name ?? name}" isn't in this league.`);
         return;
       }
-      onClaim(roster.rosterId);
+      onClaim(roster.rosterId, account.user_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Lookup failed.');
     } finally {
@@ -68,7 +71,7 @@ export function ClaimTeam({ league, onClaim }: Props) {
         </p>
       )}
 
-      {/* Orphan teams and co-owned rosters can't be resolved from a username. */}
+      {/* Orphan teams can't be resolved from a username. */}
       <div className="mt-4 border-t border-line pt-4">
         <label htmlFor="claim-select" className="text-sm text-subtle">
           Or pick it from the list

@@ -405,12 +405,23 @@ export interface Matchup {
   points: [number, number] | null;
 }
 
+/** A person who manages a team: a platform user id and the name shown for it. */
+export interface Manager {
+  id: string;
+  name: string;
+}
+
 export interface Roster {
   rosterId: number;
   /** Null for orphan teams with no current owner. */
   ownerId: string | null;
   teamName: string;
   ownerName: string;
+  /**
+   * The team's other managers, after its owner. Any of them may be the person
+   * using the app, so a claim by user id checks them too (`ownsRoster`).
+   */
+  coOwners: Manager[];
   avatar: string | null;
   wins: number;
   losses: number;

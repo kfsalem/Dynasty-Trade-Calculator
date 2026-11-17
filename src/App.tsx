@@ -27,6 +27,7 @@ import {
   useWeeklyPostInput,
 } from './hooks/useLeagueData';
 import { runsFaab } from './engine/bids';
+import { managersOf, ownsRoster, whoIsMe } from './engine/owners';
 import { useMyRoster } from './hooks/useMyRoster';
 import { useSinceLastVisit } from './hooks/useSinceLastVisit';
 import { SinceLastVisit } from './components/SinceLastVisit';
@@ -268,7 +269,7 @@ function App() {
     // A league chosen from anywhere is a league to look at, not the overview.
     setOverview(false);
   }, []);
-  const { myRosterId, setMyRoster } = useMyRoster(leagueId);
+  const { myRosterId, myUserId: knownUserId, setMyRoster, setMyUser } = useMyRoster(leagueId);
 
   /**
    * A league picked from a username's list (#160) says whose it is, so the
@@ -331,20 +332,28 @@ function App() {
   // needs a tab, and a visitor who leaves from it should not pay for five.
   useEffect(() => {
     if (!pendingClaim || !league || league.id !== pendingClaim.leagueId) return;
-    const mine = league.rosters.find((r) => r.ownerId === pendingClaim.userId);
-    // Co-owners and orphan teams cannot be matched; ClaimTeam asks as before.
-    if (mine) setMyRoster(mine.rosterId);
+    const mine = league.rosters.find((r) => ownsRoster(r, pendingClaim.userId));
+    // An orphan team cannot be matched; ClaimTeam asks as before.
+    if (mine) setMyRoster(mine.rosterId, pendingClaim.userId);
     setPendingClaim(null);
   }, [pendingClaim, league, setMyRoster]);
 
   /*
     The claimed manager's other leagues, for the switcher in the header (#161).
     The sample's managers are made up, so it has no other leagues to list.
+
+    The manager is the visitor, not the team's owner: on a co-owned team they
+    differ. A team picked from the list with several managers leaves it open,
+    and the header asks which one he is rather than list somebody else's leagues.
   */
-  const myUserId =
+  const myTeam =
     league && !isSampleId(league.id)
-      ? (league.rosters.find((r) => r.rosterId === myRosterId)?.ownerId ?? null)
-      : null;
+      ? league.rosters.find((r) => r.rosterId === myRosterId)
+      : undefined;
+  const myUserId = myTeam ? whoIsMe(myTeam, knownUserId) : null;
+  // An orphan team has nobody to ask about.
+  const myManagers = myTeam ? managersOf(myTeam) : [];
+  const askWhoYouAre = myUserId === null && myManagers.length > 1 ? myManagers : undefined;
   const myLeagues = useMyLeagues(myUserId);
   const switchLeague = useCallback(
     (next: string) => importLeague(next, myUserId ?? undefined),
@@ -653,6 +662,8 @@ function App() {
                   onSwitch={showOverview ? openFromOverview : switchLeague}
                   onOverview={canOverview ? () => setOverview(true) : undefined}
                   overview={showOverview}
+                  managers={askWhoYouAre}
+                  onPickManager={setMyUser}
                 />
                 {/* Both describe the open league, which the overview is not about. */}
                 {!showOverview && (

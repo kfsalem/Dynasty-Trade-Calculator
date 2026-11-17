@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { withClient } from './test/harness';
 import {
@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => ({
   bidWalk: [] as boolean[],
   /** What `useMyLeagues` lists once a team is claimed, when a test wants a list. */
   myLeagues: null as unknown,
+  /** Whose leagues the app asked for, in order. */
+  leaguesAskedFor: [] as (string | null)[],
 }));
 
 vi.mock('./hooks/useLeagueData', () => ({
@@ -76,8 +78,10 @@ vi.mock('./hooks/useLeagueData', () => ({
   useWeeklyPostInput: () => null,
   // The claimed manager's leagues for the header's switcher (#161). Idle
   // unless a test lists some: the switcher has its own tests.
-  useMyLeagues: (userId: string | null) =>
-    userId && mocks.myLeagues ? { data: mocks.myLeagues } : { data: undefined },
+  useMyLeagues: (userId: string | null) => {
+    mocks.leaguesAskedFor.push(userId);
+    return userId && mocks.myLeagues ? { data: mocks.myLeagues } : { data: undefined };
+  },
   // The manager model's walk, idle for the same reason: the suggestion list
   // renders identically with and without it, and these tests are about the
   // shell rather than about the ordering inside that list.
@@ -101,6 +105,13 @@ function leagueWithRosters(id: string, a: number, b: number): League {
     id,
     name: `League ${id}`,
   };
+}
+
+/** The same, with `u9` managing the first roster beside its owner. */
+function coOwnedBy9(id: string, a: number, b: number): League {
+  const league = leagueWithRosters(id, a, b);
+  const [first, second] = league.rosters;
+  return { ...league, rosters: [{ ...first, coOwners: [{ id: 'u9', name: 'Nine' }] }, second] };
 }
 
 function playersFor(ids: number[]): Map<string, Player> {
@@ -175,6 +186,7 @@ beforeEach(() => {
   mocks.managerWalk = [];
   mocks.bidWalk = [];
   mocks.myLeagues = null;
+  mocks.leaguesAskedFor = [];
   localStorage.clear();
   window.history.replaceState(null, '', '/');
 });
@@ -503,6 +515,27 @@ describe('App — a league found by username (#160)', () => {
     expect(screen.queryByText('Which team is yours?')).not.toBeInTheDocument();
   });
 
+  it('claims a co-owned team for its co-owner, and remembers that it is him', async () => {
+    mocks.states['80'] = ready(coOwnedBy9('80', 1, 2), [1, 2]);
+    await openAt('/');
+    const { sleeperProvider } = await import('./platforms/sleeper');
+    vi.spyOn(sleeperProvider, 'findLeagues').mockResolvedValue({
+      userId: 'u9',
+      displayName: 'Nine',
+      season: '2026',
+      leagues: [{ leagueId: '80', name: 'League 80', teams: 2, format: 'dynasty' }],
+    });
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/Sleeper username/i), 'nine');
+    await user.click(screen.getByRole('button', { name: 'Find my league' }));
+    await user.click(await screen.findByRole('button', { name: /League 80/ }));
+
+    await waitFor(() => expect(localStorage.getItem('dynasty:myRoster:80')).toBe('1'));
+    expect(localStorage.getItem('dynasty:myUser:80')).toBe('u9');
+    expect(mocks.leaguesAskedFor).not.toContain('u1');
+  });
+
   it('leaves the claim to the reader for a league loaded by id', async () => {
     mocks.states['810000'] = ready(leagueWithRosters('810000', 1, 2), [1, 2]);
     await openAt('/');
@@ -553,6 +586,44 @@ describe('App — all of a manager’s leagues at once (#161)', () => {
     expect(screen.getByRole('tablist')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'My team' })).toHaveAttribute('aria-selected', 'true');
     await waitFor(() => expect(localStorage.getItem('dynasty:myRoster:222222')).toBe('1'));
+  });
+
+  it('asks which manager he is on a co-owned team, and lists only that manager’s leagues', async () => {
+    // He co-owns roster 1 in one league and roster 4 in the other, as `u9`.
+    mocks.states['111111'] = ready(coOwnedBy9('111111', 1, 2), [1, 2]);
+    mocks.states['222222'] = ready(coOwnedBy9('222222', 4, 3), [4, 3]);
+    mocks.myLeagues = {
+      userId: 'u9',
+      season: '2026',
+      leagues: [
+        { leagueId: '111111', name: 'League 111111', teams: 2, format: 'dynasty' },
+        { leagueId: '222222', name: 'League 222222', teams: 2, format: 'dynasty' },
+      ],
+    };
+    localStorage.setItem('dynasty:leagueId', '111111');
+    // Picked from the list, so nothing says which of its managers he is.
+    localStorage.setItem('dynasty:myRoster:111111', '1');
+    await openAt('/');
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByLabelText(/^League 111111, /));
+    const ask = screen.getByRole('region', { name: 'Which manager are you?' });
+    // No guess: the owner's leagues are not listed as his.
+    expect(screen.queryByRole('navigation', { name: 'Your leagues' })).toBeNull();
+    expect(mocks.leaguesAskedFor).not.toContain('u1');
+
+    await user.click(within(ask).getByRole('button', { name: /Nine/ }));
+    expect(localStorage.getItem('dynasty:myUser:111111')).toBe('u9');
+    expect(screen.queryByText('Which manager are you?')).toBeNull();
+
+    // His leagues take the question's place, and the other opens with his team claimed.
+    const nav = await screen.findByRole('navigation', { name: 'Your leagues' });
+    await user.click(within(nav).getByRole('button', { name: /League 222222/ }));
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'League 222222' }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(localStorage.getItem('dynasty:myRoster:222222')).toBe('4'));
+    expect(localStorage.getItem('dynasty:myUser:222222')).toBe('u9');
   });
 
   it('offers no overview to a manager with one league', async () => {

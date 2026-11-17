@@ -204,6 +204,23 @@ describe('mapLeague', () => {
     { user_id: 'u1', display_name: 'Kevin', avatar: 'abc', metadata: { team_name: 'Dynasty Co' } },
   ];
 
+  it('names a team’s co-owners after its owner, and never the owner twice', () => {
+    const league = mapLeague(
+      baseLeague,
+      [
+        { ...rosters[0], co_owners: ['u1', 'u7', 'u8', 'u7'] },
+        { ...rosters[1], co_owners: null },
+      ],
+      [...users, { user_id: 'u7', display_name: 'Seven', avatar: null }],
+    );
+    // u8 is in no user row: still a manager, with a placeholder name.
+    expect(league.rosters[0].coOwners).toEqual([
+      { id: 'u7', name: 'Seven' },
+      { id: 'u8', name: 'Co-owner' },
+    ]);
+    expect(league.rosters[1].coOwners).toEqual([]);
+  });
+
   it('keeps the set lineup aligned to the slots, empty slots included', () => {
     const league = mapLeague(baseLeague, rosters, users);
     // The RB slot is empty; p2 is in the *second* RB slot, not shifted up into

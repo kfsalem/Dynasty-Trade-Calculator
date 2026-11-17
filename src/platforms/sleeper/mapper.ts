@@ -365,6 +365,10 @@ export function mapLeague(
       // Custom team names are optional on Sleeper; most managers never set one.
       teamName: user?.metadata?.team_name?.trim() || ownerName,
       ownerName,
+      // The owner is listed once, as the owner, even if Sleeper repeats him.
+      coOwners: [...new Set(r.co_owners ?? [])]
+        .filter((id) => id !== r.owner_id)
+        .map((id) => ({ id, name: usersById.get(id)?.display_name ?? 'Co-owner' })),
       avatar: avatarUrl(user?.avatar),
       wins: r.settings?.wins ?? 0,
       losses: r.settings?.losses ?? 0,

@@ -35,7 +35,9 @@ import {
  *
  * **What anonymising means here.** Every response is first parsed with the
  * schema the app reads it with, which drops every field the app does not
- * name: avatars, co-owners, metadata, notes. What survives and could identify
+ * name: avatars, metadata, notes. Co-owners the app does read (#161), so they
+ * are dropped by hand: the sample's managers are made up and have no other
+ * leagues, so a co-owner would only be a real user id. What survives and could identify
  * someone is rewritten: league and draft ids, the league's name, each user's
  * id, display name and team name, and transaction ids. Then every one of the
  * original values is searched for in the output, and a single hit discards
@@ -196,7 +198,11 @@ export function anonymise(
         };
       });
     } else if (endpoint === 'rosters') {
-      responses[out] = (body as SleeperRoster[]).map((r) => ({ ...r, owner_id: user(r.owner_id) }));
+      responses[out] = (body as SleeperRoster[]).map((r) => {
+        const kept = { ...r, owner_id: user(r.owner_id) };
+        delete kept.co_owners;
+        return kept;
+      });
     } else if (endpoint === 'drafts') {
       responses[out] = (body as SleeperDraft[]).map((d) => ({
         ...d,

@@ -357,6 +357,29 @@ describe('WeeklyLineup — best ball', () => {
   });
 });
 
+describe('WeeklyLineup — an empty roster (#161)', () => {
+  it('makes no claims for a team with nobody on it, as a chopped guillotine team has', () => {
+    const target: Roster = { ...makeRoster(1, []), setLineup: [] };
+    render(
+      <WeeklyLineup
+        roster={target}
+        summary={summarizeRoster(target, players, values, settings)}
+        settings={settings}
+        seasonPhase="regular"
+        currentWeek={7}
+        byeTeams={null}
+        board={wire(freeAgent('purdy', 'QB', 2000))}
+      />,
+    );
+
+    expect(screen.getByText('Empty roster — no lineup to set')).toBeInTheDocument();
+    expect(screen.getByText(/the team has been chopped/)).toBeInTheDocument();
+    // Without the rule, every empty slot was a change and Purdy a claim.
+    expect(screen.queryByText(/to make/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Player purdy/)).not.toBeInTheDocument();
+  });
+});
+
 describe('WeeklyLineup — what a claim costs', () => {
   const FAAB: WaiverSettings = { type: 2, budget: 100, minBid: null };
 

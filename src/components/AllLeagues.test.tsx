@@ -39,11 +39,14 @@ function leagueState(
   setLineup: string[],
   {
     owner = ME,
+    coOwners = [],
     phase = 'regular',
     settings: overrides = {},
     byes = [],
   }: {
     owner?: string;
+    /** User ids managing the team beside its owner. */
+    coOwners?: string[];
     phase?: SeasonPhase;
     settings?: Partial<LeagueSettings>;
     /** NFL teams on bye. Every player here is on KC. */
@@ -51,7 +54,12 @@ function leagueState(
   } = {},
 ) {
   const settings = makeSettings(['QB'], overrides);
-  const mine: Roster = { ...makeRoster(1, men.map((m) => m.id)), ownerId: owner, setLineup };
+  const mine: Roster = {
+    ...makeRoster(1, men.map((m) => m.id)),
+    ownerId: owner,
+    coOwners: coOwners.map((id) => ({ id, name: id })),
+    setLineup,
+  };
   const theirs = makeRoster(2, []);
   const league: League = { ...makeLeague([mine, theirs], settings), id, name: `League ${id}` };
   const players = new Map<string, Player>(
@@ -208,6 +216,25 @@ describe('AllLeagues (#161)', () => {
 
     await userEvent.setup().click(screen.getByRole('button', { name: 'Open League b' }));
     expect(onOpen).toHaveBeenCalledWith('b');
+  });
+
+  it('checks a league where he is a co-owner of the team, not its owner', async () => {
+    mocks.states.a = leagueState('a', [{ id: 'star', value: 3000 }], ['star']);
+    mocks.states.b = leagueState(
+      'b',
+      [
+        { id: 'star', value: 3000 },
+        { id: 'backup', value: 1000 },
+      ],
+      ['backup'],
+      { owner: 'somebody-else', coOwners: [ME] },
+    );
+    render(<AllLeagues userId={ME} leagues={[choice('a'), choice('b')]} onOpen={vi.fn()} />);
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: '1 change to make' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/wasn't found/)).toBeNull();
   });
 
   it('says a best-ball league has no lineup to set rather than checking one', async () => {
