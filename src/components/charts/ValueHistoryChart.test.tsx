@@ -24,6 +24,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // The window chosen is remembered in this browser (`useTrendWindow`).
+  localStorage.clear();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -40,6 +42,27 @@ describe('ValueHistoryChart (#158)', () => {
 
     expect(await screen.findByText('up 10%')).toBeInTheDocument();
     expect(screen.getByText(/since Sep 29/)).toBeInTheDocument();
+  });
+
+  it('states the move over the window chosen, from his first point inside it (#158)', async () => {
+    const weekly: ValueHistoryFile = {
+      ...HISTORY,
+      dates: ['2026-10-13', '2026-10-20', '2026-10-27', '2026-11-03', '2026-11-10'],
+      players: {
+        gibbs: ['RB', [1000, 1000, 1000, 1200, 1500], [900, 900, 900, 900, 900]],
+      },
+    };
+    vi.stubGlobal('fetch', respond(weekly));
+    draw('gibbs');
+
+    // Four weeks back is the first point, so the default reads from there.
+    expect(await screen.findByText('up 50%')).toBeInTheDocument();
+    expect(screen.getByText(/since Oct 13/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Since/ })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: '1 week' }));
+    expect(screen.getByText('up 25%')).toBeInTheDocument();
+    expect(screen.getByText(/since Nov 3/)).toBeInTheDocument();
   });
 
   it('carries every point it draws in its table, skipping days he was not listed', async () => {

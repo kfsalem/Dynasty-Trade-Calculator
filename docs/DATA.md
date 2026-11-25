@@ -187,7 +187,10 @@ it. One format per QB setting, at 10 teams and PPR, because within a QB setting
 the formats are the same market: every 1QB format's week-over-week change
 correlated 0.992–1.000 with the 10-team PPR one's, and superflex the same.
 About 5 KB a point, so around 110 KB a season each, outside the budget, and
-fetched only when a player panel opens.
+fetched only when it is read: by the chart in a player panel, and by the Market
+movers card on My team, which loads after the rest of the tab. Both read the
+move over the same window, a week, four weeks or since the history began
+(`values/valueTrend`).
 
 Only the weekly refresh appends, because it is the only run that commits what
 it writes: it sets `VALUE_HISTORY=append`, and a deploy's ingest leaves the

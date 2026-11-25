@@ -67,6 +67,14 @@ const LeagueHistory = lazy(() =>
 const AllLeagues = lazy(() =>
   import('./components/AllLeagues').then((m) => ({ default: m.AllLeagues })),
 );
+/*
+  Market movers on My team (#158). On demand although My team is in the first
+  load: it reads the value history, a fetch of its own, and the first load is
+  within a few kB of its budget.
+*/
+const MarketMovers = lazy(() =>
+  import('./components/MarketMovers').then((m) => ({ default: m.MarketMovers })),
+);
 
 /**
  * Start every tab's download once the browser is idle. A failed prefetch is
@@ -864,6 +872,16 @@ function App() {
                     picksSettled={picksSettled}
                     roles={roles}
                     onChangeTeam={() => setMyRoster(null)}
+                    movers={
+                      <Suspense fallback={null}>
+                        <MarketMovers
+                          league={league}
+                          summaries={summaries}
+                          myRosterId={myRosterId}
+                          numQbs={league.settings.numQbs === 2 ? 2 : 1}
+                        />
+                      </Suspense>
+                    }
                   />
                   </>
                 ))}
