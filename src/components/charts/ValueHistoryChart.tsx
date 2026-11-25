@@ -4,6 +4,10 @@ import type { Position } from '../../types';
 import { POSITION_STYLES, formatValue } from '../../lib/format';
 import { fetchValueHistory } from '../../data/load';
 import { playerSeries, type HistoryPoint, type HistoryQbs } from '../../values/valueHistory';
+import { pickWindow, trendWindows, type TrendWindow, type TrendWindowKey } from '../../values/valueTrend';
+import { useTrendWindow } from '../../hooks/useTrendWindow';
+import { shortDate } from '../../lib/trendText';
+import { TrendWindowPicker } from '../TrendWindowPicker';
 import { AxisY, ChartTooltip, TooltipRow } from './ChartChrome';
 import { ChartFigure } from './ChartFigure';
 import { MARK, linear, niceTicks } from './scale';
@@ -21,16 +25,22 @@ import { useChartWidth } from './useChartWidth';
  * The market's figure, not the league-adjusted one in the tiles above it — a
  * league-adjusted value depends on that league's rosters on the day, which the
  * history cannot reproduce — so the title says whose number it is.
+ *
+ * **The move is over a window** (#158), the one the Market movers card on My
+ * team uses, so a riser opened from that card says the same figure here. The
+ * whole history is still drawn — a week is two points, which is a price, not
+ * a picture — and the window is shaded behind the lines, the sentence above
+ * stating its move from the first point inside it.
  */
 
 const HEIGHT = 150;
 const PAD = { top: 12, right: 64, bottom: 26, left: 48 };
 /** Fewest pixels between the two end labels before the lower one is pushed down. */
 const LABEL_GAP = 13;
+/** Fewest pixels between date labels on the x axis before the window's start is left unlabelled. */
+const DATE_GAP = 52;
 
 const day = (date: string) => Date.parse(`${date}T12:00:00Z`) / 86_400_000;
-const shortDate = (date: string) =>
-  new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
 interface Props {
   playerId: string;
@@ -49,21 +59,55 @@ export function ValueHistoryChart({ playerId, position, numQbs }: Props) {
     () => (query.data ? playerSeries(query.data, playerId) : []),
     [query.data, playerId],
   );
+  const windows = useMemo(() => (query.data ? trendWindows(query.data.dates) : []), [query.data]);
+  const [preference, setPreference] = useTrendWindow();
+  const span = pickWindow(windows, preference);
 
   if (query.isPending) return <div className="skeleton mt-4 h-40 w-full rounded-card" aria-hidden="true" />;
   // One point is a price, not a history; the tiles above already show it.
-  if (series.length < 2) return null;
-  return <Chart series={series} position={position} />;
+  if (series.length < 2 || !span) return null;
+  return (
+    <Chart
+      series={series}
+      position={position}
+      windows={windows}
+      span={span}
+      onWindow={setPreference}
+    />
+  );
 }
 
-function Chart({ series, position }: { series: HistoryPoint[]; position: Position }) {
+function Chart({
+  series,
+  position,
+  windows,
+  span,
+  onWindow,
+}: {
+  series: HistoryPoint[];
+  position: Position;
+  windows: TrendWindow[];
+  span: TrendWindow;
+  onWindow: (next: TrendWindowKey) => void;
+}) {
   const { ref, width } = useChartWidth(400);
   const [active, setActive] = useState<number | null>(null);
   const style = POSITION_STYLES[position];
 
   const first = series[0];
   const last = series[series.length - 1];
-  const change = (last.value - first.value) / first.value;
+  /*
+    The move is from his first point inside the window. That is the window's
+    own start unless FantasyCalc began listing him later, and the sentence
+    names whichever date it was, so it is never a move he did not make. With
+    no earlier point inside the window, it falls back to his last two.
+  */
+  const inside = series.findIndex((p) => p.date >= span.start);
+  const fromIndex =
+    inside === -1 || inside === series.length - 1 ? series.length - 2 : inside;
+  const from = series[fromIndex];
+  const change = from.value === 0 ? 0 : (last.value - from.value) / from.value;
+  const shaded = fromIndex > 0;
 
   /*
     The axis is widened to round numbers on both sides, so every point sits
@@ -80,6 +124,9 @@ function Chart({ series, position }: { series: HistoryPoint[]; position: Positio
   const ticks = niceTicks(lo, hi, Math.round((hi - lo) / step));
   const x = linear([day(first.date), day(last.date)], [PAD.left, width - PAD.right]);
   const y = linear([lo, hi], [HEIGHT - PAD.bottom, PAD.top]);
+  const bandX = x(day(from.date));
+  const labelStart =
+    shaded && bandX - PAD.left >= DATE_GAP && width - PAD.right - bandX >= DATE_GAP;
 
   const path = (pick: (p: HistoryPoint) => number) =>
     series.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(day(p.date))},${y(pick(p))}`).join(' ');
@@ -117,7 +164,7 @@ function Chart({ series, position }: { series: HistoryPoint[]; position: Positio
               ? 'unchanged'
               : `${change > 0 ? 'up' : 'down'} ${Math.abs(change * 100).toFixed(change > -0.1 && change < 0.1 ? 1 : 0)}%`}
           </span>{' '}
-          since {shortDate(first.date)}. The market&apos;s price at each weekly refresh, before
+          since {shortDate(from.date)}. The market&apos;s price at each weekly refresh, before
           this league&apos;s adjustment.
         </>
       }
@@ -130,6 +177,9 @@ function Chart({ series, position }: { series: HistoryPoint[]; position: Positio
         rows: series.map((p) => [shortDate(p.date), formatValue(p.value), formatValue(p.redraft)]),
       }}
     >
+      <div className="mb-3">
+        <TrendWindowPicker windows={windows} value={span.key} onChange={onWindow} label="Change over" />
+      </div>
       <div ref={ref} className="relative">
         <svg
           width={width}
@@ -141,11 +191,28 @@ function Chart({ series, position }: { series: HistoryPoint[]; position: Positio
           }
           onPointerLeave={() => setActive(null)}
         >
+          {/* The window, under the gridlines so they still read across it. */}
+          {shaded && (
+            <rect
+              x={bandX}
+              y={PAD.top}
+              width={Math.max(0, width - PAD.right - bandX)}
+              height={HEIGHT - PAD.bottom - PAD.top}
+              className="fill-line"
+              opacity={0.5}
+              aria-hidden="true"
+            />
+          )}
           <AxisY scale={y} ticks={ticks} x={PAD.left} width={width - PAD.right} format={formatValue} />
           <g aria-hidden="true">
             <text x={PAD.left} y={HEIGHT - 6} className="fill-subtle text-[11px]">
               {shortDate(first.date)}
             </text>
+            {labelStart && (
+              <text x={bandX} y={HEIGHT - 6} textAnchor="middle" className="fill-subtle text-[11px]">
+                {shortDate(from.date)}
+              </text>
+            )}
             <text x={width - PAD.right} y={HEIGHT - 6} textAnchor="end" className="fill-subtle text-[11px]">
               {shortDate(last.date)}
             </text>

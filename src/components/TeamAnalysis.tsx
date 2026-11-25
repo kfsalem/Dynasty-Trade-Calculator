@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import type { League, Position, SeasonPhase } from '../types';
 import type { RosterSummary } from '../engine/rosterValue';
 import {
@@ -98,6 +98,12 @@ interface Props {
   /** Measured role, when the activity data is in hand. */
   roles: Map<string, PlayerRole> | undefined;
   onChangeTeam: () => void;
+  /**
+   * The Market movers card (#158), built by `App`. A slot rather than a
+   * component imported here, because it fetches the value history and loads
+   * its code on demand, and this tab is in the first load.
+   */
+  movers?: ReactNode;
 }
 
 /**
@@ -192,6 +198,7 @@ export function TeamAnalysis({
   picksSettled,
   roles,
   onChangeTeam,
+  movers,
 }: Props) {
   // `analyzeTeam` reaches `contentionProfile`, which carries the same
   // once-per-team projection cost as `leagueContention` below — so it is
@@ -597,6 +604,13 @@ export function TeamAnalysis({
               </div>
             </section>
           )}
+
+          {/*
+            What the market did to these players lately: beside the trade chips
+            and the holdings, because a price that moved is a reason to look at
+            a trade, and it is the same currency.
+          */}
+          {movers}
         </div>
       </div>
 
